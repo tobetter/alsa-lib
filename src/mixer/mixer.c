@@ -45,6 +45,7 @@ This is an abstraction layer over the hcontrol layer.
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <pthread.h>
 #include "mixer_local.h"
 
 #ifndef DOC_HIDDEN
@@ -152,8 +153,8 @@ static int hctl_elem_event_handler(snd_hctl_elem_t *helem,
 	}
 	if (mask & (SND_CTL_EVENT_MASK_VALUE | SND_CTL_EVENT_MASK_INFO)) {
 		int err = 0;
-		bag_iterator_t i;
-		bag_for_each(i, bag) {
+		bag_iterator_t i, n;
+		bag_for_each_safe(i, n, bag) {
 			snd_mixer_elem_t *melem = bag_iterator_entry(i);
 			snd_mixer_class_t *class = melem->class;
 			err = class->event(class, mask, helem, melem);
@@ -520,17 +521,26 @@ static int snd_mixer_compare_default(const snd_mixer_elem_t *c1,
 	return c1->class->compare(c1, c2);
 }
 
+static snd_mixer_t *compare_mixer;
+static int mixer_compare(const void *a, const void *b) {
+	return compare_mixer->compare(*(const snd_mixer_elem_t * const *) a,
+				      *(const snd_mixer_elem_t * const *) b);
+}
+
 static int snd_mixer_sort(snd_mixer_t *mixer)
 {
 	unsigned int k;
-	int compar(const void *a, const void *b) {
-		return mixer->compare(*(const snd_mixer_elem_t * const *) a,
-				      *(const snd_mixer_elem_t * const *) b);
-	}
+	static pthread_mutex_t sync_lock = PTHREAD_MUTEX_INITIALIZER;
+
 	assert(mixer);
 	assert(mixer->compare);
 	INIT_LIST_HEAD(&mixer->elems);
-	qsort(mixer->pelems, mixer->count, sizeof(snd_mixer_elem_t*), compar);
+
+	pthread_mutex_lock(&sync_lock);
+	compare_mixer = mixer;
+	qsort(mixer->pelems, mixer->count, sizeof(snd_mixer_elem_t*), mixer_compare);
+	pthread_mutex_unlock(&sync_lock);
+
 	for (k = 0; k < mixer->count; k++)
 		list_add_tail(&mixer->pelems[k]->list, &mixer->elems);
 	return 0;
@@ -734,8 +744,8 @@ int snd_mixer_handle_events(snd_mixer_t *mixer)
 
 /**
  * \brief Set callback function for a mixer
- * \param mixer mixer handle
- * \param callback callback function
+ * \param obj mixer handle
+ * \param val callback function
  */
 void snd_mixer_set_callback(snd_mixer_t *obj, snd_mixer_callback_t val)
 {
@@ -745,8 +755,8 @@ void snd_mixer_set_callback(snd_mixer_t *obj, snd_mixer_callback_t val)
 
 /**
  * \brief Set callback private value for a mixer
- * \param mixer mixer handle
- * \param callback_private callback private value
+ * \param obj mixer handle
+ * \param val callback private value
  */
 void snd_mixer_set_callback_private(snd_mixer_t *obj, void * val)
 {
@@ -756,7 +766,7 @@ void snd_mixer_set_callback_private(snd_mixer_t *obj, void * val)
 
 /**
  * \brief Get callback private value for a mixer
- * \param mixer mixer handle
+ * \param obj mixer handle
  * \return callback private value
  */
 void * snd_mixer_get_callback_private(const snd_mixer_t *obj)
@@ -767,7 +777,7 @@ void * snd_mixer_get_callback_private(const snd_mixer_t *obj)
 
 /**
  * \brief Get elements count for a mixer
- * \param mixer mixer handle
+ * \param obj mixer handle
  * \return elements count
  */
 unsigned int snd_mixer_get_count(const snd_mixer_t *obj)

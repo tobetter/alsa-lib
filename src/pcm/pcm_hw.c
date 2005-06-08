@@ -111,7 +111,6 @@ typedef struct {
 	((enum sndrv_pcm_state) (hw)->mmap_status->state)
 #define FAST_PCM_TSTAMP(hw) \
 	((hw)->mmap_status->tstamp)
-#endif /* DOC_HIDDEN */
 
 struct timespec snd_pcm_hw_fast_tstamp(snd_pcm_t *pcm)
 {
@@ -122,6 +121,7 @@ struct timespec snd_pcm_hw_fast_tstamp(snd_pcm_t *pcm)
 		res.tv_nsec *= 1000L;
 	return res;
 }
+#endif /* DOC_HIDDEN */
 
 static int sync_ptr1(snd_pcm_hw_t *hw, unsigned int flags)
 {
@@ -543,6 +543,7 @@ static int snd_pcm_hw_start(snd_pcm_t *pcm)
 	assert(pcm->stream != SND_PCM_STREAM_PLAYBACK ||
 	       snd_pcm_mmap_playback_hw_avail(pcm) > 0);
 #endif
+	sync_ptr(hw, 0);
 	if (ioctl(hw->fd, SNDRV_PCM_IOCTL_START) < 0) {
 		err = -errno;
 		SYSMSG("SNDRV_PCM_IOCTL_START failed");
@@ -656,6 +657,53 @@ static int snd_pcm_hw_resume(snd_pcm_t *pcm)
 	return 0;
 }
 
+static int snd_pcm_hw_link_fd(snd_pcm_t *pcm, int *fds, int count, int (**failed)(snd_pcm_t *, int))
+{
+	snd_pcm_hw_t *hw = pcm->private_data;
+
+	if (count < 1)
+		return -EINVAL;
+	*failed = NULL;
+	fds[0] = hw->fd;
+	return 1;
+}
+
+static int snd_pcm_hw_link(snd_pcm_t *pcm1, snd_pcm_t *pcm2)
+{
+	snd_pcm_hw_t *hw = pcm1->private_data;
+	int fds[16];
+	int (*failed)(snd_pcm_t *, int) = NULL;
+	int count = _snd_pcm_link_descriptors(pcm2, fds, 16, &failed);
+	int i, err = 0;
+
+	if (count < 0)
+		return count;
+	for (i = 0; i < count; i++) {
+		if (fds[i] < 0)
+			return 0;
+		if (ioctl(hw->fd, SNDRV_PCM_IOCTL_LINK, fds[i]) < 0) {
+			if (failed != NULL) {
+				err = failed(pcm2, fds[i]);
+			} else {
+				SYSMSG("SNDRV_PCM_IOCTL_LINK failed");
+				err = -errno;
+			}
+		}
+	}
+	return err;
+}
+
+static int snd_pcm_hw_unlink(snd_pcm_t *pcm)
+{
+	snd_pcm_hw_t *hw = pcm->private_data;
+
+	if (ioctl(hw->fd, SNDRV_PCM_IOCTL_UNLINK) < 0) {
+		SYSMSG("SNDRV_PCM_IOCTL_UNLINK failed");
+		return -errno;
+	}
+	return 0;
+}
+
 static snd_pcm_sframes_t snd_pcm_hw_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_uframes_t size)
 {
 	int err;
@@ -664,6 +712,7 @@ static snd_pcm_sframes_t snd_pcm_hw_writei(snd_pcm_t *pcm, const void *buffer, s
 	struct sndrv_xferi xferi;
 	xferi.buf = (char*) buffer;
 	xferi.frames = size;
+	xferi.result = 0; /* make valgrind happy */
 	err = ioctl(fd, SNDRV_PCM_IOCTL_WRITEI_FRAMES, &xferi);
 	err = err >= 0 ? sync_ptr(hw, SNDRV_PCM_SYNC_PTR_APPL) : -errno;
 #ifdef DEBUG_RW
@@ -680,6 +729,7 @@ static snd_pcm_sframes_t snd_pcm_hw_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_
 	snd_pcm_hw_t *hw = pcm->private_data;
 	int fd = hw->fd;
 	struct sndrv_xfern xfern;
+	memset(&xfern, 0, sizeof(xfern)); /* make valgrind happy */
 	xfern.bufs = bufs;
 	xfern.frames = size;
 	err = ioctl(fd, SNDRV_PCM_IOCTL_WRITEN_FRAMES, &xfern);
@@ -700,6 +750,7 @@ static snd_pcm_sframes_t snd_pcm_hw_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_
 	struct sndrv_xferi xferi;
 	xferi.buf = buffer;
 	xferi.frames = size;
+	xferi.result = 0; /* make valgrind happy */
 	err = ioctl(fd, SNDRV_PCM_IOCTL_READI_FRAMES, &xferi);
 	err = err >= 0 ? sync_ptr(hw, SNDRV_PCM_SYNC_PTR_APPL) : -errno;
 #ifdef DEBUG_RW
@@ -717,6 +768,7 @@ static snd_pcm_sframes_t snd_pcm_hw_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_u
 	snd_pcm_hw_t *hw = pcm->private_data;
 	int fd = hw->fd;
 	struct sndrv_xfern xfern;
+	memset(&xfern, 0, sizeof(xfern)); /* make valgrind happy */
 	xfern.bufs = bufs;
 	xfern.frames = size;
 	err = ioctl(fd, SNDRV_PCM_IOCTL_READN_FRAMES, &xfern);
@@ -950,7 +1002,6 @@ static snd_pcm_ops_t snd_pcm_hw_ops = {
 	.dump = snd_pcm_hw_dump,
 	.nonblock = snd_pcm_hw_nonblock,
 	.async = snd_pcm_hw_async,
-	.poll_revents = NULL,
 	.mmap = snd_pcm_hw_mmap,
 	.munmap = snd_pcm_hw_munmap,
 };
@@ -969,13 +1020,18 @@ static snd_pcm_fast_ops_t snd_pcm_hw_fast_ops = {
 	.rewind = snd_pcm_hw_rewind,
 	.forward = snd_pcm_hw_forward,
 	.resume = snd_pcm_hw_resume,
-	.poll_ask = NULL,
+	.link_fd = snd_pcm_hw_link_fd,
+	.link = snd_pcm_hw_link,
+	.unlink = snd_pcm_hw_unlink,
 	.writei = snd_pcm_hw_writei,
 	.writen = snd_pcm_hw_writen,
 	.readi = snd_pcm_hw_readi,
 	.readn = snd_pcm_hw_readn,
 	.avail_update = snd_pcm_hw_avail_update,
 	.mmap_commit = snd_pcm_hw_mmap_commit,
+	.poll_descriptors = NULL,
+	.poll_descriptors_count = NULL,
+	.poll_revents = NULL,
 };
 
 /**
@@ -983,6 +1039,8 @@ static snd_pcm_fast_ops_t snd_pcm_hw_fast_ops = {
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
  * \param fd File descriptor
+ * \param mmap_emulation Boolean flag for mmap emulation mode
+ * \param sync_ptr_ioctl Boolean flag for sync_ptr ioctl
  * \retval zero on success otherwise a negative error code
  * \warning Using of this function might be dangerous in the sense
  *          of compatibility reasons. The prototype might be freely
@@ -1153,7 +1211,8 @@ int snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 		fmode |= O_NONBLOCK;
 	if (mode & SND_PCM_ASYNC)
 		fmode |= O_ASYNC;
-	if ((fd = open(filename, fmode)) < 0) {
+	fd = snd_open_device(filename, fmode);
+	if (fd < 0) {
 		ret = -errno;
 		SYSMSG("open %s failed", filename);
 		goto _err;

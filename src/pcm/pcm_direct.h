@@ -1,10 +1,3 @@
-/**
- * \file pcm/pcm_dmix.c
- * \ingroup PCM_Plugins
- * \brief PCM Direct Stream Mixing (dmix) Plugin Interface
- * \author Jaroslav Kysela <perex@suse.cz>
- * \date 2003
- */
 /*
  *  PCM - Direct Stream Mixing
  *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
@@ -59,6 +52,7 @@ typedef struct {
 	snd_pcm_sw_params_t sw_params;
 	struct {
 		snd_pcm_uframes_t buffer_size;
+		snd_pcm_uframes_t period_size;
 		snd_pcm_uframes_t boundary;
 		snd_pcm_uframes_t channels;
 		unsigned int sample_bits;
@@ -85,6 +79,7 @@ struct snd_pcm_direct {
 	snd_pcm_direct_share_t *shmptr;	/* pointer to shared memory area */
 	snd_pcm_t *spcm; 		/* slave PCM handle */
 	snd_pcm_uframes_t appl_ptr;
+	snd_pcm_uframes_t last_appl_ptr;
 	snd_pcm_uframes_t hw_ptr;
 	snd_pcm_uframes_t avail_max;
 	snd_pcm_uframes_t slave_appl_ptr;
@@ -95,7 +90,10 @@ struct snd_pcm_direct {
 	int server, client;
 	int comm_fd;			/* communication file descriptor (socket) */
 	int hw_fd;			/* hardware file descriptor */
+	struct pollfd timer_fd;
 	int poll_fd;
+	int tread;
+	int timer_need_poll;
 	int server_fd;
 	pid_t server_pid;
 	snd_timer_t *timer; 		/* timer used as poll_fd */
@@ -144,6 +142,9 @@ int snd_pcm_direct_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params);
 int snd_pcm_direct_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t * info);
 int snd_pcm_direct_mmap(snd_pcm_t *pcm);
 int snd_pcm_direct_munmap(snd_pcm_t *pcm);
+int snd_pcm_direct_timer_stop(snd_pcm_direct_t *dmix);
+void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix);
+int snd_pcm_direct_set_timer_params(snd_pcm_direct_t *dmix);
 
 int snd_timer_async(snd_timer_t *timer, int sig, pid_t pid);
 struct timespec snd_pcm_hw_fast_tstamp(snd_pcm_t *pcm);

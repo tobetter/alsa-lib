@@ -235,7 +235,7 @@ The queue field is the queue id for scheduling.
 The source and dest fields are source and destination addresses.
 The data field is a union of event data.
 
-\subsction seq_ev_queue Scheduling queue
+\subsection seq_ev_queue Scheduling queue
 
 An event can be delivered either on scheduled or direct dispatch mode.
 On the scheduling mode, an event is once stored on the priority queue
@@ -978,6 +978,7 @@ int snd_seq_open(snd_seq_t **seqp, const char *name,
  * \brief Open the ALSA sequencer using local configuration
  *
  * \param seqp Pointer to a snd_seq_t pointer.
+ * \param name The name to open
  * \param streams The read/write mode of the sequencer.
  * \param mode Optional modifier
  * \param lconf Local configuration
@@ -997,7 +998,7 @@ int snd_seq_open_lconf(snd_seq_t **seqp, const char *name,
 
 /**
  * \brief Close the sequencer
- * \param handle Handle returned from #snd_seq_open()
+ * \param seq Handle returned from #snd_seq_open()
  * \return 0 on success otherwise a negative error code
  *
  * Closes the sequencer client and releases its resources.
@@ -1275,7 +1276,7 @@ int snd_seq_system_info_malloc(snd_seq_system_info_t **ptr)
 
 /**
  * \brief Frees a previously allocated #snd_seq_system_info_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_system_info_free(snd_seq_system_info_t *obj)
 {
@@ -1416,7 +1417,7 @@ int snd_seq_client_info_malloc(snd_seq_client_info_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_client_info_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_client_info_free(snd_seq_client_info_t *obj)
 {
@@ -1682,17 +1683,15 @@ int snd_seq_set_client_info(snd_seq_t *seq, snd_seq_client_info_t *info)
 }
 
 /**
- * \brief query the next matching client
+ * \brief query the next client
  * \param seq sequencer handle
  * \param info query pattern and result
  *
- * Queries the next matching client with the given condition in
- * info argument.
+ * Queries the next client.
  * The search begins at the client with an id one greater than
  * client field in info.
- * If name field in info is not empty, the client name is compared.
- * If a matching client is found, its attributes are stored o
- * info and returns zero.
+ * If a client is found, its attributes are stored in info,
+ * and zero is returned.
  * Otherwise returns a negative error code.
  *
  * \sa snd_seq_get_any_client_info()
@@ -1736,7 +1735,7 @@ int snd_seq_port_info_malloc(snd_seq_port_info_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_port_info_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_port_info_free(snd_seq_port_info_t *obj)
 {
@@ -2018,7 +2017,7 @@ void snd_seq_port_info_set_capability(snd_seq_port_info_t *info, unsigned int ca
 /**
  * \brief Get the type bits of a port_info container
  * \param info port_info container
- * \return port type bits
+ * \param type port type bits
  *
  * \sa snd_seq_get_port_info(), snd_seq_port_info_get_type()
  */
@@ -2306,7 +2305,7 @@ int snd_seq_port_subscribe_malloc(snd_seq_port_subscribe_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_port_subscribe_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_port_subscribe_free(snd_seq_port_subscribe_t *obj)
 {
@@ -2328,7 +2327,6 @@ void snd_seq_port_subscribe_copy(snd_seq_port_subscribe_t *dst, const snd_seq_po
 /**
  * \brief Get sender address of a port_subscribe container
  * \param info port_subscribe container
- * \param addr sender address
  *
  * \sa snd_seq_subscribe_port(), snd_seq_port_subscribe_set_sender()
  */
@@ -2341,7 +2339,6 @@ const snd_seq_addr_t *snd_seq_port_subscribe_get_sender(const snd_seq_port_subsc
 /**
  * \brief Get destination address of a port_subscribe container
  * \param info port_subscribe container
- * \param addr destination address
  *
  * \sa snd_seq_subscribe_port(), snd_seq_port_subscribe_set_dest()
  */
@@ -2566,7 +2563,7 @@ int snd_seq_query_subscribe_malloc(snd_seq_query_subscribe_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_query_subscribe_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_query_subscribe_free(snd_seq_query_subscribe_t *obj)
 {
@@ -2850,7 +2847,7 @@ int snd_seq_queue_info_malloc(snd_seq_queue_info_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_queue_info_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_queue_info_free(snd_seq_queue_info_t *obj)
 {
@@ -3112,7 +3109,6 @@ int snd_seq_query_named_queue(snd_seq_t *seq, const char *name)
  * \brief Get the queue usage flag to the client
  * \param seq sequencer handle
  * \param q queue id
- * \param client client id
  * \return 1 = client is allowed to access the queue, 0 = not allowed, 
  *     otherwise a negative error code
  *
@@ -3135,7 +3131,6 @@ int snd_seq_get_queue_usage(snd_seq_t *seq, int q)
  * \brief Set the queue usage flag to the client
  * \param seq sequencer handle
  * \param q queue id
- * \param client client id
  * \param used non-zero if the client is allowed
  * \return 0 on success otherwise a negative error code
  *
@@ -3178,7 +3173,7 @@ int snd_seq_queue_status_malloc(snd_seq_queue_status_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_queue_status_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_queue_status_free(snd_seq_queue_status_t *obj)
 {
@@ -3239,7 +3234,6 @@ snd_seq_tick_time_t snd_seq_queue_status_get_tick_time(const snd_seq_queue_statu
 /**
  * \brief Get the real time of a queue_status container
  * \param info queue_status container
- * \param time real time
  *
  * \sa snd_seq_get_queue_status()
  */
@@ -3306,7 +3300,7 @@ int snd_seq_queue_tempo_malloc(snd_seq_queue_tempo_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_queue_tempo_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_queue_tempo_free(snd_seq_queue_tempo_t *obj)
 {
@@ -3506,7 +3500,7 @@ int snd_seq_queue_timer_malloc(snd_seq_queue_timer_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_queue_timer_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_queue_timer_free(snd_seq_queue_timer_t *obj)
 {
@@ -3914,7 +3908,7 @@ int snd_seq_extract_output(snd_seq_t *seq, snd_seq_event_t **ev_res)
 static ssize_t snd_seq_event_read_buffer(snd_seq_t *seq)
 {
 	ssize_t len;
-	len = seq->ops->read(seq, seq->ibuf, seq->ibufsize * sizeof(snd_seq_event_t));
+	len = (seq->ops->read)(seq, seq->ibuf, seq->ibufsize * sizeof(snd_seq_event_t));
 	if (len < 0)
 		return len;
 	seq->ibuflen = len / sizeof(snd_seq_event_t);
@@ -4129,7 +4123,7 @@ int snd_seq_remove_events_malloc(snd_seq_remove_events_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_remove_events_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_remove_events_free(snd_seq_remove_events_t *obj)
 {
@@ -4489,7 +4483,7 @@ int snd_seq_client_pool_malloc(snd_seq_client_pool_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_seq_client_pool_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_seq_client_pool_free(snd_seq_client_pool_t *obj)
 {
@@ -4701,7 +4695,7 @@ int snd_instr_header_malloc(snd_instr_header_t **ptr, size_t len)
 
 /**
  * \brief frees a previously allocated #snd_instr_header_t
- * \param pointer to object to free
+ * \param obj poitner to object to free
  */
 void snd_instr_header_free(snd_instr_header_t *obj)
 {

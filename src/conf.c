@@ -290,7 +290,7 @@ syntax.<P>
 
 \section confarg_define Defining arguments
 
-Arguments are defined using the id (key) \c @args and array values containing
+Arguments are defined using the id (key) \c \@args and array values containing
 the string names of the arguments:
 
 \code
@@ -300,7 +300,7 @@ the string names of the arguments:
 
 \section confarg_type Defining argument types and default values
 
-An argument's type is specified with the id (key) \c @args and the argument
+An argument's type is specified with the id (key) \c \@args and the argument
 name. The type and the default value are specified in the compound block:
 
 \code
@@ -362,7 +362,7 @@ pcm.demo {
 <P>The ALSA library can modify the configuration at runtime.
 Several built-in functions are available.</P>
 
-<P>A function is defined with the id \c @func and the function name. All other
+<P>A function is defined with the id \c \@func and the function name. All other
 values in the current compound are used as configuration for the function.
 If the compound func.<function_name> is defined in the root node, then the
 library and function from this compound configuration are used, otherwise
@@ -382,7 +382,7 @@ func.remove_first_char {
 
 <P>The hook extension in the ALSA library allows expansion of configuration
 nodes at run-time. The existence of a hook is determined by the
-presence of a @hooks compound node.</P>
+presence of a \@hooks compound node.</P>
 
 <P>This example defines a hook which loads two configuration files at the
 beginning:</P>
@@ -420,6 +420,7 @@ beginning:</P>
 #include <limits.h>
 #include <sys/stat.h>
 #include <pthread.h>
+#include <locale.h>
 #include "local.h"
 
 #ifndef DOC_HIDDEN
@@ -497,12 +498,19 @@ static int safe_strtod(const char *str, double *val)
 {
 	char *end;
 	double v;
+	char *saved_locale;
+	int err;
+
 	if (!*str)
 		return -EINVAL;
+	saved_locale = setlocale(LC_NUMERIC, NULL);
+	setlocale(LC_NUMERIC, "C");
 	errno = 0;
 	v = strtod(str, &end);
-	if (errno)
-		return -errno;
+	err = -errno;
+	setlocale(LC_NUMERIC, saved_locale);
+	if (err)
+		return err;
 	if (*end)
 		return -EINVAL;
 	*val = v;
@@ -1549,15 +1557,19 @@ static int snd_config_load1(snd_config_t *config, snd_input_t *in, int override)
 		switch (err) {
 		case LOCAL_UNTERMINATED_STRING:
 			str = "Unterminated string";
+			err = -EINVAL;
 			break;
 		case LOCAL_UNTERMINATED_QUOTE:
 			str = "Unterminated quote";
+			err = -EINVAL;
 			break;
 		case LOCAL_UNEXPECTED_CHAR:
 			str = "Unexpected char";
+			err = -EINVAL;
 			break;
 		case LOCAL_UNEXPECTED_EOF:
 			str = "Unexpected end of file";
+			err = -EINVAL;
 			break;
 		default:
 			str = strerror(-err);
@@ -2486,6 +2498,8 @@ int snd_config_search_alias(snd_config_t *config,
 				snd_config_searcha, snd_config_searchva);
 }
 
+static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data);
+
 /**
  * \brief Searches for a node in a configuration tree and expands hooks.
  * \param config Handle to the root of the configuration (sub)tree to search.
@@ -2496,7 +2510,6 @@ int snd_config_search_alias(snd_config_t *config,
  */
 int snd_config_search_hooks(snd_config_t *config, const char *key, snd_config_t **result)
 {
-	static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data);
 	SND_CONFIG_SEARCH(config, key, result, \
 					err = snd_config_hooks(config, NULL); \
 					if (err < 0) \
@@ -2516,7 +2529,6 @@ int snd_config_search_hooks(snd_config_t *config, const char *key, snd_config_t 
  */
 int snd_config_searcha_hooks(snd_config_t *root, snd_config_t *config, const char *key, snd_config_t **result)
 {
-	static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data);
 	SND_CONFIG_SEARCHA(root, config, key, result,
 					snd_config_searcha_hooks,
 					err = snd_config_hooks(config, NULL); \
@@ -2575,6 +2587,7 @@ int snd_config_search_alias_hooks(snd_config_t *config,
  */
 snd_config_t *snd_config = NULL;
 
+#ifndef DOC_HIDDEN
 struct finfo {
 	char *name;
 	dev_t dev;
@@ -2586,6 +2599,7 @@ struct _snd_config_update {
 	unsigned int count;
 	struct finfo *finfo;
 };
+#endif /* DOC_HIDDEN */
 
 static snd_config_update_t *snd_config_global_update = NULL;
 
@@ -2788,12 +2802,10 @@ int snd_config_hook_load(snd_config_t *root, snd_config_t *config, snd_config_t 
 				char *name;
 				if ((err = snd_config_get_ascii(n, &name)) < 0)
 					goto _err;
-				if ((err = snd_user_file(name, &fi[idx].name)) < 0) {
-					SNDERR("\"%s\" is not a word", name);
+				if ((err = snd_user_file(name, &fi[idx].name)) < 0)
+					fi[idx].name = name;
+				else
 					free(name);
-					goto _err;
-				}
-				free(name);
 				idx++;
 				hit = 1;
 			}
@@ -2894,8 +2906,8 @@ SND_DLSYM_BUILD_VERSION(snd_config_hook_load_for_all_cards, SND_CONFIG_DLSYM_VER
 
 /** 
  * \brief Updates a configuration tree by rereading the configuration files (if needed).
- * \param top Address of the handle to the top level node.
- * \param update Address of a pointer to private update information.
+ * \param _top Address of the handle to the top level node.
+ * \param _update Address of a pointer to private update information.
  * \param cfgs A list of configuration file names, delimited with ':'.
  *             If \p cfgs is set to \c NULL, the default global configuration
  *             file is used ("/usr/share/alsa/alsa.conf").
@@ -3103,6 +3115,10 @@ int snd_config_update_free_global(void)
 		snd_config_update_free(snd_config_global_update);
 	snd_config_global_update = NULL;
 	pthread_mutex_unlock(&snd_config_update_mutex);
+
+	/* FIXME: better to place this in another place... */
+	snd_dlobj_cache_cleanup();
+
 	return 0;
 }
 
@@ -3945,7 +3961,7 @@ int snd_config_expand(snd_config_t *config, snd_config_t *root, const char *args
  * \brief Searches for a definition in a configuration tree, using aliases and expanding hooks and arguments.
  * \param config Handle to the configuration (sub)tree to search.
  * \param base Implicit key base, or \c NULL for none.
- * \param key Key suffix.
+ * \param name Key suffix.
  * \param result The function puts the handle to the expanded found node at
  *               the address specified by \p result.
  * \return Zero if successful, otherwise a negative error code.

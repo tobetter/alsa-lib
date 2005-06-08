@@ -1,5 +1,6 @@
 alsadir = $(datadir)/alsa/cards
 cfg_files = aliases.conf \
+	AACI.conf \
 	ATIIXP.conf \
 	ATIIXP-SPDMA.conf \
 	ATIIXP-MODEM.conf \
@@ -10,11 +11,11 @@ cfg_files = aliases.conf \
 	Audigy2.conf \
 	Aureon51.conf \
 	Aureon71.conf \
-	Azalia.conf \
 	CA0106.conf \
 	CMI8338.conf \
 	CMI8338-SWIEC.conf \
 	CMI8738-MC6.conf \
+	CMI8738-MC8.conf \
 	CS46xx.conf \
 	EMU10K1.conf \
 	EMU10K1X.conf \
@@ -23,6 +24,7 @@ cfg_files = aliases.conf \
 	ES1968.conf \
 	FM801.conf \
 	GUS.conf \
+	HDA-Intel.conf \
 	ICE1712.conf \
 	ICE1724.conf \
 	ICH.conf \
@@ -30,6 +32,8 @@ cfg_files = aliases.conf \
 	ICH-MODEM.conf \
 	Maestro3.conf \
 	NFORCE.conf \
+	PC-Speaker.conf \
+	PMacToonie.conf \
 	RME9636.conf \
 	RME9652.conf \
 	SI7018.conf \

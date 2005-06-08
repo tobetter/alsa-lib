@@ -151,6 +151,7 @@ static int get_compare_weight(const char *name, unsigned int idx)
 		"Surround",
 		"Center",
 		"LFE",
+		"Side",
 		"Synth",
 		"FM",
 		"Wave",
@@ -2034,7 +2035,7 @@ int snd_mixer_selem_id_malloc(snd_mixer_selem_id_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_mixer_selem_id_t
- * \param pointer to object to free
+ * \param obj pointer to object to free
  */
 void snd_mixer_selem_id_free(snd_mixer_selem_id_t *obj)
 {

@@ -135,10 +135,13 @@ static void snd_err_msg_default(const char *file, int line, const char *function
 		fprintf(stderr, ": %s", snd_strerror(err));
 	putc('\n', stderr);
 	va_end(arg);
-	if (! strcmp(verbose, "assert"))
+	if (! strcmp(verbose, "assert") || atoi(verbose) > 1)
 		assert(0);
 }
 
+/**
+ * The ALSA error message handler
+ */
 snd_lib_error_handler_t snd_err_msg = snd_err_msg_default;
 
 #endif

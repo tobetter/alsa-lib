@@ -91,8 +91,6 @@ static unsigned short preset_dB_value[PRESET_RESOLUTION] = {
 	0xdbd5, 0xe0ab, 0xe59c, 0xeaa9, 0xefd3, 0xf519, 0xfa7d, 0xffff,
 };
 
-#endif /* DOC_HIDDEN */
-
 /* (32bit x 16bit) >> 16 */
 typedef union {
 	int i;
@@ -118,6 +116,7 @@ static inline int MULTI_DIV_int(int a, unsigned short b)
 /* (16bit x 16bit) >> 16 */
 #define MULTI_DIV_short(src,scale) (((int)(src) * (scale)) >> VOL_SCALE_SHIFT)
 
+#endif /* DOC_HIDDEN */
 
 /*
  * apply volumue attenuation
@@ -125,6 +124,7 @@ static inline int MULTI_DIV_int(int a, unsigned short b)
  * TODO: use SIMD operations
  */
 
+#ifndef DOC_HIDDEN
 #define CONVERT_AREA(TYPE) do {	\
 	unsigned int ch, fr; \
 	TYPE *src, *dst; \
@@ -174,6 +174,8 @@ static inline int MULTI_DIV_int(int a, unsigned short b)
 		vol_scale = vol[ch & 1]; \
 		break; \
 	}
+
+#endif /* DOC_HIDDEN */
 
 /* 2-channel stereo control */
 static void softvol_convert_stereo_vol(snd_pcm_softvol_t *svol,
@@ -269,8 +271,8 @@ static void get_current_volume(snd_pcm_softvol_t *svol)
 
 static void softvol_free(snd_pcm_softvol_t *svol)
 {
-	if (svol->plug.close_slave)
-		snd_pcm_close(svol->plug.slave);
+	if (svol->plug.gen.close_slave)
+		snd_pcm_close(svol->plug.gen.slave);
 	if (svol->ctl)
 		snd_ctl_close(svol->ctl);
 	if (svol->dB_value && svol->dB_value != preset_dB_value)
@@ -290,7 +292,9 @@ static int snd_pcm_softvol_hw_refine_cprepare(snd_pcm_t *pcm ATTRIBUTE_UNUSED,
 {
 	int err;
 	snd_pcm_access_mask_t access_mask = { SND_PCM_ACCBIT_SHM };
-	snd_pcm_format_mask_t format_mask = { SND_PCM_FMTBIT_LINEAR };
+	snd_pcm_format_mask_t format_mask = {
+		{ (1U << SND_PCM_FORMAT_S16) | (1U << SND_PCM_FORMAT_S32) }
+	};
 	err = _snd_pcm_hw_param_set_mask(params, SND_PCM_HW_PARAM_ACCESS,
 					 &access_mask);
 	if (err < 0)
@@ -378,18 +382,18 @@ static int snd_pcm_softvol_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params
 				       snd_pcm_softvol_hw_refine_cchange,
 				       snd_pcm_softvol_hw_refine_sprepare,
 				       snd_pcm_softvol_hw_refine_schange,
-				       snd_pcm_plugin_hw_refine_slave);
+				       snd_pcm_generic_hw_refine);
 }
 
 static int snd_pcm_softvol_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 {
 	snd_pcm_softvol_t *svol = pcm->private_data;
-	snd_pcm_t *slave = svol->plug.slave;
+	snd_pcm_t *slave = svol->plug.gen.slave;
 	int err = snd_pcm_hw_params_slave(pcm, params,
 					  snd_pcm_softvol_hw_refine_cchange,
 					  snd_pcm_softvol_hw_refine_sprepare,
 					  snd_pcm_softvol_hw_refine_schange,
-					  snd_pcm_plugin_hw_params_slave);
+					  snd_pcm_generic_hw_params);
 	if (err < 0)
 		return err;
 	if (slave->format != SND_PCM_FORMAT_S16 &&
@@ -459,7 +463,7 @@ static void snd_pcm_softvol_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(svol->plug.slave, out);
+	snd_pcm_dump(svol->plug.gen.slave, out);
 }
 
 static int add_user_ctl(snd_pcm_softvol_t *svol, snd_ctl_elem_info_t *cinfo, int count)
@@ -573,18 +577,17 @@ static int softvol_load_control(snd_pcm_t *pcm, snd_pcm_softvol_t *svol,
 
 static snd_pcm_ops_t snd_pcm_softvol_ops = {
 	.close = snd_pcm_softvol_close,
-	.info = snd_pcm_plugin_info,
+	.info = snd_pcm_generic_info,
 	.hw_refine = snd_pcm_softvol_hw_refine,
 	.hw_params = snd_pcm_softvol_hw_params,
-	.hw_free = snd_pcm_plugin_hw_free,
-	.sw_params = snd_pcm_plugin_sw_params,
-	.channel_info = snd_pcm_plugin_channel_info,
+	.hw_free = snd_pcm_generic_hw_free,
+	.sw_params = snd_pcm_generic_sw_params,
+	.channel_info = snd_pcm_generic_channel_info,
 	.dump = snd_pcm_softvol_dump,
-	.nonblock = snd_pcm_plugin_nonblock,
-	.async = snd_pcm_plugin_async,
-	.poll_revents = snd_pcm_plugin_poll_revents,
-	.mmap = snd_pcm_plugin_mmap,
-	.munmap = snd_pcm_plugin_munmap,
+	.nonblock = snd_pcm_generic_nonblock,
+	.async = snd_pcm_generic_async,
+	.mmap = snd_pcm_generic_mmap,
+	.munmap = snd_pcm_generic_munmap,
 };
 
 /**
@@ -592,7 +595,9 @@ static snd_pcm_ops_t snd_pcm_softvol_ops = {
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
  * \param sformat Slave format
- * \param card card index of the control
+ * \param ctl_card card index of the control
+ * \param ctl_id The control element
+ * \param cchannels PCM channels
  * \param min_dB minimal dB value
  * \param resolution resolution of control
  * \param slave Slave PCM handle
@@ -640,8 +645,8 @@ int snd_pcm_softvol_open(snd_pcm_t **pcmp, const char *name,
 	svol->plug.write = snd_pcm_softvol_write_areas;
 	svol->plug.undo_read = snd_pcm_plugin_undo_read_generic;
 	svol->plug.undo_write = snd_pcm_plugin_undo_write_generic;
-	svol->plug.slave = slave;
-	svol->plug.close_slave = close_slave;
+	svol->plug.gen.slave = slave;
+	svol->plug.gen.close_slave = close_slave;
 
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_SOFTVOL, name, slave->stream, slave->mode);
 	if (err < 0) {
@@ -660,116 +665,9 @@ int snd_pcm_softvol_open(snd_pcm_t **pcmp, const char *name,
 	return 0;
 }
 
-/*
- * parse card index and id for the softvol control
- */
-static int parse_control_id(snd_config_t *conf, snd_ctl_elem_id_t *ctl_id, int *cardp,
-			    int *cchannelsp)
-{
-	snd_config_iterator_t i, next;
-	int iface = SND_CTL_ELEM_IFACE_MIXER;
-	const char *name = NULL;
-	long index = 0;
-	long device = -1;
-	long subdevice = -1;
-	int err;
-
-	*cardp = -1;
-	*cchannelsp = 2;
-	snd_config_for_each(i, next, conf) {
-		snd_config_t *n = snd_config_iterator_entry(i);
-		const char *id;
-		if (snd_config_get_id(n, &id) < 0)
-			continue;
-		if (strcmp(id, "comment") == 0)
-			continue;
-		if (strcmp(id, "card") == 0) {
-			long v;
-			if ((err = snd_config_get_integer(n, &v)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			*cardp = v;
-			continue;
-		}
-		if (strcmp(id, "iface") == 0 || strcmp(id, "interface") == 0) {
-			const char *ptr;
-			if ((err = snd_config_get_string(n, &ptr)) < 0) {
-				SNDERR("field %s is not a string", id);
-				goto _err;
-			}
-			if ((err = snd_config_get_ctl_iface_ascii(ptr)) < 0) {
-				SNDERR("Invalid value for '%s'", id);
-				goto _err;
-			}
-			iface = err;
-			continue;
-		}
-		if (strcmp(id, "name") == 0) {
-			if ((err = snd_config_get_string(n, &name)) < 0) {
-				SNDERR("field %s is not a string", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "index") == 0) {
-			if ((err = snd_config_get_integer(n, &index)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "device") == 0) {
-			if ((err = snd_config_get_integer(n, &device)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "subdevice") == 0) {
-			if ((err = snd_config_get_integer(n, &subdevice)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "count") == 0) {
-			long v;
-			if ((err = snd_config_get_integer(n, &v)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			if (v < 1 || v > 2) {
-				SNDERR("Invalid count %ld", v);
-				goto _err;
-			}
-			*cchannelsp = v;
-			continue;
-		}
-		SNDERR("Unknown field %s", id);
-		return -EINVAL;
-	}
-	if (name == NULL) {
-		SNDERR("Missing control name");
-		err = -EINVAL;
-		goto _err;
-	}
-	if (device < 0)
-		device = 0;
-	if (subdevice < 0)
-		subdevice = 0;
-
-	snd_ctl_elem_id_set_interface(ctl_id, iface);
-	snd_ctl_elem_id_set_name(ctl_id, name);
-	snd_ctl_elem_id_set_index(ctl_id, index);
-	snd_ctl_elem_id_set_device(ctl_id, device);
-	snd_ctl_elem_id_set_subdevice(ctl_id, subdevice);
-
-	return 0;
-
- _err:
-	return err;
-}
+/* in pcm_misc.c */
+int snd_pcm_parse_control_id(snd_config_t *conf, snd_ctl_elem_id_t *ctl_id, int *cardp,
+			     int *cchannelsp, int *hwctlp);
 
 /*! \page pcm_plugins
 
@@ -798,7 +696,7 @@ pcm.name {
         }
         control {
 	        name STR        # control element id string
-		[card INT]      # control card index
+		[card STR]      # control card index
 		[iface STR]     # interface of the element
 		[index INT]     # index of the element
 		[device INT]    # device number of the element
@@ -915,7 +813,7 @@ int _snd_pcm_softvol_open(snd_pcm_t **pcmp, const char *name,
 	if (err < 0)
 		return err;
 	snd_ctl_elem_id_alloca(&ctl_id);
-	if ((err = parse_control_id(control, ctl_id, &card, &cchannels)) < 0) {
+	if ((err = snd_pcm_parse_control_id(control, ctl_id, &card, &cchannels, NULL)) < 0) {
 		snd_pcm_close(spcm);
 		return err;
 	}

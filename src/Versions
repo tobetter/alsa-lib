@@ -170,3 +170,51 @@ ALSA_1.0.8 {
     snd_ctl_elem_add_iec958;
     snd_ctl_elem_remove;
 } ALSA_1.0.5;
+
+ALSA_1.0.9 {
+  global:
+
+    snd_names_list;
+    snd_names_list_free;
+
+    snd_pcm_hw_params_set_rate_resample;
+    snd_pcm_hw_params_get_rate_resample;
+    snd_pcm_hw_params_set_export_buffer;
+    snd_pcm_hw_params_get_export_buffer;
+
+    snd_pcm_ioplug_create;
+    snd_pcm_ioplug_delete;
+    snd_pcm_ioplug_reinit_status;
+    snd_pcm_ioplug_params_reset;
+    snd_pcm_ioplug_set_param_minmax;
+    snd_pcm_ioplug_set_param_list;
+
+    snd_pcm_extplug_create;
+    snd_pcm_extplug_delete;
+    snd_pcm_extplug_params_reset;
+    snd_pcm_extplug_set_param_list;
+    snd_pcm_extplug_set_param_minmax;
+    snd_pcm_extplug_set_slave_param_list;
+    snd_pcm_extplug_set_slave_param_minmax;
+
+    snd_pcm_parse_control_id;
+
+    snd_async_add_timer_handler;
+    snd_async_handler_get_timer;
+
+    snd_timer_ginfo_sizeof;
+    snd_timer_ginfo_malloc;
+    snd_timer_ginfo_free;
+    snd_timer_ginfo_copy;
+    snd_timer_ginfo_set_tid;
+    snd_timer_ginfo_get_tid;
+    snd_timer_ginfo_get_flags;
+    snd_timer_ginfo_get_card;
+    snd_timer_ginfo_get_id;
+    snd_timer_ginfo_get_name;
+    snd_timer_ginfo_get_resolution;
+    snd_timer_ginfo_get_resolution_min;
+    snd_timer_ginfo_get_resolution_max;
+    snd_timer_ginfo_get_clients;
+
+} ALSA_1.0.8;

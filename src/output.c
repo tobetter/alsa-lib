@@ -181,7 +181,7 @@ static snd_output_ops_t snd_output_stdio_ops = {
  *                at the address specified by \p outputp.
  * \param fp The \c FILE pointer to write to. Characters are written
  *           to the file starting at the current file position.
- * \param close Close flag. Set this to 1 if #snd_output_close should close
+ * \param _close Close flag. Set this to 1 if #snd_output_close should close
  *              \p fp by calling \c fclose.
  * \return Zero if successful, otherwise a negative error code.
  */
@@ -237,7 +237,7 @@ typedef struct _snd_output_buffer {
 	size_t size;
 } snd_output_buffer_t;
 
-static int snd_output_buffer_close(snd_output_t *output ATTRIBUTE_UNUSED)
+static int snd_output_buffer_close(snd_output_t *output)
 {
 	snd_output_buffer_t *buffer = output->private_data;
 	free(buffer->buf);
