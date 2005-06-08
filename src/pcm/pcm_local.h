@@ -58,7 +58,6 @@ typedef enum sndrv_pcm_hw_param snd_pcm_hw_param_t;
 #define SND_PCM_HW_PARAM_BUFFER_BYTES SNDRV_PCM_HW_PARAM_BUFFER_BYTES
 #define SND_PCM_HW_PARAM_TICK_TIME SNDRV_PCM_HW_PARAM_TICK_TIME
 #define SND_PCM_HW_PARAM_LAST_INTERVAL SNDRV_PCM_HW_PARAM_LAST_INTERVAL
-#define SND_PCM_HW_PARAMS_RUNTIME SNDRV_PCM_HW_PARAMS_RUNTIME
 #define SND_PCM_HW_PARAM_LAST_MASK SNDRV_PCM_HW_PARAM_LAST_MASK
 #define SND_PCM_HW_PARAM_FIRST_MASK SNDRV_PCM_HW_PARAM_FIRST_MASK
 #define SND_PCM_HW_PARAM_LAST_INTERVAL SNDRV_PCM_HW_PARAM_LAST_INTERVAL
@@ -93,6 +92,9 @@ typedef enum sndrv_pcm_hw_param snd_pcm_hw_param_t;
 /** device can do a kind of synchronized start */
 #define SND_PCM_INFO_SYNC_START SNDRV_PCM_INFO_SYNC_START
 
+#define SND_PCM_HW_PARAMS_NORESAMPLE SNDRV_PCM_HW_PARAMS_NORESAMPLE
+#define SND_PCM_HW_PARAMS_EXPORT_BUFFER SNDRV_PCM_HW_PARAMS_EXPORT_BUFFER
+
 typedef struct _snd_pcm_rbptr {
 	snd_pcm_t *master;
 	volatile snd_pcm_uframes_t *ptr;
@@ -109,7 +111,7 @@ typedef struct _snd_pcm_channel_info {
 	void *addr;			/* base address of channel samples */
 	unsigned int first;		/* offset to first sample in bits */
 	unsigned int step;		/* samples distance in bits */
-	enum { SND_PCM_AREA_SHM, SND_PCM_AREA_MMAP } type;
+	enum { SND_PCM_AREA_SHM, SND_PCM_AREA_MMAP, SND_PCM_AREA_LOCAL } type;
 	union {
 		struct {
 			struct snd_shm_area *area;
@@ -127,7 +129,6 @@ typedef struct {
 	int (*close)(snd_pcm_t *pcm);
 	int (*nonblock)(snd_pcm_t *pcm, int nonblock);
 	int (*async)(snd_pcm_t *pcm, int sig, pid_t pid);
-	int (*poll_revents)(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
 	int (*info)(snd_pcm_t *pcm, snd_pcm_info_t *info);
 	int (*hw_refine)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
 	int (*hw_params)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
@@ -151,7 +152,9 @@ typedef struct {
 	int (*hwsync)(snd_pcm_t *pcm);
 	int (*delay)(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp);
 	int (*resume)(snd_pcm_t *pcm);
-	int (*poll_ask)(snd_pcm_t *pcm);
+	int (*link_fd)(snd_pcm_t *pcm, int *fds, int count, int (**failed)(snd_pcm_t *, int));
+	int (*link)(snd_pcm_t *pcm1, snd_pcm_t *pcm2);
+	int (*unlink)(snd_pcm_t *pcm);
 	snd_pcm_sframes_t (*rewind)(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
 	snd_pcm_sframes_t (*forward)(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
 	snd_pcm_sframes_t (*writei)(snd_pcm_t *pcm, const void *buffer, snd_pcm_uframes_t size);
@@ -160,6 +163,9 @@ typedef struct {
 	snd_pcm_sframes_t (*readn)(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size);
 	snd_pcm_sframes_t (*avail_update)(snd_pcm_t *pcm);
 	snd_pcm_sframes_t (*mmap_commit)(snd_pcm_t *pcm, snd_pcm_uframes_t offset, snd_pcm_uframes_t size);
+	int (*poll_descriptors_count)(snd_pcm_t *pcm);
+	int (*poll_descriptors)(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int space);
+	int (*poll_revents)(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
 } snd_pcm_fast_ops_t;
 
 struct _snd_pcm {
@@ -196,6 +202,7 @@ struct _snd_pcm {
 	unsigned int msbits;		/* used most significant bits */
 	unsigned int rate_num;		/* rate numerator */
 	unsigned int rate_den;		/* rate denominator */
+	unsigned int hw_flags;		/* actual hardware flags */
 	snd_pcm_uframes_t fifo_size;	/* chip FIFO size in frames */
 	snd_pcm_uframes_t buffer_size;
 	snd_interval_t buffer_time;
@@ -204,9 +211,9 @@ struct _snd_pcm {
 	snd_pcm_rbptr_t appl;
 	snd_pcm_rbptr_t hw;
 	snd_pcm_uframes_t min_align;
-	int mmap_rw: 1,
-	    mmap_shadow: 1,
-	    donot_close: 1;
+	unsigned int mmap_rw: 1;	/* use always mmapped buffer */
+	unsigned int mmap_shadow: 1;	/* don't call actual mmap */
+	unsigned int donot_close: 1;	/* don't close this PCM */
 	snd_pcm_channel_info_t *mmap_channels;
 	snd_pcm_channel_area_t *running_areas;
 	snd_pcm_channel_area_t *stopped_areas;
@@ -217,10 +224,6 @@ struct _snd_pcm {
 	void *private_data;
 	struct list_head async_handlers;
 };
-
-/* FIXME */
-#define _snd_pcm_link_descriptor _snd_pcm_poll_descriptor
-#define _snd_pcm_async_descriptor _snd_pcm_poll_descriptor
 
 int snd_pcm_new(snd_pcm_t **pcmp, snd_pcm_type_t type, const char *name,
 		snd_pcm_stream_t stream, int mode);
@@ -266,6 +269,9 @@ snd_pcm_sframes_t snd_pcm_write_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t size);
 int snd_pcm_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *info);
 int snd_pcm_channel_info_shm(snd_pcm_t *pcm, snd_pcm_channel_info_t *info, int shmid);
 int _snd_pcm_poll_descriptor(snd_pcm_t *pcm);
+int _snd_pcm_link_descriptors(snd_pcm_t *pcm, int *fds, int size, int (**failed)(snd_pcm_t *, int));
+#define _snd_pcm_link_descriptor _snd_pcm_poll_descriptor /* FIXME */
+#define _snd_pcm_async_descriptor _snd_pcm_poll_descriptor /* FIXME */
 
 /* handle special error cases */
 static inline int snd_pcm_check_error(snd_pcm_t *pcm, int err)
@@ -742,6 +748,8 @@ int snd_pcm_conf_generic_id(const char *id);
 
 int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd, int mmap_emulation, int sync_ptr_ioctl);
 
+int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout);
+
 #define SND_PCM_HW_PARBIT_ACCESS	(1U << SND_PCM_HW_PARAM_ACCESS)
 #define SND_PCM_HW_PARBIT_FORMAT	(1U << SND_PCM_HW_PARAM_FORMAT)
 #define SND_PCM_HW_PARBIT_SUBFORMAT	(1U << SND_PCM_HW_PARAM_SUBFORMAT)
@@ -820,4 +828,3 @@ typedef union snd_tmp_double {
 	double d;
 	int64_t l;
 } snd_tmp_double_t;
-

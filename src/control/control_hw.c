@@ -38,6 +38,7 @@ const char *_snd_module_control_hw = "";
 #define F_SETSIG 10
 #endif
 
+#ifndef DOC_HIDDEN
 #define SNDRV_FILE_CONTROL	"/dev/snd/controlC%i"
 #define SNDRV_CTL_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 3)
 
@@ -45,6 +46,7 @@ typedef struct {
 	int card;
 	int fd;
 } snd_ctl_hw_t;
+#endif /* DOC_HIDDEN */
 
 static int snd_ctl_hw_close(snd_ctl_t *handle)
 {
@@ -337,9 +339,11 @@ int snd_ctl_hw_open(snd_ctl_t **handle, const char *name, int card, int mode)
 		fmode |= O_NONBLOCK;
 	if (mode & SND_CTL_ASYNC)
 		fmode |= O_ASYNC;
-	if ((fd = open(filename, fmode)) < 0) {
+	fd = snd_open_device(filename, fmode);
+	if (fd < 0) {
 		snd_card_load(card);
-		if ((fd = open(filename, O_RDWR)) < 0)
+		fd = snd_open_device(filename, fmode);
+		if (fd < 0)
 			return -errno;
 	}
 #if 0

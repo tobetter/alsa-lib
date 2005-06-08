@@ -1,3 +1,58 @@
+alsa-lib (1.0.9-2) unstable; urgency=low
+
+  * Thomas Hood
+    - Conflict with pre-1.0.9 libasound2-plugins
+
+ -- Jordi Mallach <jordi@debian.org>  Wed,  8 Jun 2005 15:20:32 +0200
+
+alsa-lib (1.0.9-1) unstable; urgency=low
+
+  * New upstream release
+    - Fix bug that disabled stack protection (CAN-2005-0087)
+      (RedHat bug #144518)  (Closes: #301164)
+    - Fixes related to mplayer (Closes: #310189)
+  * Jordi Mallach
+    - debian/rules: bump shlibs to 1.0.9.
+
+ -- Jordi Mallach <jordi@debian.org>  Sun,  5 Jun 2005 23:00:51 +0200
+
+alsa-lib (1.0.8+1.0.9rc3-1) experimental; urgency=low
+
+  * New upstream release
+    - Closes: #291533 "ttable in .asoundrc do not accept fractions"
+    - Closes: #293928 "wrong routings of channels for 5.1 ICH5"
+    - Closes: #299423 "Please include asound_fm.h"
+    - Closes: #300792 "FTBFS (ppc64/gcc-4.0): static declaration ..."
+    - libasound2-plugins is no longer built from this source package
+  * Thomas Hood
+    - Remove the control entry, commands in rules, build dependencies
+      related to libasound2-plugins
+    - Add some mutual Suggestions among the ALSA library packages
+    - Drop dpatch applied upstream: 10_conf-space-fix
+    - debian/NOTES:
+      + Add note about what to do if we ever have libasound3
+      + Remove note about building libasound2-plugins
+    - Tweak descriptions
+
+ -- Jordi Mallach <jordi@sindominio.net>  Wed, 11 May 2005 13:32:05 +0200
+
+alsa-lib (1.0.8-3) unstable; urgency=medium
+
+  * Thomas Hood:
+    - debian/control
+      + s/alsalib-dev/libasound-dev/ in libasound2-dev's Conflicts: and
+        Provides:, to use a more standard naming scheme
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 24 Feb 2005 20:09:09 +0100
+
+alsa-lib (1.0.8-2) unstable; urgency=medium
+
+  * Thomas Hood:
+    - Add 10_conf-space-fix.dpatch so that libasound2 works with sound
+      card names containing spaces  (Closes: #294880, #293907)
+
+ -- Jordi Mallach <jordi@debian.org>  Fri, 18 Feb 2005 01:53:09 +0100
+
 alsa-lib (1.0.8-1) unstable; urgency=low
 
   * New upstream release

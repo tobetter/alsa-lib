@@ -34,6 +34,9 @@
 #include <errno.h>
 
 #include "config.h"
+#ifdef SUPPORT_RESMGR
+#include <resmgr.h>
+#endif
 
 #define _snd_config_iterator list_head
 #define _snd_interval sndrv_interval
@@ -126,13 +129,15 @@ typedef struct sndrv_seq_event snd_seq_event_t;
 struct _snd_async_handler {
 	enum {
 		SND_ASYNC_HANDLER_GENERIC,
-		SND_ASYNC_HANDLER_PCM,
 		SND_ASYNC_HANDLER_CTL,
+		SND_ASYNC_HANDLER_PCM,
+		SND_ASYNC_HANDLER_TIMER,
 	} type;
 	int fd;
 	union {
-		snd_pcm_t *pcm;
 		snd_ctl_t *ctl;
+		snd_pcm_t *pcm;
+		snd_timer_t *timer;
 	} u;
 	snd_async_callback_t callback;
 	void *private_data;
@@ -215,5 +220,23 @@ extern snd_lib_error_handler_t snd_err_msg;
 /* We will never be heard; they will all die horribly.  */
 # define link_warning(symbol, msg)
 #endif
+
+/* open with resmgr */
+#ifdef SUPPORT_RESMGR
+static inline int snd_open_device(const char *filename, int fmode)
+{
+	int fd = open(filename, fmode);
+	if (fd >= 0)
+		return fd;
+	return rsm_open_device(filename, fmode);
+}
+#else
+#define snd_open_device(filename, fmode) open(filename, fmode);
+#endif
+
+/* dlobj cache */
+void *snd_dlobj_cache_lookup(const char *name);
+int snd_dlobj_cache_add(const char *name, void *dlobj, void *open_func);
+void snd_dlobj_cache_cleanup(void);
 
 #endif

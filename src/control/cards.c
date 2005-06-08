@@ -51,11 +51,14 @@ int snd_card_load(int card)
 
 	sprintf(control, SND_FILE_CONTROL, card);
 
-	if ((open_dev=open(control, O_RDONLY)) < 0) {
+	open_dev = snd_open_device(control, O_RDONLY);
+#ifdef SUPPORT_ALOAD
+	if (open_dev < 0) {
 		char aload[32];
 		sprintf(aload, SND_FILE_LOAD, card);
-		open_dev = open(aload, O_RDONLY);
+		open_dev = snd_open_device(aload, O_RDONLY);
 	}
+#endif
 	if (open_dev >= 0) {
 		close (open_dev);
 		return 0;

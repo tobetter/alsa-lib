@@ -155,7 +155,7 @@ COMPATNUM = @LIBTOOL_VERSION_INFO@
 @VERSIONED_SYMBOLS_FALSE@VSYMS = 
 
 lib_LTLIBRARIES = libasound.la
-libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c
+libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c names.c
 libasound_la_LIBADD = control/libcontrol.la \
 		      mixer/libmixer.la ordinary_mixer/libordinarymixer.la \
 		      pcm/libpcm.la ordinary_pcm/libordinarypcm.la \
@@ -181,7 +181,8 @@ libasound_la_DEPENDENCIES = control/libcontrol.la mixer/libmixer.la \
 	timer/libtimer.la hwdep/libhwdep.la seq/libseq.la \
 	instr/libinstr.la compat/libcompat.la alisp/libalisp.la
 am_libasound_la_OBJECTS = conf.lo confmisc.lo input.lo output.lo \
-	async.lo error.lo dlmisc.lo socket.lo shmarea.lo userfile.lo
+	async.lo error.lo dlmisc.lo socket.lo shmarea.lo userfile.lo \
+	names.lo
 libasound_la_OBJECTS = $(am_libasound_la_OBJECTS)
 
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/include
@@ -190,8 +191,9 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/async.Plo ./$(DEPDIR)/conf.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/confmisc.Plo ./$(DEPDIR)/dlmisc.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/error.Plo ./$(DEPDIR)/input.Plo \
-@AMDEP_TRUE@	./$(DEPDIR)/output.Plo ./$(DEPDIR)/shmarea.Plo \
-@AMDEP_TRUE@	./$(DEPDIR)/socket.Plo ./$(DEPDIR)/userfile.Plo
+@AMDEP_TRUE@	./$(DEPDIR)/names.Plo ./$(DEPDIR)/output.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/shmarea.Plo ./$(DEPDIR)/socket.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/userfile.Plo
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) \
@@ -262,6 +264,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlmisc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/error.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/input.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/names.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/output.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shmarea.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/socket.Plo@am__quote@

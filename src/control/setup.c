@@ -37,6 +37,7 @@
 #include <ctype.h>
 #include "local.h"
 
+#ifndef DOC_HIDDEN
 typedef struct {
 	unsigned int lock: 1;
 	unsigned int preserve: 1;
@@ -53,6 +54,7 @@ struct _snd_sctl {
 	snd_ctl_t *ctl;
 	struct list_head elems;
 };
+#endif /* DOC_HIDDEN */
 
 static int free_elems(snd_sctl_t *h)
 {
@@ -418,7 +420,6 @@ static int add_elem(snd_sctl_t *h, snd_config_t *_conf, snd_config_t *private_da
 			}
 			if ((err = snd_config_get_ctl_iface_ascii(ptr)) < 0) {
 				SNDERR("Invalid value for '%s'", id);
-				free(tmp);
 				goto _err;
 			}
 			iface = err;

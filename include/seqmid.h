@@ -1,5 +1,5 @@
 /**
- * \file <alsa/seqmid.h>
+ * \file include/seqmid.h
  * \brief Application interface library for the ALSA driver
  * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
@@ -7,8 +7,8 @@
  * \date 1998-2001
  *
  * Application interface library for the ALSA driver
- *
- *
+ */
+/*
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -47,6 +47,16 @@ extern "C" {
  */
 #define snd_seq_ev_clear(ev) \
 	memset(ev, 0, sizeof(snd_seq_event_t))
+
+/**
+ * \brief set the tag for given event
+ * \param ev event record
+ * \param t event tag
+ *
+ * This macro sets the tag to the given event record.
+ */
+#define snd_seq_ev_set_tag(ev,t) \
+	((ev)->tag = (t))
 
 /**
  * \brief set the explicit destination
@@ -185,8 +195,8 @@ extern "C" {
 /**
  * \brief set varusr data
  * \param ev event instance
- * \param len length of the external data
- * \param ptr pointer of the external data
+ * \param datalen length of the external data
+ * \param dataptr pointer of the external data
  *
  * Sets the event length mode as variable user-space data and stores the data.
  *
