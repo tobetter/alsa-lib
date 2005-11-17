@@ -1,12 +1,28 @@
-            MAINTAINER NOTES
-	      for alsa-lib
-            ----------------
+                     MAINTAINER NOTES
+                     for alsa-lib
+
+
+TODO in release after 1.0.9
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* Close: #277539
+
+
+TODO each time
+~~~~~~~~~~~~~~
+* Check Ubuntu patches at http://people.ubuntulinux.org/~scott/patches/
+* Update debian/ChangeLog from release announcement
+
+
+NOTES
+~~~~~
+
+aserver
+~~~~~~~
+If we add it back in then we should create a new package libsound2-bin
+for it.
 
 libasound3
 ----------
-libasound2 includes /usr/bin/aserver which should be in a libasound2-bin
-package.
-
 We build libasound2-dev, making it appear that we are prepared to
 support multiple simultaneous -dev packages in the future.  However,
 libasound2-dev uses generically named directories such as
