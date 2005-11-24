@@ -34,6 +34,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <grp.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -92,14 +93,15 @@ static void snd_pcm_dsnoop_sync_area(snd_pcm_t *pcm, snd_pcm_uframes_t slave_hw_
 	dst_areas = snd_pcm_mmap_areas(pcm);
 	src_areas = snd_pcm_mmap_areas(dsnoop->spcm);
 	hw_ptr %= pcm->buffer_size;
-	slave_hw_ptr %= dsnoop->shmptr->s.buffer_size;
+	slave_hw_ptr %= dsnoop->slave_buffer_size;
 	while (size > 0) {
 		transfer = hw_ptr + size > pcm->buffer_size ? pcm->buffer_size - hw_ptr : size;
-		transfer = slave_hw_ptr + transfer > dsnoop->shmptr->s.buffer_size ? dsnoop->shmptr->s.buffer_size - slave_hw_ptr : transfer;
+		transfer = slave_hw_ptr + transfer > dsnoop->slave_buffer_size ?
+			dsnoop->slave_buffer_size - slave_hw_ptr : transfer;
 		size -= transfer;
 		snoop_areas(dsnoop, src_areas, dst_areas, slave_hw_ptr, hw_ptr, transfer);
 		slave_hw_ptr += transfer;
-	 	slave_hw_ptr %= dsnoop->shmptr->s.buffer_size;
+	 	slave_hw_ptr %= dsnoop->slave_buffer_size;
 		hw_ptr += transfer;
 		hw_ptr %= pcm->buffer_size;
 	}
@@ -129,7 +131,7 @@ static int snd_pcm_dsnoop_sync_ptr(snd_pcm_t *pcm)
 	if (diff == 0)		/* fast path */
 		return 0;
 	if (diff < 0) {
-		slave_hw_ptr += dsnoop->shmptr->s.boundary;
+		slave_hw_ptr += dsnoop->slave_boundary;
 		diff = slave_hw_ptr - old_slave_hw_ptr;
 	}
 	snd_pcm_dsnoop_sync_area(pcm, old_slave_hw_ptr, diff);
@@ -244,7 +246,6 @@ static int snd_pcm_dsnoop_prepare(snd_pcm_t *pcm)
 	snd_pcm_direct_t *dsnoop = pcm->private_data;
 
 	snd_pcm_direct_check_interleave(dsnoop, pcm);
-	// assert(pcm->boundary == dsnoop->shmptr->s.boundary);	/* for sure */
 	dsnoop->state = SND_PCM_STATE_PREPARED;
 	dsnoop->appl_ptr = 0;
 	dsnoop->hw_ptr = 0;
@@ -337,13 +338,6 @@ static snd_pcm_sframes_t snd_pcm_dsnoop_forward(snd_pcm_t *pcm, snd_pcm_uframes_
 	return frames;
 }
 
-static int snd_pcm_dsnoop_resume(snd_pcm_t *pcm)
-{
-	snd_pcm_direct_t *dsnoop = pcm->private_data;
-	snd_pcm_resume(dsnoop->spcm);
-	return 0;
-}
-
 static snd_pcm_sframes_t snd_pcm_dsnoop_writei(snd_pcm_t *pcm ATTRIBUTE_UNUSED, const void *buffer ATTRIBUTE_UNUSED, snd_pcm_uframes_t size ATTRIBUTE_UNUSED)
 {
 	return -ENODEV;
@@ -419,7 +413,7 @@ static void snd_pcm_dsnoop_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_pcm_direct_t *dsnoop = pcm->private_data;
 
-	snd_output_printf(out, "Direct Stream Mixing PCM\n");
+	snd_output_printf(out, "Direct Snoop PCM\n");
 	if (pcm->setup) {
 		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
@@ -456,7 +450,7 @@ static snd_pcm_fast_ops_t snd_pcm_dsnoop_fast_ops = {
 	.pause = snd_pcm_dsnoop_pause,
 	.rewind = snd_pcm_dsnoop_rewind,
 	.forward = snd_pcm_dsnoop_forward,
-	.resume = snd_pcm_dsnoop_resume,
+	.resume = snd_pcm_direct_resume,
 	.link_fd = NULL,
 	.link = NULL,
 	.unlink = NULL,
@@ -477,6 +471,7 @@ static snd_pcm_fast_ops_t snd_pcm_dsnoop_fast_ops = {
  * \param name Name of PCM
  * \param ipc_key IPC key for semaphore and shared memory
  * \param ipc_perm IPC permissions for semaphore and shared memory
+ * \param ipc_gid IPC group ID for semaphore and shared memory
  * \param params Parameters for slave
  * \param bindings Channel bindings
  * \param slowptr Slow but more precise pointer updates
@@ -490,7 +485,7 @@ static snd_pcm_fast_ops_t snd_pcm_dsnoop_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
-			key_t ipc_key, mode_t ipc_perm,
+			key_t ipc_key, mode_t ipc_perm, int ipc_gid,
 			struct slave_params *params,
 			snd_config_t *bindings,
 			int slowptr,
@@ -520,6 +515,7 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 	
 	dsnoop->ipc_key = ipc_key;
 	dsnoop->ipc_perm = ipc_perm;
+	dsnoop->ipc_gid = ipc_gid;
 	dsnoop->semid = -1;
 	dsnoop->shmid = -1;
 
@@ -594,25 +590,10 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 		}
 			
 		snd_pcm_direct_semaphore_down(dsnoop, DIRECT_IPC_SEM_CLIENT);
-		ret = snd_pcm_hw_open_fd(&spcm, "dsnoop_client", dsnoop->hw_fd, 0, 0);
-		if (ret < 0) {
-			SNDERR("unable to open hardware");
+
+		ret = snd_pcm_direct_open_secondary_client(&spcm, dsnoop, "dsnoop_client");
+		if (ret < 0)
 			goto _err;
-		}
-		
-		spcm->donot_close = 1;
-		spcm->setup = 1;
-		spcm->buffer_size = dsnoop->shmptr->s.buffer_size;
-		spcm->sample_bits = dsnoop->shmptr->s.sample_bits;
-		spcm->channels = dsnoop->shmptr->s.channels;
-		spcm->format = dsnoop->shmptr->s.format;
-		spcm->boundary = dsnoop->shmptr->s.boundary;
-		spcm->info = dsnoop->shmptr->s.info;
-		ret = snd_pcm_mmap(spcm);
-		if (ret < 0) {
-			SNDERR("unable to mmap channels");
-			goto _err;
-		}
 		dsnoop->spcm = spcm;
 	}
 
@@ -732,6 +713,7 @@ int _snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 	int bsize, psize, ipc_key_add_uid = 0, slowptr = 0;
 	key_t ipc_key = 0;
 	mode_t ipc_perm = 0600;
+	int ipc_gid = -1;
 	int err;
 
 	snd_config_for_each(i, next, conf) {
@@ -761,9 +743,33 @@ int _snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 			}
 			if (isdigit(*perm) == 0) {
 				SNDERR("The field ipc_perm must be a valid file permission");
+				free(perm);
 				return -EINVAL;
 			}
 			ipc_perm = strtol(perm, &endp, 8);
+			free(perm);
+			continue;
+		}
+		if (strcmp(id, "ipc_gid") == 0) {
+			char *group;
+			char *endp;
+			err = snd_config_get_ascii(n, &group);
+			if (err < 0) {
+				SNDERR("The field ipc_gid must be a valid group");
+				return err;
+			}
+			if (isdigit(*group) == 0) {
+				struct group *grp = getgrnam(group);
+				if (group == NULL) {
+					SNDERR("The field ipc_gid must be a valid group (create group %s)", group);
+					free(group);
+					return -EINVAL;
+				}
+				ipc_gid = grp->gr_gid;
+			} else {
+				ipc_perm = strtol(group, &endp, 10);
+			}
+			free(group);
 			continue;
 		}
 		if (strcmp(id, "ipc_key_add_uid") == 0) {
@@ -831,7 +837,7 @@ int _snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 
 	params.period_size = psize;
 	params.buffer_size = bsize;
-	err = snd_pcm_dsnoop_open(pcmp, name, ipc_key, ipc_perm, &params, bindings, slowptr, root, sconf, stream, mode);
+	err = snd_pcm_dsnoop_open(pcmp, name, ipc_key, ipc_perm, ipc_gid, &params, bindings, slowptr, root, sconf, stream, mode);
 	if (err < 0)
 		snd_config_delete(sconf);
 	return err;

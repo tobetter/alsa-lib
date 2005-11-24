@@ -42,6 +42,12 @@
  *
  */
  
+union semun {
+	int              val;    /* Value for SETVAL */
+	struct semid_ds *buf;    /* Buffer for IPC_STAT, IPC_SET */
+	unsigned short  *array;  /* Array for GETALL, SETALL */
+	struct seminfo  *__buf;  /* Buffer for IPC_INFO (Linux specific) */
+};
  
 /*
  * FIXME:
@@ -50,38 +56,27 @@
 
 int snd_pcm_direct_semaphore_create_or_connect(snd_pcm_direct_t *dmix)
 {
+	union semun s;
+	struct semid_ds buf;
+	int i;
+
 	dmix->semid = semget(dmix->ipc_key, DIRECT_IPC_SEMS,
 			     IPC_CREAT | dmix->ipc_perm);
 	if (dmix->semid < 0)
 		return -errno;
-	return 0;
-}
-
-int snd_pcm_direct_semaphore_discard(snd_pcm_direct_t *dmix)
-{
-	if (dmix->semid < 0)
-		return -EINVAL;
-	if (semctl(dmix->semid, 0, IPC_RMID, NULL) < 0)
-		return -errno;
-	dmix->semid = -1;
-	return 0;
-}
-
-int snd_pcm_direct_semaphore_down(snd_pcm_direct_t *dmix, int sem_num)
-{
-	struct sembuf op[2] = { { sem_num, 0, 0 }, { sem_num, 1, SEM_UNDO } };
-	assert(dmix->semid >= 0);
-	if (semop(dmix->semid, op, 2) < 0)
-		return -errno;
-	return 0;
-}
-
-int snd_pcm_direct_semaphore_up(snd_pcm_direct_t *dmix, int sem_num)
-{
-	struct sembuf op = { sem_num, -1, SEM_UNDO | IPC_NOWAIT };
-	assert(dmix->semid >= 0);
-	if (semop(dmix->semid, &op, 1) < 0)
-		return -errno;
+	if (dmix->ipc_gid < 0)
+		return 0;
+	for (i = 0; i < DIRECT_IPC_SEMS; i++) {
+		s.buf = &buf;
+		if (semctl(dmix->semid, i, IPC_STAT, s) < 0) {
+			int err = -errno;
+			snd_pcm_direct_semaphore_discard(dmix);
+			return err;
+		}
+		buf.sem_perm.gid = dmix->ipc_gid;
+		s.buf = &buf;
+		semctl(dmix->semid, i, IPC_SET, s);
+	}
 	return 0;
 }
 
@@ -120,12 +115,23 @@ retryget:
 	}
 	if (buf.shm_nattch == 1) {	/* we're the first user, clear the segment */
 		memset(dmix->shmptr, 0, sizeof(snd_pcm_direct_share_t));
+		if (dmix->ipc_gid >= 0) {
+			buf.shm_perm.gid = dmix->ipc_gid;
+			shmctl(dmix->shmid, IPC_SET, &buf);
+		}
 		return 1;
 	}
 	return 0;
 }
 
-int snd_pcm_direct_shm_discard(snd_pcm_direct_t *dmix)
+/* discard shared memory */
+/*
+ * Define snd_* functions to be used in server.
+ * Since objects referred in a plugin can be released dynamically, a forked
+ * server should have statically linked functions.
+ * (e.g. Novell bugzilla #105772)
+ */
+static int _snd_pcm_direct_shm_discard(snd_pcm_direct_t *dmix)
 {
 	struct shmid_ds buf;
 	int ret = 0;
@@ -146,6 +152,12 @@ int snd_pcm_direct_shm_discard(snd_pcm_direct_t *dmix)
 	return ret;
 }
 
+/* ... and an exported version */
+int snd_pcm_direct_shm_discard(snd_pcm_direct_t *dmix)
+{
+	return _snd_pcm_direct_shm_discard(dmix);
+}
+
 /*
  *  server side
  */
@@ -160,7 +172,7 @@ static int get_tmp_name(char *filename, size_t size)
 	return 0;
 }
 
-static int make_local_socket(const char *filename, int server, mode_t ipc_perm)
+static int make_local_socket(const char *filename, int server, mode_t ipc_perm, int ipc_gid)
 {
 	size_t l = strlen(filename);
 	size_t size = offsetof(struct sockaddr_un, sun_path) + l;
@@ -176,6 +188,7 @@ static int make_local_socket(const char *filename, int server, mode_t ipc_perm)
 
 	if (server)
 		unlink(filename);
+	memset(addr, 0, size); /* make valgrind happy */
 	addr->sun_family = AF_LOCAL;
 	memcpy(addr->sun_path, filename, l);
 	
@@ -183,18 +196,32 @@ static int make_local_socket(const char *filename, int server, mode_t ipc_perm)
 		if (bind(sock, (struct sockaddr *) addr, size) < 0) {
 			int result = -errno;
 			SYSERR("bind failed: %s", filename);
+			close(sock);
 			return result;
 		} else {
 			if (chmod(filename, ipc_perm) < 0) {
 				int result = -errno;
 				SYSERR("chmod failed: %s", filename);
+				close(sock);
+				unlink(filename);
 				return result;
+			}
+			if (chown(filename, -1, ipc_gid) < 0) {
+#if 0 /* it's not fatal */
+				int result = -errno;
+				SYSERR("chown failed: %s", filename);
+				close(sock);
+				unlink(filename);
+				return result;
+#endif
 			}
 		}
 	} else {
 		if (connect(sock, (struct sockaddr *) addr, size) < 0) {
+			int result = -errno;
 			SYSERR("connect failed: %s", filename);
-			return -errno;
+			close(sock);
+			return result;
 		}
 	}
 	return sock;
@@ -208,12 +235,73 @@ static int make_local_socket(const char *filename, int server, mode_t ipc_perm)
 #define server_printf(fmt, args...) /* nothing */
 #endif
 
+static snd_pcm_direct_t *server_job_dmix;
+
+static void server_cleanup(snd_pcm_direct_t *dmix)
+{
+	close(dmix->server_fd);
+	close(dmix->hw_fd);
+	if (dmix->server_free)
+		dmix->server_free(dmix);
+	unlink(dmix->shmptr->socket_name);
+	_snd_pcm_direct_shm_discard(dmix);
+	snd_pcm_direct_semaphore_discard(dmix);
+}
+
+static void server_job_signal(int sig ATTRIBUTE_UNUSED)
+{
+	snd_pcm_direct_semaphore_down(server_job_dmix, DIRECT_IPC_SEM_CLIENT);
+	server_cleanup(server_job_dmix);
+	server_printf("DIRECT SERVER EXIT - SIGNAL\n");
+	_exit(EXIT_SUCCESS);
+}
+
+/* This is a copy from ../socket.c, provided here only for a server job
+ * (see the comment above)
+ */
+static int _snd_send_fd(int sock, void *data, size_t len, int fd)
+{
+	int ret;
+	size_t cmsg_len = CMSG_LEN(sizeof(int));
+	struct cmsghdr *cmsg = alloca(cmsg_len);
+	int *fds = (int *) CMSG_DATA(cmsg);
+	struct msghdr msghdr;
+	struct iovec vec;
+
+	vec.iov_base = (void *)&data;
+	vec.iov_len = len;
+
+	cmsg->cmsg_len = cmsg_len;
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	*fds = fd;
+
+	msghdr.msg_name = NULL;
+	msghdr.msg_namelen = 0;
+	msghdr.msg_iov = &vec;
+ 	msghdr.msg_iovlen = 1;
+	msghdr.msg_control = cmsg;
+	msghdr.msg_controllen = cmsg_len;
+	msghdr.msg_flags = 0;
+
+	ret = sendmsg(sock, &msghdr, 0 );
+	if (ret < 0)
+		return -errno;
+	return ret;
+}
+
 static void server_job(snd_pcm_direct_t *dmix)
 {
 	int ret, sck, i;
 	int max = 128, current = 0;
 	struct pollfd pfds[max + 1];
 
+	server_job_dmix = dmix;
+	/* don't allow to be killed */
+	signal(SIGHUP, server_job_signal);
+	signal(SIGQUIT, server_job_signal);
+	signal(SIGTERM, server_job_signal);
+	signal(SIGKILL, server_job_signal);
 	/* close all files to free resources */
 	i = sysconf(_SC_OPEN_MAX);
 #ifdef SERVER_JOB_DEBUG
@@ -234,14 +322,18 @@ static void server_job(snd_pcm_direct_t *dmix)
 	server_printf("DIRECT SERVER STARTED\n");
 	while (1) {
 		ret = poll(pfds, current + 1, 500);
-		server_printf("DIRECT SERVER: poll ret = %i, revents[0] = 0x%x\n", ret, pfds[0].revents);
-		if (ret < 0)	/* some error */
+		server_printf("DIRECT SERVER: poll ret = %i, revents[0] = 0x%x, errno = %i\n", ret, pfds[0].revents, errno);
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
+			/* some error */
 			break;
-		if (ret == 0 || pfds[0].revents & (POLLERR | POLLHUP)) {	/* timeout or error? */
+		}
+		if (ret == 0 || (pfds[0].revents & (POLLERR | POLLHUP))) {	/* timeout or error? */
 			struct shmid_ds buf;
 			snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT);
 			if (shmctl(dmix->shmid, IPC_STAT, &buf) < 0) {
-				snd_pcm_direct_shm_discard(dmix);
+				_snd_pcm_direct_shm_discard(dmix);
 				snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
 				continue;
 			}
@@ -262,7 +354,7 @@ static void server_job(snd_pcm_direct_t *dmix)
 					unsigned char buf = 'A';
 					pfds[current+1].fd = sck;
 					pfds[current+1].events = POLLIN | POLLERR | POLLHUP;
-					snd_send_fd(sck, &buf, 1, dmix->hw_fd);
+					_snd_send_fd(sck, &buf, 1, dmix->hw_fd);
 					server_printf("DIRECT SERVER: fd sent ok\n");
 					current++;
 				}
@@ -292,13 +384,7 @@ static void server_job(snd_pcm_direct_t *dmix)
 			}
 		}
 	}
-	close(dmix->server_fd);
-	close(dmix->hw_fd);
-	if (dmix->server_free)
-		dmix->server_free(dmix);
-	unlink(dmix->shmptr->socket_name);
-	snd_pcm_direct_shm_discard(dmix);
-	snd_pcm_direct_semaphore_discard(dmix);
+	server_cleanup(dmix);
 	server_printf("DIRECT SERVER EXIT\n");
 #ifdef SERVER_JOB_DEBUG
 	close(0); close(1); close(2);
@@ -316,7 +402,7 @@ int snd_pcm_direct_server_create(snd_pcm_direct_t *dmix)
 	if (ret < 0)
 		return ret;
 	
-	ret = make_local_socket(dmix->shmptr->socket_name, 1, dmix->ipc_perm);
+	ret = make_local_socket(dmix->shmptr->socket_name, 1, dmix->ipc_perm, dmix->ipc_gid);
 	if (ret < 0)
 		return ret;
 	dmix->server_fd = ret;
@@ -368,7 +454,7 @@ int snd_pcm_direct_client_connect(snd_pcm_direct_t *dmix)
 	int ret;
 	unsigned char buf;
 
-	ret = make_local_socket(dmix->shmptr->socket_name, 0, dmix->ipc_perm);
+	ret = make_local_socket(dmix->shmptr->socket_name, 0, -1, -1);
 	if (ret < 0)
 		return ret;
 	dmix->comm_fd = ret;
@@ -409,6 +495,14 @@ int snd_pcm_direct_async(snd_pcm_t *pcm, int sig, pid_t pid)
 	return snd_timer_async(dmix->timer, sig, pid);
 }
 
+static inline void process_timer_event(snd_pcm_direct_t *dmix ATTRIBUTE_UNUSED,
+				       snd_timer_tread_t *te ATTRIBUTE_UNUSED)
+{
+#if 0
+	printf("te->event = %i\n", te->event);
+#endif
+}
+
 /* empty the timer read queue */
 void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
 {
@@ -418,6 +512,7 @@ void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
 			if (dmix->tread) {
 				snd_timer_tread_t rbuf;
 				snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf));
+				process_timer_event(dmix, &rbuf);
 			} else {
 				snd_timer_read_t rbuf;
 				snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf));
@@ -427,7 +522,7 @@ void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
 		if (dmix->tread) {
 			snd_timer_tread_t rbuf;
 			while (snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf)) > 0)
-				;
+				process_timer_event(dmix, &rbuf);
 		} else {
 			snd_timer_read_t rbuf;
 			while (snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf)) > 0)
@@ -488,9 +583,9 @@ int snd_pcm_direct_info(snd_pcm_t *pcm, snd_pcm_info_t * info)
 	info->card = -1;
 	/* FIXME: fill this with something more useful: we know the hardware name */
 	if (pcm->name) {
-		strncpy(info->id, pcm->name, sizeof(info->id));
-		strncpy(info->name, pcm->name, sizeof(info->name));
-		strncpy(info->subname, pcm->name, sizeof(info->subname));
+		strncpy((char *)info->id, pcm->name, sizeof(info->id));
+		strncpy((char *)info->name, pcm->name, sizeof(info->name));
+		strncpy((char *)info->subname, pcm->name, sizeof(info->subname));
 	}
 	info->subdevices_count = 1;
 	return 0;
@@ -510,7 +605,7 @@ static inline snd_interval_t *hw_param_interval(snd_pcm_hw_params_t *params,
 
 static int hw_param_interval_refine_one(snd_pcm_hw_params_t *params,
 					snd_pcm_hw_param_t var,
-					snd_pcm_hw_params_t *src)
+					snd_interval_t *src)
 {
 	snd_interval_t *i;
 
@@ -521,7 +616,7 @@ static int hw_param_interval_refine_one(snd_pcm_hw_params_t *params,
 		SNDERR("dshare interval %i empty?", (int)var);
 		return -EINVAL;
 	}
-	if (snd_interval_refine(i, hw_param_interval(src, var)))
+	if (snd_interval_refine(i, src))
 		params->cmask |= 1<<var;
 	return 0;
 }
@@ -531,7 +626,6 @@ static int hw_param_interval_refine_one(snd_pcm_hw_params_t *params,
 int snd_pcm_direct_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
-	snd_pcm_hw_params_t *hw_params = &dshare->shmptr->hw_params;
 	static snd_mask_t access = { .bits = { 
 					(1<<SNDRV_PCM_ACCESS_MMAP_INTERLEAVED) |
 					(1<<SNDRV_PCM_ACCESS_MMAP_NONINTERLEAVED) |
@@ -560,7 +654,7 @@ int snd_pcm_direct_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			return -EINVAL;
 		}
 		if (snd_mask_refine_set(hw_param_mask(params, SND_PCM_HW_PARAM_FORMAT),
-				        snd_mask_value(hw_param_mask(hw_params, SND_PCM_HW_PARAM_FORMAT))))
+					dshare->shmptr->hw.format))
 			params->cmask |= 1<<SND_PCM_HW_PARAM_FORMAT;
 	}
 	//snd_mask_none(hw_param_mask(params, SND_PCM_HW_PARAM_SUBFORMAT));
@@ -573,22 +667,28 @@ int snd_pcm_direct_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		if (err < 0)
 			return err;
 	}
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_RATE, hw_params);
+	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_RATE,
+					   &dshare->shmptr->hw.rate);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_SIZE, hw_params);
+	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_SIZE,
+					   &dshare->shmptr->hw.buffer_size);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_TIME, hw_params);
+	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_TIME,
+					   &dshare->shmptr->hw.buffer_time);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIOD_SIZE, hw_params);
+	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIOD_SIZE,
+					   &dshare->shmptr->hw.period_size);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIOD_TIME, hw_params);
+	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIOD_TIME,
+					   &dshare->shmptr->hw.period_time);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIODS, hw_params);
+	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIODS,
+					   &dshare->shmptr->hw.periods);
 	if (err < 0)
 		return err;
 	params->info = dshare->shmptr->s.info;
@@ -639,6 +739,23 @@ int snd_pcm_direct_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 	return 0;
 }
 
+int snd_pcm_direct_resume(snd_pcm_t *pcm)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+	int err;
+	
+	snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT);
+	err = snd_pcm_resume(dmix->spcm);
+	if (err == -ENOSYS) {
+		/* FIXME: error handling? */
+		snd_pcm_prepare(dmix->spcm);
+		snd_pcm_start(dmix->spcm);
+		err = 0;
+	}
+	snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
+	return err;
+}
+
 /*
  * this function initializes hardware and starts playback operation with
  * no stop threshold (it operates all time without xrun checking)
@@ -653,8 +770,8 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	struct pollfd fd;
 	int loops = 10;
 
-	hw_params = &dmix->shmptr->hw_params;
-	sw_params = &dmix->shmptr->sw_params;
+	snd_pcm_hw_params_alloca(&hw_params);
+	snd_pcm_sw_params_alloca(&sw_params);
 
       __again:
       	if (loops-- <= 0) {
@@ -677,13 +794,19 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	ret = snd_pcm_hw_params_set_format(spcm, hw_params, params->format);
 	if (ret < 0) {
 		snd_pcm_format_t format;
-		switch (params->format) {
-		case SND_PCM_FORMAT_S32: format = SND_PCM_FORMAT_S16; break;
-		case SND_PCM_FORMAT_S16: format = SND_PCM_FORMAT_S32; break;
-		default:
-			SNDERR("invalid format");
-			return -EINVAL;
+		if (dmix->type == SND_PCM_TYPE_DMIX) {
+			switch (params->format) {
+			case SND_PCM_FORMAT_S32_LE:
+			case SND_PCM_FORMAT_S32_BE:
+			case SND_PCM_FORMAT_S16_LE:
+			case SND_PCM_FORMAT_S16_BE:
+				break;
+			default:
+				SNDERR("invalid format");
+				return -EINVAL;
+			}
 		}
+		format = params->format;
 		ret = snd_pcm_hw_params_set_format(spcm, hw_params, format);
 		if (ret < 0) {
 			SNDERR("requested or auto-format is not available");
@@ -714,7 +837,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 			return ret;
 		}
 	}
-	ret = INTERNAL(snd_pcm_hw_params_set_rate_near)(spcm, hw_params, &params->rate, 0);
+	ret = INTERNAL(snd_pcm_hw_params_set_rate_near)(spcm, hw_params, (unsigned int *)&params->rate, 0);
 	if (ret < 0) {
 		SNDERR("requested rate is not available");
 		return ret;
@@ -722,13 +845,13 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 
 	buffer_is_not_initialized = 0;
 	if (params->buffer_time > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_buffer_time_near)(spcm, hw_params, &params->buffer_time, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_buffer_time_near)(spcm, hw_params, (unsigned int *)&params->buffer_time, 0);
 		if (ret < 0) {
 			SNDERR("unable to set buffer time");
 			return ret;
 		}
 	} else if (params->buffer_size > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_buffer_size_near)(spcm, hw_params, &params->buffer_size);
+		ret = INTERNAL(snd_pcm_hw_params_set_buffer_size_near)(spcm, hw_params, (snd_pcm_uframes_t *)&params->buffer_size);
 		if (ret < 0) {
 			SNDERR("unable to set buffer size");
 			return ret;
@@ -738,13 +861,13 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	}
 
 	if (params->period_time > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_period_time_near)(spcm, hw_params, &params->period_time, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_period_time_near)(spcm, hw_params, (unsigned int *)&params->period_time, 0);
 		if (ret < 0) {
 			SNDERR("unable to set period_time");
 			return ret;
 		}
 	} else if (params->period_size > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_period_size_near)(spcm, hw_params, &params->period_size, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_period_size_near)(spcm, hw_params, (snd_pcm_uframes_t *)&params->period_size, 0);
 		if (ret < 0) {
 			SNDERR("unable to set period_size");
 			return ret;
@@ -777,6 +900,16 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 		SNDERR("unable to install hw params");
 		return ret;
 	}
+
+	/* store some hw_params values to shared info */
+	dmix->shmptr->hw.format = snd_mask_value(hw_param_mask(hw_params, SND_PCM_HW_PARAM_FORMAT));
+	dmix->shmptr->hw.rate = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_RATE);
+	dmix->shmptr->hw.buffer_size = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_BUFFER_SIZE);
+	dmix->shmptr->hw.buffer_time = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_BUFFER_TIME);
+	dmix->shmptr->hw.period_size = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_PERIOD_SIZE);
+	dmix->shmptr->hw.period_time = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_PERIOD_TIME);
+	dmix->shmptr->hw.periods = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_PERIODS);
+
 
 	ret = snd_pcm_sw_params_current(spcm, sw_params);
 	if (ret < 0) {
@@ -843,9 +976,19 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	dmix->shmptr->s.channels = spcm->channels;
 	dmix->shmptr->s.rate = spcm->rate;
 	dmix->shmptr->s.format = spcm->format;
-	dmix->shmptr->s.boundary = spcm->boundary;
 	dmix->shmptr->s.info = spcm->info & ~SND_PCM_INFO_PAUSE;
 	dmix->shmptr->s.msbits = spcm->msbits;
+
+	/* Currently, we assume that each dmix client has the same
+	 * hw_params setting.
+	 * If the arbitrary hw_parmas is supported in future,
+	 * boundary has to be taken from the slave config but
+	 * recalculated for the native boundary size (for 32bit
+	 * emulation on 64bit arch).
+	 */
+	dmix->slave_buffer_size = spcm->buffer_size;
+	dmix->slave_period_size = spcm->period_size;
+	dmix->slave_boundary = spcm->boundary;
 
 	spcm->donot_close = 1;
 	return 0;
@@ -862,8 +1005,8 @@ int snd_pcm_direct_initialize_poll_fd(snd_pcm_direct_t *dmix)
 	snd_pcm_info_t *info;
 	char name[128];
 	int capture = dmix->type == SND_PCM_TYPE_DSNOOP ? 1 : 0;
-	
-	dmix->tread = 0;
+
+	dmix->tread = 1;
 	dmix->timer_need_poll = 0;
 	snd_pcm_info_alloca(&info);
 	ret = snd_pcm_info(dmix->spcm, info);
@@ -876,11 +1019,14 @@ int snd_pcm_direct_initialize_poll_fd(snd_pcm_direct_t *dmix)
 				snd_pcm_info_get_card(info),
 				snd_pcm_info_get_device(info),
 				snd_pcm_info_get_subdevice(info) * 2 + capture);
-	ret = snd_timer_open(&dmix->timer, name, SND_TIMER_OPEN_NONBLOCK
-			     /*| SND_TIMER_OPEN_TREAD*/);  /* XXX: TREAD is set later */
+	ret = snd_timer_open(&dmix->timer, name, SND_TIMER_OPEN_NONBLOCK | SND_TIMER_OPEN_TREAD);
 	if (ret < 0) {
-		SNDERR("unable to open timer '%s'", name);
-		return ret;
+		dmix->tread = 1;
+		ret = snd_timer_open(&dmix->timer, name, SND_TIMER_OPEN_NONBLOCK);
+		if (ret < 0) {
+			SNDERR("unable to open timer '%s'", name);
+			return ret;
+		}
 	}
 
 	if (snd_timer_poll_descriptors_count(dmix->timer) != 1) {
@@ -890,33 +1036,85 @@ int snd_pcm_direct_initialize_poll_fd(snd_pcm_direct_t *dmix)
 	snd_timer_poll_descriptors(dmix->timer, &dmix->timer_fd, 1);
 	dmix->poll_fd = dmix->timer_fd.fd;
 
+	dmix->timer_event_suspend = 1<<SND_TIMER_EVENT_MSUSPEND;
+	dmix->timer_event_resume = 1<<SND_TIMER_EVENT_MRESUME;
+
 	/*
-	 * A hack to avoid Oops in the older kernel
-	 *
-	 * Enable TREAD mode only when protocl is newer than 2.0.2.
+	 * Some hacks for older kernel drivers
 	 */
 	{
 		int ver = 0;
 		ioctl(dmix->poll_fd, SNDRV_TIMER_IOCTL_PVERSION, &ver);
-		if (ver >= SNDRV_PROTOCOL_VERSION(2, 0, 3)) {
-			dmix->tread = 1;
-			if (ioctl(dmix->poll_fd, SNDRV_TIMER_IOCTL_TREAD, &dmix->tread) < 0)
-				dmix->tread = 0;
-		}
 		/* In older versions, check via poll before read() is needed
 		 * because of the confliction between TIMER_START and
 		 * FIONBIO ioctls.
 		 */
 		if (ver < SNDRV_PROTOCOL_VERSION(2, 0, 4))
 			dmix->timer_need_poll = 1;
+		/*
+		 * In older versions, timer uses pause events instead
+		 * suspend/resume events.
+		 */
+		if (ver < SNDRV_PROTOCOL_VERSION(2, 0, 5)) {
+			dmix->timer_event_suspend = 1<<SND_TIMER_EVENT_MPAUSE;
+			dmix->timer_event_resume = 1<<SND_TIMER_EVENT_MCONTINUE;
+		}
 	}
+	return 0;
+}
 
+static snd_pcm_uframes_t recalc_boundary_size(unsigned long long bsize, snd_pcm_uframes_t buffer_size)
+{
+	if (bsize > LONG_MAX) {
+		bsize = buffer_size;
+		while (bsize * 2 <= LONG_MAX - buffer_size)
+			bsize *= 2;
+	}
+	return (snd_pcm_uframes_t)bsize;
+}
+
+/*
+ * open a slave PCM as secondary client (dup'ed fd)
+ */
+int snd_pcm_direct_open_secondary_client(snd_pcm_t **spcmp, snd_pcm_direct_t *dmix, const char *client_name)
+{
+	int ret;
+	snd_pcm_t *spcm;
+
+	ret = snd_pcm_hw_open_fd(spcmp, client_name, dmix->hw_fd, 0, 0);
+	if (ret < 0) {
+		SNDERR("unable to open hardware");
+		return ret;
+	}
+		
+	spcm = *spcmp;
+	spcm->donot_close = 1;
+	spcm->setup = 1;
+	/* we copy the slave setting */
+	spcm->buffer_size = dmix->shmptr->s.buffer_size;
+	spcm->sample_bits = dmix->shmptr->s.sample_bits;
+	spcm->channels = dmix->shmptr->s.channels;
+	spcm->format = dmix->shmptr->s.format;
+	spcm->boundary = recalc_boundary_size(dmix->shmptr->s.boundary, spcm->buffer_size);
+	spcm->info = dmix->shmptr->s.info;
+
+	/* Use the slave setting as SPCM, so far */
+	dmix->slave_buffer_size = spcm->buffer_size;
+	dmix->slave_period_size = dmix->shmptr->s.period_size;
+	dmix->slave_boundary = spcm->boundary;
+
+	ret = snd_pcm_mmap(spcm);
+	if (ret < 0) {
+		SNDERR("unable to mmap channels");
+		return ret;
+	}
 	return 0;
 }
 
 int snd_pcm_direct_set_timer_params(snd_pcm_direct_t *dmix)
 {
 	snd_timer_params_t *params;
+	unsigned int filter;
 	int ret;
 
 	snd_timer_params_alloca(&params);
@@ -924,8 +1122,12 @@ int snd_pcm_direct_set_timer_params(snd_pcm_direct_t *dmix)
 	if (dmix->type != SND_PCM_TYPE_DSNOOP)
 		snd_timer_params_set_early_event(params, 1);
 	snd_timer_params_set_ticks(params, 1);
-	if (dmix->tread)
-		snd_timer_params_set_filter(params, (1<<SND_TIMER_EVENT_TICK)|(1<<SND_TIMER_EVENT_MPAUSE));
+	if (dmix->tread) {
+		filter = (1<<SND_TIMER_EVENT_TICK) |
+			 dmix->timer_event_suspend |
+			 dmix->timer_event_resume;
+		snd_timer_params_set_filter(params, filter);
+	}
 	ret = snd_timer_params(dmix->timer, params);
 	if (ret < 0) {
 		SNDERR("unable to set timer parameters");

@@ -18,7 +18,6 @@ srcdir = @srcdir@
 top_srcdir = @top_srcdir@
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
-pkglibdir = $(libdir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
 top_builddir = ../../..
 
@@ -38,6 +37,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+pkglibdir = $(libdir)/@PACKAGE@/scopes
 ACLOCAL = @ACLOCAL@
 ALSA_HSEARCH_R_FALSE = @ALSA_HSEARCH_R_FALSE@
 ALSA_HSEARCH_R_TRUE = @ALSA_HSEARCH_R_TRUE@
@@ -150,10 +150,11 @@ target_vendor = @target_vendor@
 
 AM_CFLAGS = -g -O2 -W -Wall
 
-pkglib_LTLIBRARIES = liblevel.la
+pkglib_LTLIBRARIES = scope-level.la
 
-liblevel_la_SOURCES = level.c
-liblevel_la_LIBADD = -lncurses
+scope_level_la_SOURCES = level.c
+scope_level_la_LDFLAGS = -module
+scope_level_la_LIBADD = -lncurses
 subdir = src/pcm/scopes
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
@@ -161,10 +162,9 @@ CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
 LTLIBRARIES = $(pkglib_LTLIBRARIES)
 
-liblevel_la_LDFLAGS =
-liblevel_la_DEPENDENCIES =
-am_liblevel_la_OBJECTS = level.lo
-liblevel_la_OBJECTS = $(am_liblevel_la_OBJECTS)
+scope_level_la_DEPENDENCIES =
+am_scope_level_la_OBJECTS = level.lo
+scope_level_la_OBJECTS = $(am_scope_level_la_OBJECTS)
 
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -177,9 +177,9 @@ LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) \
 CCLD = $(CC)
 LINK = $(LIBTOOL) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
-DIST_SOURCES = $(liblevel_la_SOURCES)
+DIST_SOURCES = $(scope_level_la_SOURCES)
 DIST_COMMON = Makefile.am Makefile.in
-SOURCES = $(liblevel_la_SOURCES)
+SOURCES = $(scope_level_la_SOURCES)
 
 all: all-am
 
@@ -218,8 +218,8 @@ clean-pkglibLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-liblevel.la: $(liblevel_la_OBJECTS) $(liblevel_la_DEPENDENCIES) 
-	$(LINK) -rpath $(pkglibdir) $(liblevel_la_LDFLAGS) $(liblevel_la_OBJECTS) $(liblevel_la_LIBADD) $(LIBS)
+scope-level.la: $(scope_level_la_OBJECTS) $(scope_level_la_DEPENDENCIES) 
+	$(LINK) -rpath $(pkglibdir) $(scope_level_la_LDFLAGS) $(scope_level_la_OBJECTS) $(scope_level_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT) core *.core

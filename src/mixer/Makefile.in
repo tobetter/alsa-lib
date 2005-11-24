@@ -149,9 +149,9 @@ target_os = @target_os@
 target_vendor = @target_vendor@
 EXTRA_LTLIBRARIES = libmixer.la
 
-libmixer_la_SOURCES = bag.c mixer.c simple.c
+libmixer_la_SOURCES = bag.c mixer.c simple.c simple_none.c simple_abst.c
 
-noinst_HEADERS = mixer_local.h
+noinst_HEADERS = mixer_local.h mixer_simple.h
 
 INCLUDES = -I$(top_srcdir)/include
 subdir = src/mixer
@@ -161,14 +161,16 @@ CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
 libmixer_la_LDFLAGS =
 libmixer_la_LIBADD =
-am_libmixer_la_OBJECTS = bag.lo mixer.lo simple.lo
+am_libmixer_la_OBJECTS = bag.lo mixer.lo simple.lo simple_none.lo \
+	simple_abst.lo
 libmixer_la_OBJECTS = $(am_libmixer_la_OBJECTS)
 
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/bag.Plo ./$(DEPDIR)/mixer.Plo \
-@AMDEP_TRUE@	./$(DEPDIR)/simple.Plo
+@AMDEP_TRUE@	./$(DEPDIR)/simple.Plo ./$(DEPDIR)/simple_abst.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/simple_none.Plo
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) \
@@ -203,6 +205,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bag.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mixer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/simple.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/simple_abst.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/simple_none.Plo@am__quote@
 
 distclean-depend:
 	-rm -rf ./$(DEPDIR)

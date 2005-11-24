@@ -1,9 +1,9 @@
-SUBDIRS=control mixer ordinary_mixer pcm ordinary_pcm rawmidi timer hwdep seq instr compat conf alisp
+SUBDIRS=control mixer pcm rawmidi timer hwdep seq instr compat conf alisp
 EXTRA_DIST=Versions
 COMPATNUM=@LIBTOOL_VERSION_INFO@
 
 if VERSIONED_SYMBOLS
-VSYMS = -Wl,--version-script=Versions
+VSYMS = -Wl,--version-script=$(srcdir)/Versions
 else
 VSYMS =
 endif
@@ -11,8 +11,8 @@ endif
 lib_LTLIBRARIES = libasound.la
 libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c names.c
 libasound_la_LIBADD = control/libcontrol.la \
-		      mixer/libmixer.la ordinary_mixer/libordinarymixer.la \
-		      pcm/libpcm.la ordinary_pcm/libordinarypcm.la \
+		      mixer/libmixer.la \
+		      pcm/libpcm.la \
                       rawmidi/librawmidi.la timer/libtimer.la \
 		      hwdep/libhwdep.la seq/libseq.la instr/libinstr.la \
 		      compat/libcompat.la alisp/libalisp.la -lm -ldl -lpthread

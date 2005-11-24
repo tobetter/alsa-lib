@@ -48,13 +48,20 @@ struct slave_params {
 typedef struct {
 	char socket_name[256];			/* name of communication socket */
 	snd_pcm_type_t type;			/* PCM type (currently only hw) */
-	snd_pcm_hw_params_t hw_params;
-	snd_pcm_sw_params_t sw_params;
 	struct {
-		snd_pcm_uframes_t buffer_size;
-		snd_pcm_uframes_t period_size;
-		snd_pcm_uframes_t boundary;
-		snd_pcm_uframes_t channels;
+		unsigned int format;
+		snd_interval_t rate;
+		snd_interval_t buffer_size;
+		snd_interval_t buffer_time;
+		snd_interval_t period_size;
+		snd_interval_t period_time;
+		snd_interval_t periods;
+	} hw;
+	struct {
+		unsigned int buffer_size;
+		unsigned int period_size;
+		unsigned long long boundary;
+		unsigned int channels;
 		unsigned int sample_bits;
 		unsigned int rate;
 		snd_pcm_format_t format;
@@ -74,6 +81,7 @@ struct snd_pcm_direct {
 	snd_pcm_type_t type;		/* type (dmix, dsnoop, dshare) */
 	key_t ipc_key;			/* IPC key for semaphore and memory */
 	mode_t ipc_perm;		/* IPC socket permissions */
+	int ipc_gid;			/* IPC socket gid */
 	int semid;			/* IPC global semaphore identification */
 	int shmid;			/* IPC global shared memory identification */
 	snd_pcm_direct_share_t *shmptr;	/* pointer to shared memory area */
@@ -84,6 +92,9 @@ struct snd_pcm_direct {
 	snd_pcm_uframes_t avail_max;
 	snd_pcm_uframes_t slave_appl_ptr;
 	snd_pcm_uframes_t slave_hw_ptr;
+	snd_pcm_uframes_t slave_period_size;
+	snd_pcm_uframes_t slave_buffer_size;
+	snd_pcm_uframes_t slave_boundary;
 	int (*sync_ptr)(snd_pcm_t *pcm);
 	snd_pcm_state_t state;
 	snd_htimestamp_t trigger_tstamp;
@@ -94,6 +105,8 @@ struct snd_pcm_direct {
 	int poll_fd;
 	int tread;
 	int timer_need_poll;
+	unsigned int timer_event_suspend;
+	unsigned int timer_event_resume;
 	int server_fd;
 	pid_t server_pid;
 	snd_timer_t *timer; 		/* timer used as poll_fd */
@@ -118,9 +131,29 @@ struct snd_pcm_direct {
 };
 
 int snd_pcm_direct_semaphore_create_or_connect(snd_pcm_direct_t *dmix);
-int snd_pcm_direct_semaphore_discard(snd_pcm_direct_t *dmix);
-int snd_pcm_direct_semaphore_down(snd_pcm_direct_t *dmix, int sem_num);
-int snd_pcm_direct_semaphore_up(snd_pcm_direct_t *dmix, int sem_num);
+
+static inline int snd_pcm_direct_semaphore_discard(snd_pcm_direct_t *dmix)
+{
+	if (dmix->semid >= 0) {
+		if (semctl(dmix->semid, 0, IPC_RMID, NULL) < 0)
+			return -errno;
+		dmix->semid = -1;
+	}
+	return 0;
+}
+
+static inline int snd_pcm_direct_semaphore_down(snd_pcm_direct_t *dmix, int sem_num)
+{
+	struct sembuf op[2] = { { sem_num, 0, 0 }, { sem_num, 1, SEM_UNDO } };
+	return semop(dmix->semid, op, 2);
+}
+
+static inline int snd_pcm_direct_semaphore_up(snd_pcm_direct_t *dmix, int sem_num)
+{
+	struct sembuf op = { sem_num, -1, SEM_UNDO | IPC_NOWAIT };
+	return semop(dmix->semid, &op, 1);
+}
+
 int snd_pcm_direct_shm_create_or_connect(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_shm_discard(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_server_create(snd_pcm_direct_t *dmix);
@@ -142,9 +175,11 @@ int snd_pcm_direct_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params);
 int snd_pcm_direct_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t * info);
 int snd_pcm_direct_mmap(snd_pcm_t *pcm);
 int snd_pcm_direct_munmap(snd_pcm_t *pcm);
+int snd_pcm_direct_resume(snd_pcm_t *pcm);
 int snd_pcm_direct_timer_stop(snd_pcm_direct_t *dmix);
 void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_set_timer_params(snd_pcm_direct_t *dmix);
+int snd_pcm_direct_open_secondary_client(snd_pcm_t **spcmp, snd_pcm_direct_t *dmix, const char *client_name);
 
 int snd_timer_async(snd_timer_t *timer, int sig, pid_t pid);
 struct timespec snd_pcm_hw_fast_tstamp(snd_pcm_t *pcm);

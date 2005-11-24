@@ -745,9 +745,9 @@ int snd_pcm_hw_params_current(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		return -EBADFD;
 	memset(params, 0, snd_pcm_hw_params_sizeof());
 	params->flags = pcm->hw_flags;
-	snd_mask_copy(&params->masks[SND_PCM_HW_PARAM_ACCESS - SND_PCM_HW_PARAM_FIRST_MASK], (snd_mask_t *)&pcm->access);
-	snd_mask_copy(&params->masks[SND_PCM_HW_PARAM_FORMAT - SND_PCM_HW_PARAM_FIRST_MASK], (snd_mask_t *)&pcm->format);
-	snd_mask_copy(&params->masks[SND_PCM_HW_PARAM_SUBFORMAT - SND_PCM_HW_PARAM_FIRST_MASK], (snd_mask_t *)&pcm->subformat);
+	snd_mask_set(&params->masks[SND_PCM_HW_PARAM_ACCESS - SND_PCM_HW_PARAM_FIRST_MASK], pcm->access);
+	snd_mask_set(&params->masks[SND_PCM_HW_PARAM_FORMAT - SND_PCM_HW_PARAM_FIRST_MASK], pcm->format);
+	snd_mask_set(&params->masks[SND_PCM_HW_PARAM_SUBFORMAT - SND_PCM_HW_PARAM_FIRST_MASK], pcm->subformat);
 	frame_bits = snd_pcm_format_physical_width(pcm->format) * pcm->channels;
 	snd_interval_set_value(&params->intervals[SND_PCM_HW_PARAM_FRAME_BITS - SND_PCM_HW_PARAM_FIRST_INTERVAL], frame_bits);
 	snd_interval_set_value(&params->intervals[SND_PCM_HW_PARAM_CHANNELS - SND_PCM_HW_PARAM_FIRST_INTERVAL], pcm->channels);
@@ -834,11 +834,16 @@ int snd_pcm_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 		SNDMSG("params->xfer_align is 0");
 		return -EINVAL;
 	}
+#if 0
+	/* disable the check below - it looks too restrictive
+	 * (start_threshold is basically independent from avail_min)
+	 */
 	if (params->start_threshold <= pcm->buffer_size &&
 	    params->start_threshold > (pcm->buffer_size / params->avail_min) * params->avail_min) {
 		SNDMSG("params->avail_min problem for start_threshold");
 		return -EINVAL;
 	}
+#endif
 	if (params->start_threshold <= pcm->buffer_size &&
 	    params->start_threshold > (pcm->buffer_size / params->xfer_align) * params->xfer_align) {
 		SNDMSG("params->xfer_align problem for start_threshold");
@@ -1511,7 +1516,12 @@ static const char *snd_pcm_type_names[] = {
 	PCMTYPE(LINEAR_FLOAT), 
 	PCMTYPE(LADSPA), 
 	PCMTYPE(DMIX), 
-	PCMTYPE(JACK), 
+	PCMTYPE(JACK),
+        PCMTYPE(DSNOOP),
+        PCMTYPE(IEC958),
+	PCMTYPE(SOFTVOL),
+        PCMTYPE(IOPLUG),
+        PCMTYPE(EXTPLUG),
 };
 
 static const char *snd_pcm_subformat_names[] = {
@@ -1957,8 +1967,7 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 		val = NULL;
 		snd_config_get_ascii(pcm_conf, &val);
 		SNDERR("Invalid type for PCM %s%sdefinition (id: %s, value: %s)", name ? name : "", name ? " " : "", id, val);
-		if (val)
-			free(val);
+		free(val);
 		return -EINVAL;
 	}
 	err = snd_config_search(pcm_conf, "type", &conf);
@@ -2235,15 +2244,18 @@ int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout)
 		return -EIO;
 	}
 	do {
+		pollio = 0;
 		err_poll = poll(pfd, npfds, timeout);
-		if (err_poll < 0)
+		if (err_poll < 0) {
+		        if (errno == EINTR)
+		                continue;
 			return -errno;
+                }
 		if (! err_poll)
 			break;
 		err = snd_pcm_poll_descriptors_revents(pcm, pfd, npfds, revents);
 		if (err < 0)
 			return err;
-		pollio = 0;
 		for (i = 0; i < npfds; i++) {
 			if (revents[i] & (POLLERR | POLLNVAL)) {
 				/* check more precisely */
@@ -3409,7 +3421,7 @@ int INTERNAL(snd_pcm_hw_params_get_format)(const snd_pcm_hw_params_t *params, sn
 int snd_pcm_hw_params_get_format(const snd_pcm_hw_params_t *params, snd_pcm_format_t *format)
 #endif
 {
-	return snd_pcm_hw_param_get(params, SND_PCM_HW_PARAM_FORMAT, format, NULL);
+	return snd_pcm_hw_param_get(params, SND_PCM_HW_PARAM_FORMAT, (unsigned int *)format, NULL);
 }
 
 /**
@@ -3449,7 +3461,7 @@ int INTERNAL(snd_pcm_hw_params_set_format_first)(snd_pcm_t *pcm, snd_pcm_hw_para
 int snd_pcm_hw_params_set_format_first(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, snd_pcm_format_t *format)
 #endif
 {
-	return snd_pcm_hw_param_set_first(pcm, params, SND_PCM_HW_PARAM_FORMAT, format, NULL);
+	return snd_pcm_hw_param_set_first(pcm, params, SND_PCM_HW_PARAM_FORMAT, (unsigned int *)format, NULL);
 }
 
 /**
@@ -3465,7 +3477,7 @@ int INTERNAL(snd_pcm_hw_params_set_format_last)(snd_pcm_t *pcm, snd_pcm_hw_param
 int snd_pcm_hw_params_set_format_last(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, snd_pcm_format_t *format)
 #endif
 {
-	return snd_pcm_hw_param_set_last(pcm, params, SND_PCM_HW_PARAM_FORMAT, format, NULL);
+	return snd_pcm_hw_param_set_last(pcm, params, SND_PCM_HW_PARAM_FORMAT, (unsigned int *)format, NULL);
 }
 
 /**
@@ -6015,7 +6027,7 @@ int snd_pcm_info_get_card(const snd_pcm_info_t *obj)
 const char *snd_pcm_info_get_id(const snd_pcm_info_t *obj)
 {
 	assert(obj);
-	return obj->id;
+	return (const char *)obj->id;
 }
 
 /**
@@ -6026,7 +6038,7 @@ const char *snd_pcm_info_get_id(const snd_pcm_info_t *obj)
 const char *snd_pcm_info_get_name(const snd_pcm_info_t *obj)
 {
 	assert(obj);
-	return obj->name;
+	return (const char *)obj->name;
 }
 
 /**
@@ -6037,7 +6049,7 @@ const char *snd_pcm_info_get_name(const snd_pcm_info_t *obj)
 const char *snd_pcm_info_get_subdevice_name(const snd_pcm_info_t *obj)
 {
 	assert(obj);
-	return obj->subname;
+	return (const char *)obj->subname;
 }
 
 /**
