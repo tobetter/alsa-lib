@@ -151,7 +151,7 @@ EXTRA_LTLIBRARIES = libcontrol.la
 
 libcontrol_la_SOURCES = cards.c hcontrol.c \
                         control.c control_hw.c control_shm.c \
-			setup.c control_symbols.c
+			control_ext.c setup.c control_symbols.c
 
 
 noinst_HEADERS = control_local.h
@@ -165,13 +165,14 @@ CONFIG_CLEAN_FILES =
 libcontrol_la_LDFLAGS =
 libcontrol_la_LIBADD =
 am_libcontrol_la_OBJECTS = cards.lo hcontrol.lo control.lo control_hw.lo \
-	control_shm.lo setup.lo control_symbols.lo
+	control_shm.lo control_ext.lo setup.lo control_symbols.lo
 libcontrol_la_OBJECTS = $(am_libcontrol_la_OBJECTS)
 
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/cards.Plo ./$(DEPDIR)/control.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/control_ext.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/control_hw.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/control_shm.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/control_symbols.Plo \
@@ -209,6 +210,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cards.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/control.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/control_ext.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/control_hw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/control_shm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/control_symbols.Plo@am__quote@

@@ -364,7 +364,7 @@ Several built-in functions are available.</P>
 
 <P>A function is defined with the id \c \@func and the function name. All other
 values in the current compound are used as configuration for the function.
-If the compound func.<function_name> is defined in the root node, then the
+If the compound func.\<function_name\> is defined in the root node, then the
 library and function from this compound configuration are used, otherwise
 'snd_func_' is prefixed to the string and code from the ALSA library is used.
 The definition of a function looks like:</P> 
@@ -499,16 +499,21 @@ static int safe_strtod(const char *str, double *val)
 	char *end;
 	double v;
 	char *saved_locale;
+	char locstr[64]; /* enough? */
 	int err;
 
 	if (!*str)
 		return -EINVAL;
 	saved_locale = setlocale(LC_NUMERIC, NULL);
-	setlocale(LC_NUMERIC, "C");
+	if (saved_locale) {
+		snprintf(locstr, sizeof(locstr), "%s", saved_locale);
+		setlocale(LC_NUMERIC, "C");
+	}
 	errno = 0;
 	v = strtod(str, &end);
 	err = -errno;
-	setlocale(LC_NUMERIC, saved_locale);
+	if (saved_locale)
+		setlocale(LC_NUMERIC, locstr);
 	if (err)
 		return err;
 	if (*end)
@@ -671,29 +676,75 @@ static int get_quotedchar(input_t *input)
 	}
 }
 
+#define LOCAL_STR_BUFSIZE	64
+struct local_string {
+	char *buf;
+	size_t alloc;
+	size_t idx;
+	char tmpbuf[LOCAL_STR_BUFSIZE];
+};
+
+static void init_local_string(struct local_string *s)
+{
+	memset(s, 0, sizeof(*s));
+	s->buf = s->tmpbuf;
+	s->alloc = LOCAL_STR_BUFSIZE;
+}
+
+static void free_local_string(struct local_string *s)
+{
+	if (s->buf != s->tmpbuf)
+		free(s->buf);
+}
+
+static int add_char_local_string(struct local_string *s, int c)
+{
+	if (s->idx >= s->alloc) {
+		size_t nalloc = s->alloc * 2;
+		if (s->buf == s->tmpbuf) {
+			s->buf = malloc(nalloc);
+			if (s->buf == NULL)
+				return -ENOMEM;
+			memcpy(s->buf, s->tmpbuf, s->alloc);
+		} else {
+			char *ptr = realloc(s->buf, nalloc);
+			if (ptr == NULL)
+				return -ENOMEM;
+			s->buf = ptr;
+		}
+		s->alloc = nalloc;
+	}
+	s->buf[s->idx++] = c;
+	return 0;
+}
+
+static char *copy_local_string(struct local_string *s)
+{
+	char *dst = malloc(s->idx + 1);
+	if (dst) {
+		memcpy(dst, s->buf, s->idx);
+		dst[s->idx] = '\0';
+	}
+	return dst;
+}
+
 static int get_freestring(char **string, int id, input_t *input)
 {
-	const size_t bufsize = 64;
-	char _buf[bufsize];
-	char *buf = _buf;
-	size_t alloc = bufsize;
-	size_t idx = 0;
+	struct local_string str;
 	int c;
+
+	init_local_string(&str);
 	while (1) {
 		c = get_char(input);
 		if (c < 0) {
 			if (c == LOCAL_UNEXPECTED_EOF) {
-				char *s = malloc(idx + 1);
-				if (!s)
-					return -ENOMEM;
-				memcpy(s, buf, idx);
-				s[idx] = '\0';
-				*string = s;
-				c = 0;
+				*string = copy_local_string(&str);
+				if (! *string)
+					c = -ENOMEM;
+				else
+					c = 0;
 			}
-			if (alloc > bufsize)
-				free(buf);
-			return c;
+			break;
 		}
 		switch (c) {
 		case '.':
@@ -715,95 +766,58 @@ static int get_freestring(char **string, int id, input_t *input)
 		case '"':
 		case '\\':
 		case '#':
-		{
-			char *s = malloc(idx + 1);
-			if (!s)
-				return -ENOMEM;
-			unget_char(c, input);
-			memcpy(s, buf, idx);
-			s[idx] = '\0';
-			*string = s;
-			if (alloc > bufsize)
-				free(buf);
-			return 0;
-		}
+			*string = copy_local_string(&str);
+			if (! *string)
+				c = -ENOMEM;
+			else {
+				unget_char(c, input);
+				c = 0;
+			}
+			goto _out;
 		default:
 			break;
 		}
-		if (idx >= alloc) {
-			size_t old_alloc = alloc;
-			alloc *= 2;
-			if (old_alloc == bufsize) {
-				buf = malloc(alloc);
-				if (buf == NULL)
-					return -ENOMEM;
-				memcpy(buf, _buf, old_alloc);
-			} else {
-				char *ptr = realloc(buf, alloc);
-				if (ptr == NULL) {
-					free(buf);
-					return -ENOMEM;
-				}
-				buf = ptr;
-			}
+		if (add_char_local_string(&str, c) < 0) {
+			c = -ENOMEM;
+			break;
 		}
-		buf[idx++] = c;
 	}
-	return 0;
+ _out:
+	free_local_string(&str);
+	return c;
 }
 			
 static int get_delimstring(char **string, int delim, input_t *input)
 {
-	const size_t bufsize = 64;
-	char _buf[bufsize];
-	char *buf = _buf;
-	size_t alloc = bufsize;
-	size_t idx = 0;
+	struct local_string str;
 	int c;
+
+	init_local_string(&str);
 	while (1) {
 		c = get_char(input);
 		if (c < 0)
-			return c;
-		switch (c) {
-		case '\\':
+			break;
+		if (c == '\\') {
 			c = get_quotedchar(input);
 			if (c < 0)
-				return c;
+				break;
 			if (c == '\n')
 				continue;
+		} else if (c == delim) {
+			*string = copy_local_string(&str);
+			if (! *string)
+				c = -ENOMEM;
+			else
+				c = 0;
 			break;
-		default:
-			if (c == delim) {
-				char *s = malloc(idx + 1);
-				if (!s)
-					return -ENOMEM;
-				memcpy(s, buf, idx);
-				s[idx] = '\0';
-				*string = s;
-				if (alloc > bufsize)
-					free(buf);
-				return 0;
-			}
 		}
-		if (idx >= alloc) {
-			size_t old_alloc = alloc;
-			alloc *= 2;
-			if (old_alloc == bufsize) {
-				buf = malloc(alloc);
-				if (buf == NULL)
-					return -ENOMEM;
-				memcpy(buf, _buf, old_alloc);
-			} else {
-				char *ptr = realloc(buf, alloc);
-				if (ptr == NULL) {
-					free(buf);
-					return -ENOMEM;
-				}
-				buf = ptr;
-			}
+		if (add_char_local_string(&str, c) < 0) {
+			c = -ENOMEM;
+			break;
 		}
-		buf[idx++] = c;
 	}
+	 free_local_string(&str);
+	 return c;
 }
 
 /* Return 0 for free string, 1 for delimited string */
@@ -978,14 +992,14 @@ static int parse_array_defs(snd_config_t *farther, input_t *input, int skip, int
 
 static int parse_array_def(snd_config_t *father, input_t *input, int idx, int skip, int override)
 {
-	char static_id[12], *id = NULL;
+	char *id = NULL;
 	int c;
 	int err;
 	snd_config_t *n = NULL;
 
 	if (!skip) {
+		char static_id[12];
 		snprintf(static_id, sizeof(static_id), "%i", idx);
-		static_id[sizeof(static_id)-1] = '\0';
 		id = strdup(static_id);
 		if (id == NULL)
 			return -ENOMEM;
@@ -1228,7 +1242,7 @@ static int parse_defs(snd_config_t *father, input_t *input, int skip, int overri
 
 static void string_print(char *str, int id, snd_output_t *out)
 {
-	unsigned char *p = str;
+	unsigned char *p = (unsigned char *)str;
 	if (!id) {
 		switch (*p) {
 		case 0:
@@ -1268,7 +1282,7 @@ static void string_print(char *str, int id, snd_output_t *out)
 	return;
  quoted:
 	snd_output_putc(out, '\'');
-	p = str;
+	p = (unsigned char *)str;
 	while (*p) {
 		int c;
 		c = *p;

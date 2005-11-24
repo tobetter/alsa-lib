@@ -229,7 +229,7 @@ pcm.NAME {
   # or
   file INT		# File descriptor
   [format STR]		# File format (NYI)
-
+  [perm INT]		# File permission (default 0600)
 
   type meter		# Meter PCM
   slave STR		# Slave name (see pcm_slave)
@@ -318,6 +318,7 @@ pcm.NAME {
   slave STR		# Slave name (see pcm_slave)
   ipc_key INT		# Unique ipc key
   ipc_perm INT		# ipc permissions (default 0600)
+  ipc_gid INT		# ipc gid (default -1 = disable)
   ipc_key_add_uid BOOL  # Add current uid to ipc_key
   bindings {		# Bindings table
     N INT		# Slave channel for client channel N
@@ -327,6 +328,7 @@ pcm.NAME {
   slave STR		# Slave name (see pcm_slave)
   ipc_key INT		# Unique ipc key
   ipc_perm INT		# ipc permissions (default 0600)
+  ipc_gid INT		# ipc gid (default -1 = disable)
   ipc_key_add_uid BOOL  # Add current uid to ipc_key
   bindings {		# Bindings table
     N INT		# Slave channel for client channel N
@@ -336,6 +338,7 @@ pcm.NAME {
   slave STR		# Slave name (see pcm_slave)
   ipc_key INT		# Unique ipc key
   ipc_perm INT		# ipc permissions (default 0600)
+  ipc_gid INT		# ipc gid (default -1 = disable)
   ipc_key_add_uid BOOL  # Add current uid to ipc_key
   bindings {		# Bindings table
     N INT		# Slave channel for client channel N
@@ -449,7 +452,7 @@ pcm.m {
 }
 
 pcm_scope_type.level {
-	lib /home/abramo/scopes/liblevel.so
+	lib /home/abramo/scopes/scope-level.so
 } 
 
 # an example command is 'aplay -D plug:ladspa <filename>'

@@ -155,14 +155,14 @@ alsaincludedir = ${includedir}/alsa
 alsainclude_HEADERS = asoundlib.h asoundef.h \
 		      version.h global.h input.h output.h error.h \
 		      conf.h pcm.h pcm_old.h pcm_plugin.h rawmidi.h timer.h \
-		      hwdep.h control.h mixer.h \
+		      hwdep.h control.h mixer.h mixer_abst.h \
 		      seq_event.h seq.h seqmid.h seq_midi_event.h \
 		      conv.h instr.h iatomic.h \
-		      pcm_ordinary.h mixer_ordinary.h \
-		      alisp.h pcm_external.h pcm_ioplug.h pcm_extplug.h
+		      alisp.h pcm_external.h pcm_ioplug.h pcm_extplug.h \
+		      control_external.h
 
 
-noinst_HEADERS = sys.h search.h list.h aserver.h local.h alsa-symbols.h
+noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h
 
 CLEANFILES = stamp-vh version.h alsa
 
@@ -507,7 +507,10 @@ uninstall-info: uninstall-info-recursive
 	uninstall-info-am uninstall-info-recursive uninstall-recursive
 
 
-version.h: stamp-vh
+alsa:
+	ln -s $(top_srcdir)/include alsa
+
+version.h: stamp-vh alsa
 	@:
 
 stamp-vh: $(top_builddir)/configure.in
@@ -534,7 +537,7 @@ stamp-vh: $(top_builddir)/configure.in
 
 install-data-hook:
 	test -d $(DESTDIR)$(sysincludedir) || mkdir -p $(DESTDIR)$(sysincludedir)
-	$(INSTALL_DATA) sys.h $(DESTDIR)$(sysincludedir)/asoundlib.h
+	$(INSTALL_DATA) $(srcdir)/sys.h $(DESTDIR)$(sysincludedir)/asoundlib.h
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

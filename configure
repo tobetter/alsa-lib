@@ -1824,7 +1824,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=alsa-lib
- VERSION=1.0.9
+ VERSION=1.0.10
 
 
 cat >>confdefs.h <<_ACEOF
@@ -2398,7 +2398,7 @@ echo "$as_me:$LINENO: checking whether the C compiler works" >&5
 echo $ECHO_N "checking whether the C compiler works... $ECHO_C" >&6
 # FIXME: These cross compiler hacks should be removed for Autoconf 3.0
 # If not cross compiling, check that we can run a simple program.
-if test "$cross_compiling" != yes; then
+if false && test "$cross_compiling" != yes; then
   if { ac_try='./$ac_file'
   { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
   (eval $ac_try) 2>&5
@@ -19231,7 +19231,7 @@ if test ! -L include/alsa ; then
   ln -sf . include/alsa
 fi
 
-                                                                                                                                                                                                                                                                                        ac_config_files="$ac_config_files Makefile doc/Makefile doc/pictures/Makefile include/Makefile include/sound/Makefile src/Makefile src/control/Makefile src/mixer/Makefile src/ordinary_mixer/Makefile src/pcm/Makefile src/pcm/scopes/Makefile src/ordinary_pcm/Makefile src/rawmidi/Makefile src/timer/Makefile src/hwdep/Makefile src/seq/Makefile src/instr/Makefile src/compat/Makefile src/alisp/Makefile src/conf/Makefile src/conf/cards/Makefile src/conf/pcm/Makefile alsalisp/Makefile aserver/Makefile test/Makefile utils/Makefile utils/alsa-lib.spec utils/alsa.pc"
+                                                                                                                                                                                                                                                                                                  ac_config_files="$ac_config_files Makefile doc/Makefile doc/pictures/Makefile include/Makefile include/sound/Makefile src/Makefile src/control/Makefile src/mixer/Makefile src/pcm/Makefile src/pcm/scopes/Makefile src/rawmidi/Makefile src/timer/Makefile src/hwdep/Makefile src/seq/Makefile src/instr/Makefile src/compat/Makefile src/alisp/Makefile src/conf/Makefile src/conf/cards/Makefile src/conf/pcm/Makefile modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile alsalisp/Makefile aserver/Makefile test/Makefile utils/Makefile utils/alsa-lib.spec utils/alsa.pc"
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
 # tests run on this system so they can be shared between configure
@@ -19816,10 +19816,8 @@ do
   "src/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
   "src/control/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/control/Makefile" ;;
   "src/mixer/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/mixer/Makefile" ;;
-  "src/ordinary_mixer/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/ordinary_mixer/Makefile" ;;
   "src/pcm/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/pcm/Makefile" ;;
   "src/pcm/scopes/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/pcm/scopes/Makefile" ;;
-  "src/ordinary_pcm/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/ordinary_pcm/Makefile" ;;
   "src/rawmidi/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/rawmidi/Makefile" ;;
   "src/timer/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/timer/Makefile" ;;
   "src/hwdep/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/hwdep/Makefile" ;;
@@ -19830,6 +19828,9 @@ do
   "src/conf/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/conf/Makefile" ;;
   "src/conf/cards/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/conf/cards/Makefile" ;;
   "src/conf/pcm/Makefile" ) CONFIG_FILES="$CONFIG_FILES src/conf/pcm/Makefile" ;;
+  "modules/Makefile" ) CONFIG_FILES="$CONFIG_FILES modules/Makefile" ;;
+  "modules/mixer/Makefile" ) CONFIG_FILES="$CONFIG_FILES modules/mixer/Makefile" ;;
+  "modules/mixer/simple/Makefile" ) CONFIG_FILES="$CONFIG_FILES modules/mixer/simple/Makefile" ;;
   "alsalisp/Makefile" ) CONFIG_FILES="$CONFIG_FILES alsalisp/Makefile" ;;
   "aserver/Makefile" ) CONFIG_FILES="$CONFIG_FILES aserver/Makefile" ;;
   "test/Makefile" ) CONFIG_FILES="$CONFIG_FILES test/Makefile" ;;
