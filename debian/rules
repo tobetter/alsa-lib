@@ -33,8 +33,8 @@ ifneq (,$(biarch_cpu))
   dpkg_ctrl_args = -- '-Vbilib:depends=libc6-$(biarch_cpu)' \
 	'-Vbidev:depends=libc6-dev-$(biarch_cpu)'
   ifeq ($(DEB_HOST_ARCH),amd64)
-  dpkg_ctrl_args = -- '-Vbilib:depends=libc6-$(biarch_cpu) | ia32-libs' \
-	'-Vbidev:depends=libc6-dev-$(biarch_cpu) | ia32-libs-dev'
+  dpkg_ctrl_args = -- '-Vbilib:depends=libc6-$(biarch_cpu)' \
+	'-Vbidev:depends=libc6-dev-$(biarch_cpu)'
   endif
 endif
 
