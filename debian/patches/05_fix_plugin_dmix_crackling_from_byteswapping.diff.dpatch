@@ -1,0 +1,43 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_plugin_dmix_crackling_from_byteswapping.diff.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix crackling in dmix plugin due to S16 byte swapping
+
+@DPATCH@
+
+# HG changeset patch
+# User crimsun@localhost.localdomain
+# Node ID c440b3363e444abb6534e97e86bf1daeca72b0fe
+# Parent  119b979a571be48858765459b0edcb365f636282
+Subject: [PATCH] [UBUNTU alsa-lib] Fix crackling in dmix plugin due to S16 byte swapping
+
+UpstreamStatus: Applied, src/pcm/pcm_dmix_generic.c r1.7,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9995493&forum_id=33141
+
+Juergen Kreileder <jk@blackdown.de> supplied a patch fixing crackling
+exhibited in the dmix plugin due to byte-swapping.
+
+Signed-off-by: Daniel T Chen <crimsun@ubuntu.com>
+
+diff -r 119b979a571b -r c440b3363e44 src/pcm/pcm_dmix_generic.c
+--- a/src/pcm/pcm_dmix_generic.c	Sat Apr 29 18:58:09 2006 -0400
++++ b/src/pcm/pcm_dmix_generic.c	Sat Apr 29 19:25:10 2006 -0400
+@@ -193,7 +193,7 @@ static void mix_areas1_swap(unsigned int
+ 	register signed int sample;
+ 
+ 	for (;;) {
+-		sample = bswap_16(*src);
++		sample = (signed short) bswap_16(*src);
+ 		if (! *dst) {
+ 			*sum = sample;
+ 			*dst = *src;
+@@ -204,7 +204,7 @@ static void mix_areas1_swap(unsigned int
+ 				sample = 0x7fff;
+ 			else if (sample < -0x8000)
+ 				sample = -0x8000;
+-			*dst = bswap_16((signed short)sample);
++			*dst = (signed short) bswap_16((signed short) sample);
+ 		}
+ 		if (!--size)
+ 			return;

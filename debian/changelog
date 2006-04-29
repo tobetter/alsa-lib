@@ -1,3 +1,17 @@
+alsa-lib (1.0.10-2ubuntu2) dapper; urgency=low
+
+  * debian/patches/: Add:
+    - Memory leak fixes: 05_fix_mem_double_free,05_fix_mem_leaks_1,
+      05_fix_mem_leaks_2,05_fix_mem_leaks_3 .
+    - Minor fixes: 05_fix_nonblocking_mode_typo,
+      05_fix_plugin_dmix_crackling_from_byteswapping,
+      05_fix_possible_infinite_loop_in_snd-pcm-wait_when_xrun
+    - 32/64-bit cpu polling issue:
+      05_fix_timer_read_poll_100_percent_cpu__malone_41367
+      (Closes: Malone #41367).
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sat, 29 Apr 2006 19:53:05 -0400
+
 alsa-lib (1.0.10-2ubuntu1) dapper; urgency=low
 
   * Synchronize to Debian.

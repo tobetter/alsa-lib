@@ -1,0 +1,42 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_possible_infinite_loop_in_snd-pcm-wait_when_xrun.diff.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix infinite loop in snd_pcm_wait() with direct plugins when an XRUN 
+## DP: occurs during poll
+
+@DPATCH@
+
+# HG changeset patch
+# User crimsun@localhost.localdomain
+# Node ID b17ccb2a67eb8f1bbc6e82958240d7bddc5e9e83
+# Parent  0a8e6e5e08efd89f6824ebdcec38f004508dd16a
+Subject: [PATCH] [UBUNTU alsa-lib] Fix infinite loop in snd_pcm_wait() with direct plugins when an XRUN occurs during poll
+
+UpstreamStatus: Applied, src/pcm/pcm_direct.c r1.57,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9770522&forum_id=33141
+
+Takashi Iwai applied this patch fixing an infinite loop in
+snd_pcm_wait() with direct plugins when an XRUN occurs during poll.
+
+Signed-off-by: Daniel T Chen <crimsun@ubuntu.com>
+
+diff -r 0a8e6e5e08ef -r b17ccb2a67eb src/pcm/pcm_direct.c
+--- a/src/pcm/pcm_direct.c	Sat Apr 29 17:49:21 2006 -0400
++++ b/src/pcm/pcm_direct.c	Sat Apr 29 18:01:19 2006 -0400
+@@ -567,6 +567,15 @@ int snd_pcm_direct_poll_revents(snd_pcm_
+ 		if (empty) {
+ 			snd_pcm_direct_clear_timer_queue(dmix);
+ 			events &= ~(POLLOUT|POLLIN);
++			/* additional check */
++			switch (snd_pcm_state(pcm)) {
++			case SND_PCM_STATE_XRUN:
++			case SND_PCM_STATE_SUSPENDED:
++				events |= POLLERR;
++				break;
++			default:
++				break;
++			}
+ 		}
+ 		break;
+ 	}

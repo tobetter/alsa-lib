@@ -1,0 +1,78 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_timer_read_poll_100_percent_cpu__malone_41367.diff.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: #41367: Fix timer read from 32bit user-space on 64bit kernel
+
+@DPATCH@
+
+# HG changeset patch
+# User crimsun@localhost.localdomain
+# Node ID f736217578a17b592e06762d5e5ef6c16934fd9f
+# Parent  c440b3363e444abb6534e97e86bf1daeca72b0fe
+Subject: [PATCH] [UBUNTU alsa-lib] #41367: Fix timer read from 32bit user-space on 64bit kernel
+
+UpstreamStatus: Applied, src/pcm/pcm_direct.c r1.59,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=10000481&forum_id=33141
+
+Takashi Iwai applied this fix for 32/64-bit compatibility. He comments:
+
+"snd_timer_tread struct is a bad design for 32/64bit compatibility, 
+and reading this struct on 32bit program returns zero.  This results
+in tight poll looping (bug#1938, #1945).
+
+For avoiding this bug, now more bigger buffer is read to cover the
+64bit tread struct, too.  Also this optimizes the read without
+checking -EAGAIN in the case both user-space and kernel have the same
+tread size."
+
+This commit closes Malone #41367.
+
+Signed-off-by: Daniel T Chen <crimsun@ubuntu.com>
+
+diff -r c440b3363e44 -r f736217578a1 src/pcm/pcm_direct.c
+--- a/src/pcm/pcm_direct.c	Sat Apr 29 19:25:10 2006 -0400
++++ b/src/pcm/pcm_direct.c	Sat Apr 29 19:32:07 2006 -0400
+@@ -495,14 +495,6 @@ int snd_pcm_direct_async(snd_pcm_t *pcm,
+ 	return snd_timer_async(dmix->timer, sig, pid);
+ }
+ 
+-static inline void process_timer_event(snd_pcm_direct_t *dmix ATTRIBUTE_UNUSED,
+-				       snd_timer_tread_t *te ATTRIBUTE_UNUSED)
+-{
+-#if 0
+-	printf("te->event = %i\n", te->event);
+-#endif
+-}
+-
+ /* empty the timer read queue */
+ void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
+ {
+@@ -510,9 +502,8 @@ void snd_pcm_direct_clear_timer_queue(sn
+ 		while (poll(&dmix->timer_fd, 1, 0) > 0) {
+ 			/* we don't need the value */
+ 			if (dmix->tread) {
+-				snd_timer_tread_t rbuf;
+-				snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf));
+-				process_timer_event(dmix, &rbuf);
++				snd_timer_tread_t rbuf[4];
++				snd_timer_read(dmix->timer, rbuf, sizeof(rbuf));
+ 			} else {
+ 				snd_timer_read_t rbuf;
+ 				snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf));
+@@ -520,9 +511,12 @@ void snd_pcm_direct_clear_timer_queue(sn
+ 		}
+ 	} else {
+ 		if (dmix->tread) {
+-			snd_timer_tread_t rbuf;
+-			while (snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf)) > 0)
+-				process_timer_event(dmix, &rbuf);
++			snd_timer_tread_t rbuf[4];
++			int len;
++			while ((len = snd_timer_read(dmix->timer, rbuf,
++						     sizeof(rbuf))) > 0 &&
++			       len != sizeof(rbuf[0]))
++				;
+ 		} else {
+ 			snd_timer_read_t rbuf;
+ 			while (snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf)) > 0)

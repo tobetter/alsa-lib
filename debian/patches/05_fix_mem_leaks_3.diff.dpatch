@@ -1,0 +1,201 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_mem_leaks_3.diff.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix memory leaks in snd_xxx_close() when operation fails, take 2
+
+@DPATCH@
+
+# HG changeset patch
+# User crimsun@localhost.localdomain
+# Node ID 90e945769d0cdc8b930e4e57dbd2a833cf548132
+# Parent  b17ccb2a67eb8f1bbc6e82958240d7bddc5e9e83
+Subject: [PATCH] [UBUNTU alsa-lib] Fix memory leaks in snd_xxx_close() when operation fails, take 2
+
+UpstreamStatus: Applied, src/seq/seq.c r1.96,
+                         src/seq/seq_hw.c r1.28,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9821916&forum_id=33141 ;
+                         src/timer/timer.c r1.48,
+                         src/timer/timer_query.c r1.17,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9821917&forum_id=33141 ;
+                         src/hwdep/hwdep.c r1.35,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9821918&forum_id=33141 ;
+                         src/pcm/pcm.c r1.322,
+                         src/pcm/pcm_hooks.c r1.42,
+                         src/pcm/pcm_hw.c r1.144,
+                         src/pcm/pcm_plug.c r1.140,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9821919&forum_id=33141
+
+These are the remaining patches from Clemens Ladisch fixing memory
+leaks in snd_xxx_close() when an operation fails.
+
+Signed-off-by: Daniel T Chen <crimsun@ubuntu.com>
+
+diff -r b17ccb2a67eb -r 90e945769d0c src/hwdep/hwdep.c
+--- a/src/hwdep/hwdep.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/hwdep/hwdep.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -206,12 +206,11 @@ int snd_hwdep_close(snd_hwdep_t *hwdep)
+ {
+ 	int err;
+   	assert(hwdep);
+-	if ((err = hwdep->ops->close(hwdep)) < 0)
+-		return err;
++	err = hwdep->ops->close(hwdep);
+ 	if (hwdep->name)
+ 		free(hwdep->name);
+ 	free(hwdep);
+-	return 0;
++	return err;
+ }
+ 
+ /**
+diff -r b17ccb2a67eb -r 90e945769d0c src/pcm/pcm.c
+--- a/src/pcm/pcm.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/pcm/pcm.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -659,13 +659,13 @@ snd_pcm_stream_t snd_pcm_stream(snd_pcm_
+  */
+ int snd_pcm_close(snd_pcm_t *pcm)
+ {
+-	int err;
++	int res = 0, err;
+ 	assert(pcm);
+ 	if (pcm->setup && !pcm->donot_close) {
+ 		snd_pcm_drop(pcm);
+ 		err = snd_pcm_hw_free(pcm);
+ 		if (err < 0)
+-			return err;
++			res = err;
+ 	}
+ 	if (pcm->mmap_channels)
+ 		snd_pcm_munmap(pcm);
+@@ -675,8 +675,11 @@ int snd_pcm_close(snd_pcm_t *pcm)
+ 	}
+ 	err = pcm->ops->close(pcm->op_arg);
+ 	if (err < 0)
+-		return err;
+-	return snd_pcm_free(pcm);
++		res = err;
++	err = snd_pcm_free(pcm);
++	if (err < 0)
++		res = err;
++	return res;
+ }	
+ 
+ /**
+diff -r b17ccb2a67eb -r 90e945769d0c src/pcm/pcm_hooks.c
+--- a/src/pcm/pcm_hooks.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/pcm/pcm_hooks.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -55,13 +55,13 @@ static int snd_pcm_hooks_close(snd_pcm_t
+ 	snd_pcm_hooks_t *h = pcm->private_data;
+ 	struct list_head *pos, *next;
+ 	unsigned int k;
+-	int err;
++	int res = 0, err;
+ 
+ 	list_for_each_safe(pos, next, &h->hooks[SND_PCM_HOOK_TYPE_CLOSE]) {
+ 		snd_pcm_hook_t *hook = list_entry(pos, snd_pcm_hook_t, list);
+ 		err = hook->func(hook);
+ 		if (err < 0)
+-			return err;
++			res = err;
+ 	}
+ 	for (k = 0; k <= SND_PCM_HOOK_TYPE_LAST; ++k) {
+ 		struct list_head *hooks = &h->hooks[k];
+@@ -72,7 +72,10 @@ static int snd_pcm_hooks_close(snd_pcm_t
+ 			snd_pcm_hook_remove(hook);
+ 		}
+ 	}
+-	return snd_pcm_generic_close(pcm);
++	err = snd_pcm_generic_close(pcm);
++	if (err < 0)
++		res = err;
++	return res;
+ }
+ 
+ static int snd_pcm_hooks_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
+diff -r b17ccb2a67eb -r 90e945769d0c src/pcm/pcm_hw.c
+--- a/src/pcm/pcm_hw.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/pcm/pcm_hw.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -889,16 +889,15 @@ static int snd_pcm_hw_close(snd_pcm_t *p
+ static int snd_pcm_hw_close(snd_pcm_t *pcm)
+ {
+ 	snd_pcm_hw_t *hw = pcm->private_data;
+-	int err;
++	int err = 0;
+ 	if (close(hw->fd)) {
+ 		err = -errno;
+ 		SYSMSG("close failed\n");
+-		return err;
+ 	}
+ 	snd_pcm_hw_munmap_status(pcm);
+ 	snd_pcm_hw_munmap_control(pcm);
+ 	free(hw);
+-	return 0;
++	return err;
+ }
+ 
+ static snd_pcm_sframes_t snd_pcm_hw_mmap_commit(snd_pcm_t *pcm,
+diff -r b17ccb2a67eb -r 90e945769d0c src/pcm/pcm_plug.c
+--- a/src/pcm/pcm_plug.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/pcm/pcm_plug.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -64,10 +64,7 @@ static int snd_pcm_plug_close(snd_pcm_t 
+ 	int err, result = 0;
+ 	if (plug->ttable)
+ 		free(plug->ttable);
+-	if (plug->gen.slave != plug->req_slave) {
+-		SNDERR("plug slaves mismatch");
+-		return -EINVAL;
+-	}
++	assert(plug->gen.slave == plug->req_slave);
+ 	if (plug->gen.close_slave) {
+ 		snd_pcm_unlink_hw_ptr(pcm, plug->req_slave);
+ 		snd_pcm_unlink_appl_ptr(pcm, plug->req_slave);
+diff -r b17ccb2a67eb -r 90e945769d0c src/seq/seq.c
+--- a/src/seq/seq.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/seq/seq.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -1014,8 +1014,6 @@ int snd_seq_close(snd_seq_t *seq)
+ 	int err;
+ 	assert(seq);
+ 	err = seq->ops->close(seq);
+-	if (err < 0)
+-		return err;
+ 	if (seq->obuf)
+ 		free(seq->obuf);
+ 	if (seq->ibuf)
+@@ -1025,7 +1023,7 @@ int snd_seq_close(snd_seq_t *seq)
+ 	if (seq->name)
+ 		free(seq->name);
+ 	free(seq);
+-	return 0;
++	return err;
+ }
+ 
+ /**
+diff -r b17ccb2a67eb -r 90e945769d0c src/seq/seq_hw.c
+--- a/src/seq/seq_hw.c	Sat Apr 29 18:01:19 2006 -0400
++++ b/src/seq/seq_hw.c	Sat Apr 29 18:31:21 2006 -0400
+@@ -42,12 +42,13 @@ static int snd_seq_hw_close(snd_seq_t *s
+ static int snd_seq_hw_close(snd_seq_t *seq)
+ {
+ 	snd_seq_hw_t *hw = seq->private_data;
++	int err = 0;
+ 	if (close(hw->fd)) {
++		err = -errno;
+ 		SYSERR("close failed\n");
+-		return -errno;
+ 	}
+ 	free(hw);
+-	return 0;
++	return err;
+ }
+ 
+ static int snd_seq_hw_nonblock(snd_seq_t *seq, int nonblock)
+@@ -501,7 +502,7 @@ int snd_seq_hw_open(snd_seq_t **handle, 
+ 	if (streams & SND_SEQ_OPEN_INPUT) {
+ 		seq->ibuf = (snd_seq_event_t *) calloc(sizeof(snd_seq_event_t), seq->ibufsize = SND_SEQ_IBUF_SIZE);
+ 		if (!seq->ibuf) {
+-			free(seq->ibuf);
++			free(seq->obuf);
+ 			free(hw);
+ 			free(seq);
+ 			close(fd);
