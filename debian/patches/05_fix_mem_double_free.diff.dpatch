@@ -1,0 +1,33 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_mem_double_free.diff.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix double free() in rate plugin
+
+@DPATCH@
+
+# HG changeset patch
+# User crimsun@localhost.localdomain
+# Node ID 119b979a571be48858765459b0edcb365f636282
+# Parent  90e945769d0cdc8b930e4e57dbd2a833cf548132
+Subject: [PATCH] [UBUNTU alsa-lib] Fix double free() in rate plugin
+
+UpstreamStatus: Applied, src/pcm/pcm_rate.c r1.112,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9966491&forum_id=33141
+
+Takashi Iwai committed this patch that fixes a double free() in the
+rate plugin.
+
+Signed-off-by: Daniel T Chen <crimsun@ubuntu.com>
+
+diff -r 90e945769d0c -r 119b979a571b src/pcm/pcm_rate.c
+--- a/src/pcm/pcm_rate.c	Sat Apr 29 18:31:21 2006 -0400
++++ b/src/pcm/pcm_rate.c	Sat Apr 29 18:58:09 2006 -0400
+@@ -617,6 +617,7 @@ static int snd_pcm_rate_hw_free(snd_pcm_
+ 		rate->sareas = NULL;
+ 	}
+ 	free(rate->old_sample);
++	rate->old_sample = NULL;
+ 	return snd_pcm_hw_free(rate->gen.slave);
+ }
+ 

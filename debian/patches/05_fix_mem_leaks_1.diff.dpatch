@@ -1,0 +1,60 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_mem_leaks_1.diff.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix several memory leaks upon operation failure
+
+@DPATCH@
+
+# HG changeset patch
+# User crimsun@localhost.localdomain
+# Node ID 2d703ffa2dc05da9a2d724014d7b55a329c34505
+# Parent  2593ce0053113564e7c6c7f2fa82f45769c22cc8
+Subject: [PATCH] [UBUNTU alsa-lib] Fix several memory leaks upon operation failure
+
+UpstreamStatus: Applied, src/timer/timer.c r1.48,
+                         src/timer/timer_query.c r1.17,
+                         http://sourceforge.net/mailarchive/forum.php?thread_id=9821917&forum_id=33141
+
+Apply patch from Clemens Ladisch fixing several memory leaks when
+aborting prematurely from snd_xxx_close() when some operation fails. A
+prime example is when a USB device is unplugged.
+
+Signed-off-by: Daniel T Chen <crimsun@ubuntu.com>
+
+diff -r 2593ce005311 -r 2d703ffa2dc0 src/timer/timer.c
+--- a/src/timer/timer.c	Tue Apr 25 18:25:57 2006 -0400
++++ b/src/timer/timer.c	Sat Apr 29 17:34:32 2006 -0400
+@@ -242,12 +242,11 @@ int snd_timer_close(snd_timer_t *timer)
+ 		snd_async_handler_t *h = list_entry(timer->async_handlers.next, snd_async_handler_t, hlist);
+ 		snd_async_del_handler(h);
+ 	}
+-	if ((err = timer->ops->close(timer)) < 0)
+-		return err;
++	err = timer->ops->close(timer);
+ 	if (timer->name)
+ 		free(timer->name);
+ 	free(timer);
+-	return 0;
++	return err;
+ }
+ 
+ /**
+diff -r 2593ce005311 -r 2d703ffa2dc0 src/timer/timer_query.c
+--- a/src/timer/timer_query.c	Tue Apr 25 18:25:57 2006 -0400
++++ b/src/timer/timer_query.c	Sat Apr 29 17:34:32 2006 -0400
+@@ -196,12 +196,11 @@ int snd_timer_query_close(snd_timer_quer
+ {
+ 	int err;
+   	assert(timer);
+-	if ((err = timer->ops->close(timer)) < 0)
+-		return err;
++	err = timer->ops->close(timer);
+ 	if (timer->name)
+ 		free(timer->name);
+ 	free(timer);
+-	return 0;
++	return err;
+ }
+ 
+ /**
