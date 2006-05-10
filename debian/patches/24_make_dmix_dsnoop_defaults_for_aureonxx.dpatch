@@ -1,0 +1,85 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 24_make_dmix_dsnoop_defaults_for_aureonxx.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Make dmix and dsnoop the defaults for Aureon51 and Aureon71 cards
+
+@DPATCH@
+
+diff -x '*.hg*' -uNr hg-alsa-lib-1.0.10/src/conf/cards/aliases.conf hg-for-pitti-alsa-lib-1.0.10/src/conf/cards/aliases.conf
+--- hg-alsa-lib-1.0.10/src/conf/cards/aliases.conf	2005-05-12 09:12:16.000000000 -0400
++++ hg-for-pitti-alsa-lib-1.0.10/src/conf/cards/aliases.conf	2006-05-07 00:17:02.000000000 -0400
+@@ -22,6 +22,7 @@
+ au8820 cards.AU8820
+ au8830 cards.AU8830
+ Prodigy71 cards.Aureon71
++Prodigy71LT cards.Aureon71
+ VIA82XX-MODEM cards.ICH-MODEM
+ 'MPU-401 UART' cards.MPU-401
+ 'VX222/Old' cards.VX222
+diff -x '*.hg*' -uNr hg-alsa-lib-1.0.10/src/conf/cards/Aureon51.conf hg-for-pitti-alsa-lib-1.0.10/src/conf/cards/Aureon51.conf
+--- hg-alsa-lib-1.0.10/src/conf/cards/Aureon51.conf	2004-08-24 12:52:01.000000000 -0400
++++ hg-for-pitti-alsa-lib-1.0.10/src/conf/cards/Aureon51.conf	2006-05-07 00:15:20.000000000 -0400
+@@ -2,6 +2,29 @@
+ # Configuration for the Aureon51 (Envy24HT) chip
+ #
+ 
++# default with dmix & dsnoop
++Aureon51.pcm.default {
++	@args [ CARD ]
++	@args.CARD {
++		type string
++	}
++	type asym
++	playback.pcm {
++		type plug
++		slave.pcm {
++			@func concat
++			strings [ "dmix:" $CARD ",FORMAT=S32_LE" ]
++		}
++	}
++	capture.pcm {
++		type plug
++		slave.pcm {
++			@func concat
++			strings [ "dsnoop:" $CARD ",FORMAT=S32_LE" ]
++		}
++	}
++}
++ 
+ <confdir:pcm/front.conf>
+ 
+ Aureon51.pcm.front.0 {
+diff -x '*.hg*' -uNr hg-alsa-lib-1.0.10/src/conf/cards/Aureon71.conf hg-for-pitti-alsa-lib-1.0.10/src/conf/cards/Aureon71.conf
+--- hg-alsa-lib-1.0.10/src/conf/cards/Aureon71.conf	2005-03-10 15:03:02.000000000 -0500
++++ hg-for-pitti-alsa-lib-1.0.10/src/conf/cards/Aureon71.conf	2006-05-07 00:16:05.000000000 -0400
+@@ -2,6 +2,29 @@
+ # Configuration for the Aureon71 (Envy24HT) chip
+ #
+ 
++# default with dmix & dsnoop
++Aureon71.pcm.default {
++	@args [ CARD ]
++	@args.CARD {
++		type string
++	}
++	type asym
++	playback.pcm {
++		type plug
++		slave.pcm {
++			@func concat
++			strings [ "dmix:" $CARD ",FORMAT=S32_LE" ]
++		}
++	}
++	capture.pcm {
++		type plug
++		slave.pcm {
++			@func concat
++			strings [ "dsnoop:" $CARD ",FORMAT=S32_LE" ]
++		}
++	}
++}
++
+ <confdir:pcm/front.conf>
+ 
+ Aureon71.pcm.front.0 {
