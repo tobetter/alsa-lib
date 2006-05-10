@@ -1,0 +1,35 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 24_fix_generation_of_iec958_subframes_and_preamble.dpatch by  <crimsun@localhost.localdomain>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix generation of IEC958 subframes, and don't segfault when using 
+## DP: plug:iec958 with preamble
+
+@DPATCH@
+
+diff -x '*.hg*' -uNr hg-alsa-lib-1.0.10/src/pcm/pcm_iec958.c hg-for-pitti-alsa-lib-1.0.10/src/pcm/pcm_iec958.c
+--- hg-alsa-lib-1.0.10/src/pcm/pcm_iec958.c	2005-05-24 10:14:35.000000000 -0400
++++ hg-for-pitti-alsa-lib-1.0.10/src/pcm/pcm_iec958.c	2006-05-06 23:44:37.000000000 -0400
+@@ -116,10 +116,10 @@
+ 		data |= 0x80000000;
+ 
+ 	/* Preamble */
+-	if (! iec->counter)
+-		data |= iec->preamble[PREAMBLE_Z];	/* Block start, 'Z' */
+-	else if (! channel)
++	if (channel)
+ 		data |= iec->preamble[PREAMBLE_Y];	/* odd sub frame, 'Y' */
++	else if (! iec->counter)
++		data |= iec->preamble[PREAMBLE_Z];	/* Block start, 'Z' */
+ 	else
+ 		data |= iec->preamble[PREAMBLE_X];	/* even sub frame, 'X' */
+ 
+@@ -620,7 +620,7 @@
+ 	}
+ 	if (preamble) {
+ 		snd_config_iterator_t i, inext;
+-		snd_config_for_each(i, inext, status) {
++		snd_config_for_each(i, inext, preamble) {
+ 			long val;
+ 			snd_config_t *n = snd_config_iterator_entry(i);
+ 			const char *id;

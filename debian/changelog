@@ -1,3 +1,14 @@
+alsa-lib (1.0.10-2ubuntu4) dapper; urgency=low
+
+  * debian/patches: Add:
+    - 24_dont_free_uninitialised_pointer.
+    - 24_fix_generation_of_iec958_subframes_and_preamble.
+    - 24_fix_pcm_no_control_status_mmap_on_32_compat_mode_64_bit_kernel.
+    - 24_make_dmix_dsnoop_defaults_for_aureonxx,
+      24_make_dmix_dsnoop_defaults_for_ice17xx.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Wed, 10 May 2006 19:54:05 -0400
+
 alsa-lib (1.0.10-2ubuntu3) dapper; urgency=low
 
   * Run dh_makeshlibs for the biarch libraries.
