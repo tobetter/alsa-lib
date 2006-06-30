@@ -1,5 +1,44 @@
 /* include/config.h.in.  Generated from configure.in by autoheader.  */
 
+/* Directory with aload* device files */
+#undef ALOAD_DEVICE_DIRECTORY
+
+/* Directory with ALSA device files */
+#undef ALSA_DEVICE_DIRECTORY
+
+/* Build instrument component */
+#undef BUILD_INSTR
+
+/* Build mixer component */
+#undef BUILD_MIXER
+
+/* Build PCM component */
+#undef BUILD_PCM
+
+/* Build PCM adpcm plugin */
+#undef BUILD_PCM_PLUGIN_ADPCM
+
+/* Build PCM alaw plugin */
+#undef BUILD_PCM_PLUGIN_ALAW
+
+/* Build PCM lfloat plugin */
+#undef BUILD_PCM_PLUGIN_LFLOAT
+
+/* Build PCM mulaw plugin */
+#undef BUILD_PCM_PLUGIN_MULAW
+
+/* Build PCM rate plugin */
+#undef BUILD_PCM_PLUGIN_RATE
+
+/* Build PCM route plugin */
+#undef BUILD_PCM_PLUGIN_ROUTE
+
+/* Build raw MIDI component */
+#undef BUILD_RAWMIDI
+
+/* Build sequencer component */
+#undef BUILD_SEQ
+
 /* directory containing ALSA configuration database */
 #undef DATADIR
 
@@ -38,6 +77,9 @@
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
+
+/* Define to 1 if you have the <wordexp.h> header file. */
+#undef HAVE_WORDEXP_H
 
 /* No assert debug */
 #undef NDEBUG
@@ -87,6 +129,8 @@
 /* Define to empty if `const' does not conform to ANSI C. */
 #undef const
 
-/* Define as `__inline' if that's what the C compiler calls it, or to nothing
-   if it is not supported. */
+/* Define to `__inline__' or `__inline' if that's what the C compiler
+   calls it, or to nothing if 'inline' is not supported under any name.  */
+#ifndef __cplusplus
 #undef inline
+#endif

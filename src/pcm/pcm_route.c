@@ -31,6 +31,8 @@
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
+#include "plugin_ops.h"
+
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_route = "";
@@ -511,8 +513,7 @@ static int snd_pcm_route_close(snd_pcm_t *pcm)
 
 	if (params->dsts) {
 		for (dst_channel = 0; dst_channel < params->ndsts; ++dst_channel) {
-			if (params->dsts[dst_channel].srcs != NULL)
-				free(params->dsts[dst_channel].srcs);
+			free(params->dsts[dst_channel].srcs);
 		}
 		free(params->dsts);
 	}
@@ -711,11 +712,11 @@ static void snd_pcm_route_dump(snd_pcm_t *pcm, snd_output_t *out)
 	else
 		snd_output_printf(out, "Route conversion PCM (sformat=%s)\n", 
 			snd_pcm_format_name(route->sformat));
-	snd_output_puts(out, "Transformation table:\n");
+	snd_output_puts(out, "  Transformation table:\n");
 	for (dst = 0; dst < route->params.ndsts; dst++) {
 		snd_pcm_route_ttable_dst_t *d = &route->params.dsts[dst];
 		unsigned int src;
-		snd_output_printf(out, "%d <- ", dst);
+		snd_output_printf(out, "    %d <- ", dst);
 		if (d->nsrcs == 0) {
 			snd_output_printf(out, "none\n");
 			continue;
@@ -793,7 +794,6 @@ static int route_load_ttable(snd_pcm_route_params_t *params, snd_pcm_stream_t st
 		for (src_channel = 0; src_channel < sused; ++src_channel) {
 			snd_pcm_route_ttable_entry_t v;
 			v = ttable[src_channel * smul + dst_channel * dmul];
-			assert(v >= 0 && v <= SND_PCM_PLUGIN_ROUTE_FULL);
 			if (v != 0) {
 				srcs[nsrcs].channel = src_channel;
 #if SND_PCM_PLUGIN_ROUTE_FLOAT
@@ -801,6 +801,7 @@ static int route_load_ttable(snd_pcm_route_params_t *params, snd_pcm_stream_t st
 				srcs[nsrcs].as_int = (v == SND_PCM_PLUGIN_ROUTE_FULL ? SND_PCM_PLUGIN_ROUTE_RESOLUTION : 0);
 				srcs[nsrcs].as_float = v;
 #else
+				assert(v >= 0 && v <= SND_PCM_PLUGIN_ROUTE_FULL);
 				srcs[nsrcs].as_int = v;
 #endif
 				if (v != SND_PCM_PLUGIN_ROUTE_FULL)
@@ -1150,7 +1151,7 @@ int _snd_pcm_route_open(snd_pcm_t **pcmp, const char *name,
 		return err;
 	}
 
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
 	snd_config_delete(sconf);
 	if (err < 0) {
 		free(ttable);

@@ -288,7 +288,7 @@ static inline int snd_pcm_check_error(snd_pcm_t *pcm, int err)
 		case SND_PCM_STATE_SUSPENDED:
 			return -ESTRPIPE;
 		case SND_PCM_STATE_DISCONNECTED:
-			return -ENOTTY;
+			return -ENODEV;
 		default:
 			break;
 		}
@@ -748,12 +748,14 @@ int snd_pcm_slave_conf(snd_config_t *root, snd_config_t *conf,
 
 int snd_pcm_open_slave(snd_pcm_t **pcmp, snd_config_t *root,
 		       snd_config_t *conf, snd_pcm_stream_t stream,
-		       int mode);
+		       int mode, snd_config_t *parent_conf);
 int snd_pcm_conf_generic_id(const char *id);
 
 int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd, int mmap_emulation, int sync_ptr_ioctl);
 
 int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout);
+
+const char *snd_pcm_rate_get_default_converter(snd_config_t *root);
 
 #define SND_PCM_HW_PARBIT_ACCESS	(1U << SND_PCM_HW_PARAM_ACCESS)
 #define SND_PCM_HW_PARBIT_FORMAT	(1U << SND_PCM_HW_PARAM_FORMAT)

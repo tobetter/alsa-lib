@@ -188,7 +188,7 @@ static snd_pcm_sframes_t snd_pcm_file_forward(snd_pcm_t *pcm, snd_pcm_uframes_t 
 	err = INTERNAL(snd_pcm_forward)(file->gen.slave, frames);
 	if (err > 0) {
 		file->appl_ptr = (file->appl_ptr + err) % file->wbuf_size;
-		snd_pcm_uframes_t n = snd_pcm_frames_to_bytes(pcm, err);
+		n = snd_pcm_frames_to_bytes(pcm, err);
 		file->wbuf_used_bytes += n;
 	}
 	return err;
@@ -263,13 +263,10 @@ static snd_pcm_sframes_t snd_pcm_file_mmap_commit(snd_pcm_t *pcm,
 static int snd_pcm_file_hw_free(snd_pcm_t *pcm)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	if (file->wbuf) {
-		free(file->wbuf);
-		if (file->wbuf_areas)
-			free(file->wbuf_areas);
-		file->wbuf = 0;
-		file->wbuf_areas = 0;
-	}
+	free(file->wbuf);
+	free(file->wbuf_areas);
+	file->wbuf = NULL;
+	file->wbuf_areas = NULL;
 	return snd_pcm_hw_free(file->gen.slave);
 }
 
@@ -418,8 +415,7 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_FILE, name, slave->stream, slave->mode);
 	if (err < 0) {
-		if (fname)
-			free(file->fname);
+		free(file->fname);
 		free(file);
 		return err;
 	}
@@ -556,7 +552,7 @@ int _snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("file is not defined");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

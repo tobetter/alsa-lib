@@ -30,6 +30,8 @@
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
+#include "plugin_ops.h"
+
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_iec958 = "";
@@ -116,10 +118,10 @@ static inline u_int32_t iec958_subframe(snd_pcm_iec958_t *iec, u_int32_t data, i
 		data |= 0x80000000;
 
 	/* Preamble */
-	if (! iec->counter)
-		data |= iec->preamble[PREAMBLE_Z];	/* Block start, 'Z' */
-	else if (! channel)
+	if (channel)
 		data |= iec->preamble[PREAMBLE_Y];	/* odd sub frame, 'Y' */
+	else if (! iec->counter)
+		data |= iec->preamble[PREAMBLE_Z];	/* Block start, 'Z' */
 	else
 		data |= iec->preamble[PREAMBLE_X];	/* even sub frame, 'X' */
 
@@ -620,7 +622,7 @@ int _snd_pcm_iec958_open(snd_pcm_t **pcmp, const char *name,
 	}
 	if (preamble) {
 		snd_config_iterator_t i, inext;
-		snd_config_for_each(i, inext, status) {
+		snd_config_for_each(i, inext, preamble) {
 			long val;
 			snd_config_t *n = snd_config_iterator_entry(i);
 			const char *id;
@@ -660,7 +662,7 @@ int _snd_pcm_iec958_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("invalid slave format");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

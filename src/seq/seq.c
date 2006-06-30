@@ -919,7 +919,8 @@ static int snd_seq_open_conf(snd_seq_t **seqp, const char *name,
 }
 
 static int snd_seq_open_noupdate(snd_seq_t **seqp, snd_config_t *root,
-				 const char *name, int streams, int mode)
+				 const char *name, int streams, int mode,
+				 int hop)
 {
 	int err;
 	snd_config_t *seq_conf;
@@ -928,6 +929,7 @@ static int snd_seq_open_noupdate(snd_seq_t **seqp, snd_config_t *root,
 		SNDERR("Unknown SEQ %s", name);
 		return err;
 	}
+	snd_config_set_hop(seq_conf, hop);
 	err = snd_seq_open_conf(seqp, name, root, seq_conf, streams, mode);
 	snd_config_delete(seq_conf);
 	return err;
@@ -971,7 +973,7 @@ int snd_seq_open(snd_seq_t **seqp, const char *name,
 	err = snd_config_update();
 	if (err < 0)
 		return err;
-	return snd_seq_open_noupdate(seqp, snd_config, name, streams, mode);
+	return snd_seq_open_noupdate(seqp, snd_config, name, streams, mode, 0);
 }
 
 /**
@@ -993,8 +995,21 @@ int snd_seq_open_lconf(snd_seq_t **seqp, const char *name,
 		       int streams, int mode, snd_config_t *lconf)
 {
 	assert(seqp && name && lconf);
-	return snd_seq_open_noupdate(seqp, lconf, name, streams, mode);
+	return snd_seq_open_noupdate(seqp, lconf, name, streams, mode, 0);
 }
+
+#ifndef DOC_HIDDEN
+int _snd_seq_open_lconf(snd_seq_t **seqp, const char *name, 
+			int streams, int mode, snd_config_t *lconf,
+			snd_config_t *parent_conf)
+{
+	int hop;
+	assert(seqp && name && lconf);
+	if ((hop = snd_config_check_hop(parent_conf)) < 0)
+		return hop;
+	return snd_seq_open_noupdate(seqp, lconf, name, streams, mode, hop + 1);
+}
+#endif
 
 /**
  * \brief Close the sequencer
@@ -1014,18 +1029,12 @@ int snd_seq_close(snd_seq_t *seq)
 	int err;
 	assert(seq);
 	err = seq->ops->close(seq);
-	if (err < 0)
-		return err;
-	if (seq->obuf)
-		free(seq->obuf);
-	if (seq->ibuf)
-		free(seq->ibuf);
-	if (seq->tmpbuf)
-		free(seq->tmpbuf);
-	if (seq->name)
-		free(seq->name);
+	free(seq->obuf);
+	free(seq->ibuf);
+	free(seq->tmpbuf);
+	free(seq->name);
 	free(seq);
-	return 0;
+	return err;
 }
 
 /**
@@ -4435,7 +4444,7 @@ int snd_seq_remove_events(snd_seq_t *seq, snd_seq_remove_events_t *rmp)
 			ep = seq->obuf;
 			while (ep - seq->obuf < (ssize_t)seq->obufused) {
 
-				ev = ep;
+				ev = (snd_seq_event_t *)ep;
 				len = snd_seq_event_length(ev);
 
 				if (remove_match(rmp, ev)) {
