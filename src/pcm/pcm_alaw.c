@@ -30,6 +30,8 @@
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
+#include "plugin_ops.h"
+
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_alaw = "";
@@ -536,7 +538,7 @@ int _snd_pcm_alaw_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("invalid slave format");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

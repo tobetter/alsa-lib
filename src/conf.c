@@ -415,7 +415,6 @@ beginning:</P>
 
 
 #include <stdarg.h>
-#include <wordexp.h>
 #include <dlfcn.h>
 #include <limits.h>
 #include <sys/stat.h>
@@ -441,6 +440,7 @@ struct _snd_config {
 	} u;
 	struct list_head list;
 	snd_config_t *father;
+	int hop;
 };
 
 struct filedesc {
@@ -980,8 +980,7 @@ static int parse_value(snd_config_t **_n, snd_config_t *father, input_t *input, 
 		if (err < 0)
 			return err;
 	}
-	if (n->u.string)
-		free(n->u.string);
+	free(n->u.string);
 	n->u.string = s;
 	*_n = n;
 	return 0;
@@ -1056,8 +1055,7 @@ static int parse_array_def(snd_config_t *father, input_t *input, int idx, int sk
 	}
 	err = 0;
       __end:
-      	if (id)
-      		free(id);
+	free(id);
       	return err;
 }
 
@@ -1218,8 +1216,7 @@ static int parse_def(snd_config_t *father, input_t *input, int skip, int overrid
 		unget_char(c, input);
 	}
       __end:
-      	if (id)
-	      	free(id);
+	free(id);
 	return err;
 }
 		
@@ -1446,8 +1443,7 @@ int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 		if (err < 0)
 			return err;
 	}
-	if (dst->id)
-		free(dst->id);
+	free(dst->id);
 	dst->id = src->id;
 	dst->type = src->type;
 	dst->u = src->u;
@@ -1528,8 +1524,7 @@ int snd_config_set_id(snd_config_t *config, const char *id)
 	new_id = strdup(id);
 	if (!new_id)
 		return -ENOMEM;
-	if (config->id)
-		free(config->id);
+	free(config->id);
 	config->id = new_id;
 	return 0;
 }
@@ -1696,16 +1691,14 @@ int snd_config_delete(snd_config_t *config)
 		break;
 	}
 	case SND_CONFIG_TYPE_STRING:
-		if (config->u.string)
-			free(config->u.string);
+		free(config->u.string);
 		break;
 	default:
 		break;
 	}
 	if (config->father)
 		list_del(&config->list);
-	if (config->id)
-		free(config->id);
+	free(config->id);
 	free(config);
 	return 0;
 }
@@ -2023,8 +2016,7 @@ int snd_config_set_string(snd_config_t *config, const char *value)
 	} else {
 		new_string = NULL;
 	}
-	if (config->u.string)
-		free(config->u.string);
+	free(config->u.string);
 	config->u.string = new_string;
 	return 0;
 }
@@ -2091,8 +2083,7 @@ int snd_config_set_ascii(snd_config_t *config, const char *ascii)
 			char *ptr = strdup(ascii);
 			if (ptr == NULL)
 				return -ENOMEM;
-			if (config->u.string)
-				free(config->u.string);
+			free(config->u.string);
 			config->u.string = ptr;
 		}
 		break;
@@ -2702,8 +2693,7 @@ static int snd_config_hooks_call(snd_config_t *root, snd_config_t *config, snd_c
 		if (err >= 0 && nroot)
 			err = snd_config_substitute(root, nroot);
 	}
-	if (buf)
-		free(buf);
+	free(buf);
 	if (err < 0)
 		return err;
 	return 0;
@@ -2844,11 +2834,10 @@ int snd_config_hook_load(snd_config_t *root, snd_config_t *config, snd_config_t 
 	*dst = NULL;
 	err = 0;
        _err:
-	for (idx = 0; idx < fi_count; idx++)
-       		if (fi[idx].name)
-       			free(fi[idx].name);
-       	if (fi)
-       		free(fi);
+	if (fi)
+		for (idx = 0; idx < fi_count; idx++)
+			free(fi[idx].name);
+	free(fi);
 	snd_config_delete(n);
 	return err;
 }
@@ -2905,8 +2894,7 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 		      __err:
 			if (private_data)
 				snd_config_delete(private_data);
-			if (fdriver)
-				free(fdriver);
+			free(fdriver);
 			if (err < 0)
 				return err;
 		}
@@ -3106,11 +3094,9 @@ int snd_config_update_free(snd_config_update_t *update)
 	unsigned int k;
 
 	assert(update);
-	assert(update->count > 0 && update->finfo);
 	for (k = 0; k < update->count; k++)
 		free(update->finfo[k].name);
-	if (update->finfo)
-		free(update->finfo);
+	free(update->finfo);
 	free(update);
 	return 0;
 }
@@ -3501,8 +3487,7 @@ static int _snd_config_evaluate(snd_config_t *src,
 			}
 		}
 	       _errbuf:
-		if (buf)
-			free(buf);
+		free(buf);
 		if (err < 0)
 			return err;
 		return 0;
@@ -3808,7 +3793,7 @@ static int parse_args(snd_config_t *subs, const char *str, snd_config_t *defs)
 		snd_config_t *def, *sub, *typ;
 		const char *new = str;
 		const char *tmp;
-		char *val;
+		char *val = NULL;
 		err = parse_arg(&new, &varlen, &val);
 		if (err < 0)
 			goto _err;
@@ -4013,6 +3998,24 @@ int snd_config_search_definition(snd_config_t *config,
 	return snd_config_expand(conf, config, args, NULL, result);
 }
 
+#ifndef DOC_HIDDEN
+void snd_config_set_hop(snd_config_t *conf, int hop)
+{
+	conf->hop = hop;
+}
+
+int snd_config_check_hop(snd_config_t *conf)
+{
+	if (conf) {
+		if (conf->hop >= SND_CONF_MAX_HOPS) {
+			SYSERR("Too many definition levels (looped?)\n");
+			return -EINVAL;
+		}
+		return conf->hop;
+	}
+	return 0;
+}
+#endif
 
 #if 0
 /* Not strictly needed, but useful to check for memory leaks */

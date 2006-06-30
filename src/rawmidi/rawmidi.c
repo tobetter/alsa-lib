@@ -341,14 +341,12 @@ int snd_rawmidi_close(snd_rawmidi_t *rawmidi)
 {
 	int err;
   	assert(rawmidi);
-	if ((err = rawmidi->ops->close(rawmidi)) < 0)
-		return err;
-	if (rawmidi->name)
-		free(rawmidi->name);
+	err = rawmidi->ops->close(rawmidi);
+	free(rawmidi->name);
 	if (rawmidi->dl_handle)
 		snd_dlclose(rawmidi->dl_handle);
 	free(rawmidi);
-	return 0;
+	return err;
 }
 
 /**

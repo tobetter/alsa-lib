@@ -166,7 +166,7 @@ static int snd_pcm_dshare_sync_ptr(snd_pcm_t *pcm)
 	switch (snd_pcm_state(dshare->spcm)) {
 	case SND_PCM_STATE_DISCONNECTED:
 		dshare->state = SNDRV_PCM_STATE_DISCONNECTED;
-		return -ENOTTY;
+		return -ENODEV;
 	default:
 		break;
 	}
@@ -272,7 +272,7 @@ static int snd_pcm_dshare_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_DISCONNECTED:
-		return -ENOTTY;
+		return -ENODEV;
 	default:
 		return -EBADFD;
 	}
@@ -292,7 +292,7 @@ static int snd_pcm_dshare_hwsync(snd_pcm_t *pcm)
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_DISCONNECTED:
-		return -ENOTTY;
+		return -ENODEV;
 	default:
 		return -EBADFD;
 	}
@@ -385,6 +385,12 @@ static int snd_pcm_dshare_drain(snd_pcm_t *pcm)
 			return 0;
 		}
 	}
+
+	if (dshare->state == SND_PCM_STATE_XRUN) {
+		snd_pcm_dshare_drop(pcm);
+		return 0;
+	}
+
 	stop_threshold = pcm->stop_threshold;
 	if (pcm->stop_threshold > pcm->buffer_size)
 		pcm->stop_threshold = pcm->buffer_size;
@@ -460,8 +466,7 @@ static int snd_pcm_dshare_close(snd_pcm_t *pcm)
  		snd_pcm_direct_client_discard(dshare);
 	snd_pcm_direct_shm_discard(dshare);
 	snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
-	if (dshare->bindings)
-		free(dshare->bindings);
+	free(dshare->bindings);
 	pcm->private_data = NULL;
 	free(dshare);
 	return 0;
@@ -519,7 +524,7 @@ static void snd_pcm_dshare_dump(snd_pcm_t *pcm, snd_output_t *out)
 
 	snd_output_printf(out, "Direct Share PCM\n");
 	if (pcm->setup) {
-		snd_output_printf(out, "\nIts setup is:\n");
+		snd_output_printf(out, "Its setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 	if (dshare->spcm)
@@ -573,12 +578,8 @@ static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
  * \brief Creates a new dshare PCM
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
- * \param ipc_key IPC key for semaphore and shared memory
- * \param ipc_perm IPC permissions for semaphore and shared memory
- * \param ipc_gid IPC group ID for semaphore and shared memory
+ * \param opts Direct PCM configurations
  * \param params Parameters for slave
- * \param bindings Channel bindings
- * \param slowptr Slow but more precise pointer updates
  * \param root Configuration root
  * \param sconf Slave configuration
  * \param stream PCM Direction (stream)
@@ -589,10 +590,8 @@ static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
-			key_t ipc_key, mode_t ipc_perm, int ipc_gid,
+			struct snd_pcm_direct_open_conf *opts,
 			struct slave_params *params,
-			snd_config_t *bindings,
-			int slowptr,
 			snd_config_t *root, snd_config_t *sconf,
 			snd_pcm_stream_t stream, int mode)
 {
@@ -615,7 +614,7 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 		goto _err_nosem;
 	}
 	
-	ret = snd_pcm_direct_parse_bindings(dshare, bindings);
+	ret = snd_pcm_direct_parse_bindings(dshare, opts->bindings);
 	if (ret < 0)
 		goto _err_nosem;
 		
@@ -625,9 +624,9 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 		goto _err_nosem;
 	}
 	
-	dshare->ipc_key = ipc_key;
-	dshare->ipc_perm = ipc_perm;
-	dshare->ipc_gid = ipc_gid;
+	dshare->ipc_key = opts->ipc_key;
+	dshare->ipc_perm = opts->ipc_perm;
+	dshare->ipc_gid = opts->ipc_gid;
 	dshare->semid = -1;
 	dshare->shmid = -1;
 
@@ -662,11 +661,15 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	pcm->fast_ops = &snd_pcm_dshare_fast_ops;
 	pcm->private_data = dshare;
 	dshare->state = SND_PCM_STATE_OPEN;
-	dshare->slowptr = slowptr;
+	dshare->slowptr = opts->slowptr;
+	dshare->max_periods = opts->max_periods;
 	dshare->sync_ptr = snd_pcm_dshare_sync_ptr;
 
 	if (first_instance) {
-		ret = snd_pcm_open_slave(&spcm, root, sconf, stream, mode | SND_PCM_NONBLOCK);
+		/* recursion is already checked in
+		   snd_pcm_direct_get_slave_ipc_offset() */
+		ret = snd_pcm_open_slave(&spcm, root, sconf, stream,
+					 mode | SND_PCM_NONBLOCK, NULL);
 		if (ret < 0) {
 			SNDERR("unable to open slave");
 			goto _err;
@@ -754,8 +757,7 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 		snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
  _err_nosem:
 	if (dshare) {
-		if (dshare->bindings)
-			free(dshare->bindings);
+		free(dshare->bindings);
 		free(dshare);
 	}
 	if (pcm)
@@ -829,110 +831,16 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 		       snd_config_t *root, snd_config_t *conf,
 		       snd_pcm_stream_t stream, int mode)
 {
-	snd_config_iterator_t i, next;
-	snd_config_t *slave = NULL, *bindings = NULL, *sconf;
+	snd_config_t *sconf;
 	struct slave_params params;
-	int bsize, psize, ipc_key_add_uid = 0, slowptr = 0;
-	key_t ipc_key = 0;
-	mode_t ipc_perm = 0600;
-	int ipc_gid = -1;
-	
+	struct snd_pcm_direct_open_conf dopen;
+	int bsize, psize;
 	int err;
-	snd_config_for_each(i, next, conf) {
-		snd_config_t *n = snd_config_iterator_entry(i);
-		const char *id;
-		if (snd_config_get_id(n, &id) < 0)
-			continue;
-		if (snd_pcm_conf_generic_id(id))
-			continue;
-		if (strcmp(id, "ipc_key") == 0) {
-			long key;
-			err = snd_config_get_integer(n, &key);
-			if (err < 0) {
-				SNDERR("The field ipc_key must be an integer type");
-				return err;
-			}
-			ipc_key = key;
-			continue;
-		}
-		if (strcmp(id, "ipc_perm") == 0) {
-			char *perm;
-			char *endp;
-			err = snd_config_get_ascii(n, &perm);
-			if (err < 0) {
-				SNDERR("The field ipc_perm must be a valid file permission");
-				return err;
-			}
-			if (isdigit(*perm) == 0) {
-				SNDERR("The field ipc_perm must be a valid file permission");
-				free(perm);
-				return -EINVAL;
-			}
-			ipc_perm = strtol(perm, &endp, 8);
-			free(perm);
-			continue;
-		}
-		if (strcmp(id, "ipc_gid") == 0) {
-			char *group;
-			char *endp;
-			err = snd_config_get_ascii(n, &group);
-			if (err < 0) {
-				SNDERR("The field ipc_gid must be a valid group");
-				return err;
-			}
-			if (isdigit(*group) == 0) {
-				struct group *grp = getgrnam(group);
-				if (group == NULL) {
-					SNDERR("The field ipc_gid must be a valid group (create group %s)", group);
-					free(group);
-					return -EINVAL;
-				}
-				ipc_gid = grp->gr_gid;
-			} else {
-				ipc_perm = strtol(group, &endp, 10);
-			}
-			free(group);
-			continue;
-		}
-		if (strcmp(id, "ipc_key_add_uid") == 0) {
-			err = snd_config_get_bool(n);
-			if (err < 0) {
-				SNDERR("The field ipc_key_add_uid must be a boolean type");
-				return err;
-			}
-			ipc_key_add_uid = err;
-			continue;
-		}
-		if (strcmp(id, "slave") == 0) {
-			slave = n;
-			continue;
-		}
-		if (strcmp(id, "bindings") == 0) {
-			bindings = n;
-			continue;
-		}
-		if (strcmp(id, "slowptr") == 0) {
-			err = snd_config_get_bool(n);
-			if (err < 0) {
-				SNDERR("The field slowptr must be a boolean type");
-				return err;
-			}
-			slowptr = err;
-			continue;
-		}
-		SNDERR("Unknown field %s", id);
-		return -EINVAL;
-	}
-	if (!slave) {
-		SNDERR("slave is not defined");
-		return -EINVAL;
-	}
-	if (ipc_key_add_uid)
-		ipc_key += getuid();
-	if (!ipc_key) {
-		SNDERR("Unique IPC key is not defined");
-		return -EINVAL;
-	}
+
+	err = snd_pcm_direct_parse_open_conf(root, conf, stream, &dopen);
+	if (err < 0)
+		return err;
+
 	/* the default settings, it might be invalid for some hardware */
 	params.format = SND_PCM_FORMAT_S16;
 	params.rate = 48000;
@@ -941,7 +849,7 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	params.buffer_time = -1;
 	bsize = psize = -1;
 	params.periods = 3;
-	err = snd_pcm_slave_conf(root, slave, &sconf, 8,
+	err = snd_pcm_slave_conf(root, dopen.slave, &sconf, 8,
 				 SND_PCM_HW_PARAM_FORMAT, 0, &params.format,
 				 SND_PCM_HW_PARAM_RATE, 0, &params.rate,
 				 SND_PCM_HW_PARAM_CHANNELS, 0, &params.channels,
@@ -959,7 +867,9 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 
 	params.period_size = psize;
 	params.buffer_size = bsize;
-	err = snd_pcm_dshare_open(pcmp, name, ipc_key, ipc_perm, ipc_gid, &params, bindings, slowptr, root, sconf, stream, mode);
+
+	err = snd_pcm_dshare_open(pcmp, name, &dopen, &params,
+				  root, sconf, stream, mode);
 	if (err < 0)
 		snd_config_delete(sconf);
 	return err;

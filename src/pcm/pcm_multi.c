@@ -424,8 +424,9 @@ static int snd_pcm_multi_prepare(snd_pcm_t *pcm)
 	int err = 0;
 	unsigned int i;
 	for (i = 0; i < multi->slaves_count; ++i) {
-		if (multi->slaves[i].linked)
-			continue;
+		/* We call prepare to each slave even if it's linked.
+		 * This is to make sure to sync non-mmaped control/status.
+		 */
 		err = snd_pcm_prepare(multi->slaves[i].pcm);
 		if (err < 0)
 			return err;
@@ -439,8 +440,7 @@ static int snd_pcm_multi_reset(snd_pcm_t *pcm)
 	int err = 0;
 	unsigned int i;
 	for (i = 0; i < multi->slaves_count; ++i) {
-		if (multi->slaves[i].linked)
-			continue;
+		/* Reset each slave, as well as in prepare */
 		err = snd_pcm_reset(multi->slaves[i].pcm);
 		if (err < 0)
 			return err;
@@ -675,20 +675,20 @@ static void snd_pcm_multi_dump(snd_pcm_t *pcm, snd_output_t *out)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	unsigned int k;
 	snd_output_printf(out, "Multi PCM\n");
-	snd_output_printf(out, "\nChannel bindings:\n");
+	snd_output_printf(out, "  Channel bindings:\n");
 	for (k = 0; k < multi->channels_count; ++k) {
 		snd_pcm_multi_channel_t *c = &multi->channels[k];
 		if (c->slave_idx < 0)
 			continue;
-		snd_output_printf(out, "%d: slave %d, channel %d\n", 
+		snd_output_printf(out, "    %d: slave %d, channel %d\n", 
 			k, c->slave_idx, c->slave_channel);
 	}
 	if (pcm->setup) {
-		snd_output_printf(out, "\nIts setup is:\n");
+		snd_output_printf(out, "Its setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 	for (k = 0; k < multi->slaves_count; ++k) {
-		snd_output_printf(out, "\nSlave #%d: ", k);
+		snd_output_printf(out, "Slave #%d: ", k);
 		snd_pcm_dump(multi->slaves[k].pcm, out);
 	}
 }
@@ -790,7 +790,7 @@ int snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 	multi->channels = calloc(channels_count, sizeof(*multi->channels));
 	if (!multi->channels) {
 		free(multi->slaves);
-		free(multi->channels);
+		free(multi);
 		return -ENOMEM;
 	}
 	for (i = 0; i < slaves_count; ++i) {
@@ -1103,7 +1103,9 @@ int _snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 	}
 	
 	for (idx = 0; idx < slaves_count; ++idx) {
-		err = snd_pcm_open_slave(&slaves_pcm[idx], root, slaves_conf[idx], stream, mode);
+		err = snd_pcm_open_slave(&slaves_pcm[idx], root,
+					 slaves_conf[idx], stream, mode,
+					 conf);
 		if (err < 0)
 			goto _free;
 		snd_config_delete(slaves_conf[idx]);
@@ -1128,16 +1130,11 @@ _free:
 		}
 		free(slaves_conf);
 	}
-	if (slaves_pcm)
-		free(slaves_pcm);
-	if (slaves_channels)
-		free(slaves_channels);
-	if (channels_sidx)
-		free(channels_sidx);
-	if (channels_schannel)
-		free(channels_schannel);
-	if (slaves_id)
-		free(slaves_id);
+	free(slaves_pcm);
+	free(slaves_channels);
+	free(channels_sidx);
+	free(channels_schannel);
+	free(slaves_id);
 	return err;
 }
 #ifndef DOC_HIDDEN

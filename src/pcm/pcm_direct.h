@@ -34,6 +34,11 @@ typedef void (mix_areas2_t)(unsigned int size,
 			volatile signed int *sum, size_t dst_step,
 			size_t src_step, size_t sum_step);
 
+typedef void (mix_areas3_t)(unsigned int size,
+			volatile unsigned char *dst, unsigned char *src,
+			volatile signed int *sum, size_t dst_step,
+			size_t src_step, size_t sum_step);
+
 struct slave_params {
 	snd_pcm_format_t format;
 	int rate;
@@ -42,7 +47,7 @@ struct slave_params {
 	int buffer_time;
 	snd_pcm_sframes_t period_size;
 	snd_pcm_sframes_t buffer_size;
-	int periods;
+	unsigned int periods;
 };
 
 typedef struct {
@@ -112,6 +117,7 @@ struct snd_pcm_direct {
 	snd_timer_t *timer; 		/* timer used as poll_fd */
 	int interleaved;	 	/* we have interleaved buffer */
 	int slowptr;			/* use slow but more precise ptr updates */
+	int max_periods;		/* max periods (-1 = fixed periods, 0 = max buffer size) */
 	unsigned int channels;		/* client's channels */
 	unsigned int *bindings;
 	union {
@@ -120,6 +126,7 @@ struct snd_pcm_direct {
 			signed int *sum_buffer;		/* shared sum buffer */
 			mix_areas1_t *mix_areas1;
 			mix_areas2_t *mix_areas2;
+			mix_areas3_t *mix_areas3;
 		} dmix;
 		struct {
 		} dsnoop;
@@ -183,3 +190,15 @@ int snd_pcm_direct_open_secondary_client(snd_pcm_t **spcmp, snd_pcm_direct_t *dm
 
 int snd_timer_async(snd_timer_t *timer, int sig, pid_t pid);
 struct timespec snd_pcm_hw_fast_tstamp(snd_pcm_t *pcm);
+
+struct snd_pcm_direct_open_conf {
+	key_t ipc_key;
+	mode_t ipc_perm;
+	int ipc_gid;
+	int slowptr;
+	int max_periods;
+	snd_config_t *slave;
+	snd_config_t *bindings;
+};
+
+int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf, int stream, struct snd_pcm_direct_open_conf *rec);

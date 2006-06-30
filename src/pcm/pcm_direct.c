@@ -26,6 +26,8 @@
 #include <signal.h>
 #include <string.h>
 #include <fcntl.h>
+#include <ctype.h>
+#include <grp.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/poll.h>
@@ -495,14 +497,6 @@ int snd_pcm_direct_async(snd_pcm_t *pcm, int sig, pid_t pid)
 	return snd_timer_async(dmix->timer, sig, pid);
 }
 
-static inline void process_timer_event(snd_pcm_direct_t *dmix ATTRIBUTE_UNUSED,
-				       snd_timer_tread_t *te ATTRIBUTE_UNUSED)
-{
-#if 0
-	printf("te->event = %i\n", te->event);
-#endif
-}
-
 /* empty the timer read queue */
 void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
 {
@@ -510,9 +504,8 @@ void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
 		while (poll(&dmix->timer_fd, 1, 0) > 0) {
 			/* we don't need the value */
 			if (dmix->tread) {
-				snd_timer_tread_t rbuf;
-				snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf));
-				process_timer_event(dmix, &rbuf);
+				snd_timer_tread_t rbuf[4];
+				snd_timer_read(dmix->timer, rbuf, sizeof(rbuf));
 			} else {
 				snd_timer_read_t rbuf;
 				snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf));
@@ -520,9 +513,12 @@ void snd_pcm_direct_clear_timer_queue(snd_pcm_direct_t *dmix)
 		}
 	} else {
 		if (dmix->tread) {
-			snd_timer_tread_t rbuf;
-			while (snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf)) > 0)
-				process_timer_event(dmix, &rbuf);
+			snd_timer_tread_t rbuf[4];
+			int len;
+			while ((len = snd_timer_read(dmix->timer, rbuf,
+						     sizeof(rbuf))) > 0 &&
+			       len != sizeof(rbuf[0]))
+				;
 		} else {
 			snd_timer_read_t rbuf;
 			while (snd_timer_read(dmix->timer, &rbuf, sizeof(rbuf)) > 0)
@@ -567,6 +563,15 @@ int snd_pcm_direct_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned in
 		if (empty) {
 			snd_pcm_direct_clear_timer_queue(dmix);
 			events &= ~(POLLOUT|POLLIN);
+			/* additional check */
+			switch (snd_pcm_state(pcm)) {
+			case SND_PCM_STATE_XRUN:
+			case SND_PCM_STATE_SUSPENDED:
+				events |= POLLERR;
+				break;
+			default:
+				break;
+			}
 		}
 		break;
 	}
@@ -621,6 +626,19 @@ static int hw_param_interval_refine_one(snd_pcm_hw_params_t *params,
 	return 0;
 }
 
+static int hw_param_interval_refine_minmax(snd_pcm_hw_params_t *params,
+					   snd_pcm_hw_param_t var,
+					   unsigned int imin,
+					   unsigned int imax)
+{
+	snd_interval_t t;
+
+	memset(&t, 0, sizeof(t));
+	snd_interval_set_minmax(&t, imin, imax);
+	t.integer = 1;
+	return hw_param_interval_refine_one(params, var, &t);
+}
+
 #undef REFINE_DEBUG
 
 int snd_pcm_direct_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
@@ -671,14 +689,6 @@ int snd_pcm_direct_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 					   &dshare->shmptr->hw.rate);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_SIZE,
-					   &dshare->shmptr->hw.buffer_size);
-	if (err < 0)
-		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_TIME,
-					   &dshare->shmptr->hw.buffer_time);
-	if (err < 0)
-		return err;
 	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIOD_SIZE,
 					   &dshare->shmptr->hw.period_size);
 	if (err < 0)
@@ -687,10 +697,36 @@ int snd_pcm_direct_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 					   &dshare->shmptr->hw.period_time);
 	if (err < 0)
 		return err;
-	err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_PERIODS,
-					   &dshare->shmptr->hw.periods);
-	if (err < 0)
-		return err;
+	if (dshare->max_periods < 0) {
+		err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_SIZE,
+						   &dshare->shmptr->hw.buffer_size);
+		if (err < 0)
+			return err;
+		err = hw_param_interval_refine_one(params, SND_PCM_HW_PARAM_BUFFER_TIME,
+						   &dshare->shmptr->hw.buffer_time);
+		if (err < 0)
+			return err;
+	} else if (params->rmask & ((1<<SND_PCM_HW_PARAM_PERIODS)|
+				    (1<<SND_PCM_HW_PARAM_BUFFER_BYTES)|
+				    (1<<SND_PCM_HW_PARAM_BUFFER_SIZE)|
+				    (1<<SND_PCM_HW_PARAM_BUFFER_TIME))) {
+		int changed;
+		unsigned int max_periods = dshare->max_periods;
+		if (max_periods < 2)
+			max_periods = dshare->slave_buffer_size / dshare->slave_period_size;
+		do {
+			changed = 0;
+			err = hw_param_interval_refine_minmax(params, SND_PCM_HW_PARAM_PERIODS,
+							      2, max_periods);
+			if (err < 0)
+				return err;
+			changed |= err;
+			err = snd_pcm_hw_refine_soft(pcm, params);
+			if (err < 0)
+				return err;
+			changed |= err;
+		} while (changed);
+	}
 	params->info = dshare->shmptr->s.info;
 #ifdef REFINE_DEBUG
 	snd_output_puts(log, "DMIX REFINE (end):\n");
@@ -800,6 +836,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 			case SND_PCM_FORMAT_S32_BE:
 			case SND_PCM_FORMAT_S16_LE:
 			case SND_PCM_FORMAT_S16_BE:
+			case SND_PCM_FORMAT_S24_3LE:
 				break;
 			default:
 				SNDERR("invalid format");
@@ -875,7 +912,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	}		
 	
 	if (buffer_is_not_initialized && params->periods > 0) {
-		int periods = params->periods;
+		unsigned int periods = params->periods;
 		ret = INTERNAL(snd_pcm_hw_params_set_periods_near)(spcm, hw_params, &params->periods, 0);
 		if (ret < 0) {
 			SNDERR("unable to set requested periods");
@@ -1142,11 +1179,12 @@ int snd_pcm_direct_set_timer_params(snd_pcm_direct_t *dmix)
 int snd_pcm_direct_check_interleave(snd_pcm_direct_t *dmix, snd_pcm_t *pcm)
 {
 	unsigned int chn, channels;
-	int interleaved = 1;
+	int bits, interleaved = 1;
 	const snd_pcm_channel_area_t *dst_areas;
 	const snd_pcm_channel_area_t *src_areas;
 
-	if ((snd_pcm_format_physical_width(dmix->type) % 8) != 0)
+	bits = snd_pcm_format_physical_width(dmix->type);
+	if ((bits % 8) != 0)
 		interleaved = 0;
 	channels = dmix->channels;
 	dst_areas = snd_pcm_mmap_areas(dmix->spcm);
@@ -1166,13 +1204,13 @@ int snd_pcm_direct_check_interleave(snd_pcm_direct_t *dmix, snd_pcm_t *pcm)
 			interleaved = 0;
 			break;
 		}
-		if (dst_areas[chn].first != sizeof(signed short) * chn * 8 ||
-		    dst_areas[chn].step != channels * sizeof(signed short) * 8) {
+		if (dst_areas[chn].first != chn * bits ||
+		    dst_areas[chn].step != channels * bits) {
 			interleaved = 0;
 			break;
 		}
-		if (src_areas[chn].first != sizeof(signed short) * chn * 8 ||
-		    src_areas[chn].step != channels * sizeof(signed short) * 8) {
+		if (src_areas[chn].first != chn * bits ||
+		    src_areas[chn].step != channels * bits) {
 			interleaved = 0;
 			break;
 		}
@@ -1250,5 +1288,241 @@ int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix, snd_config_t *cfg)
 	}
       __skip_same_dst:
 	dmix->channels = count;
+	return 0;
+}
+
+/*
+ * parse slave config and calculate the ipc_key offset
+ */
+
+static int _snd_pcm_direct_get_slave_ipc_offset(snd_config_t *root,
+						snd_config_t *sconf,
+						int direction,
+						int hop)
+{
+	snd_config_iterator_t i, next;
+	int err;
+	long card = 0, device = 0, subdevice = 0;
+	const char *str;
+
+	if (snd_config_get_string(sconf, &str) >= 0) {
+		snd_config_t *pcm_conf;
+		if (hop > SND_CONF_MAX_HOPS) {
+			SNDERR("Too many definition levels (looped?)");
+			return -EINVAL;
+		}
+		err = snd_config_search_definition(root, "pcm", str, &pcm_conf);
+		if (err < 0) {
+			SNDERR("Unknown slave PCM %s", str);
+			return err;
+		}
+		err = _snd_pcm_direct_get_slave_ipc_offset(root, pcm_conf,
+							   direction,
+							   hop + 1);
+		snd_config_delete(pcm_conf);
+		return err;
+	}
+
+	snd_config_for_each(i, next, sconf) {
+		snd_config_t *n = snd_config_iterator_entry(i);
+		const char *id, *str;
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+		if (strcmp(id, "type") == 0) {
+			err = snd_config_get_string(n, &str);
+			if (err < 0) {
+				SNDERR("Invalid value for PCM type definition\n");
+				return -EINVAL;
+			}
+			if (strcmp(str, "hw")) {
+				SNDERR("Invalid type '%s' for slave PCM\n", str);
+				return -EINVAL;
+			}
+			continue;
+		}
+		if (strcmp(id, "card") == 0) {
+			err = snd_config_get_integer(n, &card);
+			if (err < 0) {
+				err = snd_config_get_string(n, &str);
+				if (err < 0) {
+					SNDERR("Invalid type for %s", id);
+					return -EINVAL;
+				}
+				card = snd_card_get_index(str);
+				if (card < 0) {
+					SNDERR("Invalid value for %s", id);
+					return card;
+				}
+			}
+			continue;
+		}
+		if (strcmp(id, "device") == 0) {
+			err = snd_config_get_integer(n, &device);
+			if (err < 0) {
+				SNDERR("Invalid type for %s", id);
+				return err;
+			}
+			continue;
+		}
+		if (strcmp(id, "subdevice") == 0) {
+			err = snd_config_get_integer(n, &subdevice);
+			if (err < 0) {
+				SNDERR("Invalid type for %s", id);
+				return err;
+			}
+			continue;
+		}
+	}
+	if (card < 0)
+		card = 0;
+	if (device < 0)
+		device = 0;
+	if (subdevice < 0)
+		subdevice = 0;
+	return (direction << 1) + (device << 2) + (subdevice << 8) + (card << 12);
+}
+
+static int snd_pcm_direct_get_slave_ipc_offset(snd_config_t *root,
+					snd_config_t *sconf,
+					int direction)
+{
+	return _snd_pcm_direct_get_slave_ipc_offset(root, sconf, direction, 0);
+}
+
+int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf,
+				   int stream, struct snd_pcm_direct_open_conf *rec)
+{
+	snd_config_iterator_t i, next;
+	int ipc_key_add_uid = 0;
+	snd_config_t *n;
+	int err;
+
+	rec->slave = NULL;
+	rec->bindings = NULL;
+	rec->ipc_key = 0;
+	rec->ipc_perm = 0600;
+	rec->ipc_gid = -1;
+	rec->slowptr = 0;
+	rec->max_periods = 0;
+
+	/* read defaults */
+	if (snd_config_search(root, "defaults.pcm.dmix_max_periods", &n) >= 0) {
+		long val;
+		err = snd_config_get_integer(n, &val);
+		if (err >= 0)
+			rec->max_periods = val;
+	}
+
+	snd_config_for_each(i, next, conf) {
+		const char *id;
+		n = snd_config_iterator_entry(i);
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+		if (snd_pcm_conf_generic_id(id))
+			continue;
+		if (strcmp(id, "ipc_key") == 0) {
+			long key;
+			err = snd_config_get_integer(n, &key);
+			if (err < 0) {
+				SNDERR("The field ipc_key must be an integer type");
+
+				return err;
+			}
+			rec->ipc_key = key;
+			continue;
+		}
+		if (strcmp(id, "ipc_perm") == 0) {
+			char *perm;
+			char *endp;
+			err = snd_config_get_ascii(n, &perm);
+			if (err < 0) {
+				SNDERR("The field ipc_perm must be a valid file permission");
+				return err;
+			}
+			if (isdigit(*perm) == 0) {
+				SNDERR("The field ipc_perm must be a valid file permission");
+				free(perm);
+				return -EINVAL;
+			}
+			rec->ipc_perm = strtol(perm, &endp, 8);
+			free(perm);
+			continue;
+		}
+		if (strcmp(id, "ipc_gid") == 0) {
+			char *group;
+			char *endp;
+			err = snd_config_get_ascii(n, &group);
+			if (err < 0) {
+				SNDERR("The field ipc_gid must be a valid group");
+				return err;
+			}
+			if (! *group) {
+				rec->ipc_gid = -1;
+				free(group);
+				continue;
+			}
+			if (isdigit(*group) == 0) {
+				struct group *grp = getgrnam(group);
+				if (grp == NULL) {
+					SNDERR("The field ipc_gid must be a valid group (create group %s)", group);
+					free(group);
+					return -EINVAL;
+				}
+				rec->ipc_gid = grp->gr_gid;
+			} else {
+				rec->ipc_gid = strtol(group, &endp, 10);
+			}
+			free(group);
+			continue;
+		}
+		if (strcmp(id, "ipc_key_add_uid") == 0) {
+			if ((err = snd_config_get_bool(n)) < 0) {
+				SNDERR("The field ipc_key_add_uid must be a boolean type");
+				return err;
+			}
+			ipc_key_add_uid = err;
+			continue;
+		}
+		if (strcmp(id, "slave") == 0) {
+			rec->slave = n;
+			continue;
+		}
+		if (strcmp(id, "bindings") == 0) {
+			rec->bindings = n;
+			continue;
+		}
+		if (strcmp(id, "slowptr") == 0) {
+			err = snd_config_get_bool(n);
+			if (err < 0)
+				return err;
+			rec->slowptr = err;
+			continue;
+		}
+		if (strcmp(id, "max_periods") == 0) {
+			long val;
+			err = snd_config_get_integer(n, &val);
+			if (err < 0)
+				return err;
+			rec->max_periods = val;
+			continue;
+		}
+		SNDERR("Unknown field %s", id);
+		return -EINVAL;
+	}
+	if (! rec->slave) {
+		SNDERR("slave is not defined");
+		return -EINVAL;
+	}
+	if (!rec->ipc_key) {
+		SNDERR("Unique IPC key is not defined");
+		return -EINVAL;
+	}
+	if (ipc_key_add_uid)
+		rec->ipc_key += getuid();
+	err = snd_pcm_direct_get_slave_ipc_offset(root, rec->slave, stream);
+	if (err < 0)
+		return err;
+	rec->ipc_key += err;
+
 	return 0;
 }

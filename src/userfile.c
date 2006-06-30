@@ -18,10 +18,9 @@
  *
  */
   
+#include <config.h>
 #include <string.h>
 #include <errno.h>
-#include <wordexp.h>
-#include <assert.h>
 
 /**
  * \brief Get the full file name
@@ -32,6 +31,10 @@
  * Parses the given file name with POSIX-Shell-like expansion and
  * stores the first matchine one.  The returned string is strdup'ed.
  */
+
+#ifdef HAVE_WORDEXP_H
+#include <wordexp.h>
+#include <assert.h>
 int snd_user_file(const char *file, char **result)
 {
 	wordexp_t we;
@@ -56,3 +59,14 @@ int snd_user_file(const char *file, char **result)
 	wordfree(&we);
 	return 0;
 }
+
+#else /* !HAVE_WORDEXP_H */
+/* just copy the string - would be nicer to expand by ourselves, though... */
+int snd_user_file(const char *file, char **result)
+{
+	*result = strdup(file);
+	if (! *result)
+		return -ENOMEM;
+	return 0;
+}
+#endif /* HAVE_WORDEXP_H */

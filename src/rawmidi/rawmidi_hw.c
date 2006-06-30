@@ -34,7 +34,7 @@
 const char *_snd_module_rawmidi_hw = "";
 #endif
 
-#define SNDRV_FILE_RAWMIDI		"/dev/snd/midiC%iD%i"
+#define SNDRV_FILE_RAWMIDI		ALSA_DEVICE_DIRECTORY "midiC%iD%i"
 #define SNDRV_RAWMIDI_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 0)
 
 #ifndef DOC_HIDDEN
@@ -48,15 +48,17 @@ typedef struct {
 static int snd_rawmidi_hw_close(snd_rawmidi_t *rmidi)
 {
 	snd_rawmidi_hw_t *hw = rmidi->private_data;
+	int err = 0;
+
 	hw->open--;
 	if (hw->open)
 		return 0;
 	if (close(hw->fd)) {
+		err = -errno;
 		SYSERR("close failed\n");
-		return -errno;
 	}
 	free(hw);
-	return 0;
+	return err;
 }
 
 static int snd_rawmidi_hw_nonblock(snd_rawmidi_t *rmidi, int nonblock)
@@ -173,7 +175,7 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 {
 	int fd, ver, ret;
 	int attempt = 0;
-	char filename[32];
+	char filename[sizeof(SNDRV_FILE_RAWMIDI) + 20];
 	snd_ctl_t *ctl;
 	snd_rawmidi_t *rmidi;
 	snd_rawmidi_hw_t *hw = NULL;
@@ -314,11 +316,10 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 
  _nomem:
 	close(fd);
-	if (hw)
-		free(hw);
-	if (inputp && *inputp)
+	free(hw);
+	if (inputp)
 		free(*inputp);
-	if (outputp && *outputp)
+	if (outputp)
 		free(*outputp);
 	return -ENOMEM;
 }
