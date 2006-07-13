@@ -25,10 +25,6 @@ ifneq (,$(biarch_cpu))
   ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
     bi = 32
     bilibdir = usr/lib32
-    ifeq ($(DEB_HOST_ARCH),amd64)
-      # amd64 unstable only!
-      bilibdir = emul/ia32-linux/usr/lib
-    endif
   endif
   configure_biarch_stamp = configure-biarch-stamp
   build_biarch_stamp = build-biarch-stamp
