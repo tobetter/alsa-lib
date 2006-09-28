@@ -1,3 +1,14 @@
+alsa-lib (1.0.10-2ubuntu4.1) dapper-proposed; urgency=low
+
+  * Add debian/patches/25_fix_stereo_line_capture.dpatch that fixes
+    inaudible recording of stereo microphone input. Patch backported
+    from 1.0.11 referenced at
+    http://hg-mirror.alsa-project.org/alsa-lib?cmd=changeset;node=71eb744cd5be42cd7ebd14edf5f3f2e2da6ba35d;style=raw
+    (Closes Ubuntu ticket #1000, bug #62855). Thanks, Jeff Meininger
+    and others.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Thu, 28 Sep 2006 17:34:12 -0400
+
 alsa-lib (1.0.10-2ubuntu4) dapper; urgency=low
 
   * debian/patches: Add:
