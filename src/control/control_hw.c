@@ -40,11 +40,12 @@ const char *_snd_module_control_hw = "";
 
 #ifndef DOC_HIDDEN
 #define SNDRV_FILE_CONTROL	ALSA_DEVICE_DIRECTORY "controlC%i"
-#define SNDRV_CTL_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 3)
+#define SNDRV_CTL_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 4)
 
 typedef struct {
 	int card;
 	int fd;
+	unsigned int protocol;
 } snd_ctl_hw_t;
 #endif /* DOC_HIDDEN */
 
@@ -200,6 +201,43 @@ static int snd_ctl_hw_elem_unlock(snd_ctl_t *handle, snd_ctl_elem_id_t *id)
 	return 0;
 }
 
+static int snd_ctl_hw_elem_tlv(snd_ctl_t *handle, int op_flag,
+			       unsigned int numid,
+			       unsigned int *tlv, unsigned int tlv_size)
+{
+	int inum;
+	snd_ctl_hw_t *hw = handle->private_data;
+	struct sndrv_ctl_tlv *xtlv;
+	
+	/* we don't support TLV on protocol ver 2.0.3 or earlier */
+	if (hw->protocol < SNDRV_PROTOCOL_VERSION(2, 0, 4))
+		return -ENXIO;
+
+	switch (op_flag) {
+	case -1: inum = SNDRV_CTL_IOCTL_TLV_COMMAND; break;
+ 	case 0:	inum = SNDRV_CTL_IOCTL_TLV_READ; break;
+	case 1:	inum = SNDRV_CTL_IOCTL_TLV_WRITE; break;
+	default: return -EINVAL;
+	}
+	xtlv = malloc(sizeof(struct sndrv_ctl_tlv) + tlv_size);
+	if (xtlv == NULL)
+		return -ENOMEM; 
+	xtlv->numid = numid;
+	xtlv->length = tlv_size;
+	memcpy(xtlv->tlv, tlv, tlv_size);
+	if (ioctl(hw->fd, inum, xtlv) < 0) {
+		free(xtlv);
+		return -errno;
+	}
+	if (op_flag == 0) {
+		if (xtlv->tlv[1] + 2 * sizeof(unsigned int) > tlv_size)
+			return -EFAULT;
+		memcpy(tlv, xtlv->tlv, xtlv->tlv[1] + 2 * sizeof(unsigned int));
+	}
+	free(xtlv);
+	return 0;
+}
+
 static int snd_ctl_hw_hwdep_next_device(snd_ctl_t *handle, int * device)
 {
 	snd_ctl_hw_t *hw = handle->private_data;
@@ -305,6 +343,7 @@ snd_ctl_ops_t snd_ctl_hw_ops = {
 	.element_write = snd_ctl_hw_elem_write,
 	.element_lock = snd_ctl_hw_elem_lock,
 	.element_unlock = snd_ctl_hw_elem_unlock,
+	.element_tlv = snd_ctl_hw_elem_tlv,
 	.hwdep_next_device = snd_ctl_hw_hwdep_next_device,
 	.hwdep_info = snd_ctl_hw_hwdep_info,
 	.pcm_next_device = snd_ctl_hw_pcm_next_device,
@@ -373,6 +412,7 @@ int snd_ctl_hw_open(snd_ctl_t **handle, const char *name, int card, int mode)
 	}
 	hw->card = card;
 	hw->fd = fd;
+	hw->protocol = ver;
 
 	err = snd_ctl_new(&ctl, SND_CTL_TYPE_HW, name);
 	if (err < 0) {

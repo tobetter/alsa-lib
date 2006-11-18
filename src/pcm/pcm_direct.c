@@ -82,6 +82,8 @@ int snd_pcm_direct_semaphore_create_or_connect(snd_pcm_direct_t *dmix)
 	return 0;
 }
 
+#define SND_PCM_DIRECT_MAGIC	(0xa15ad300 + sizeof(snd_pcm_direct_share_t))
+
 /*
  *  global shared memory area 
  */
@@ -121,7 +123,13 @@ retryget:
 			buf.shm_perm.gid = dmix->ipc_gid;
 			shmctl(dmix->shmid, IPC_SET, &buf);
 		}
+		dmix->shmptr->magic = SND_PCM_DIRECT_MAGIC;
 		return 1;
+	} else {
+		if (dmix->shmptr->magic != SND_PCM_DIRECT_MAGIC) {
+			snd_pcm_direct_shm_discard(dmix);
+			return -errno;
+		}
 	}
 	return 0;
 }
@@ -792,6 +800,46 @@ int snd_pcm_direct_resume(snd_pcm_t *pcm)
 	return err;
 }
 
+#define COPY_SLAVE(field) (dmix->shmptr->s.field = spcm->field)
+
+/* copy the slave setting */
+static void save_slave_setting(snd_pcm_direct_t *dmix, snd_pcm_t *spcm)
+{
+	spcm->info &= ~SND_PCM_INFO_PAUSE;
+
+	COPY_SLAVE(access);
+	COPY_SLAVE(format);
+	COPY_SLAVE(subformat);
+	COPY_SLAVE(channels);
+	COPY_SLAVE(rate);
+	COPY_SLAVE(period_size);
+	COPY_SLAVE(period_time);
+	COPY_SLAVE(periods);
+	COPY_SLAVE(tick_time);
+	COPY_SLAVE(tstamp_mode);
+	COPY_SLAVE(period_step);
+	COPY_SLAVE(sleep_min);
+	COPY_SLAVE(avail_min);
+	COPY_SLAVE(start_threshold);
+	COPY_SLAVE(stop_threshold);
+	COPY_SLAVE(silence_threshold);
+	COPY_SLAVE(silence_size);
+	COPY_SLAVE(xfer_align);
+	COPY_SLAVE(boundary);
+	COPY_SLAVE(info);
+	COPY_SLAVE(msbits);
+	COPY_SLAVE(rate_num);
+	COPY_SLAVE(rate_den);
+	COPY_SLAVE(hw_flags);
+	COPY_SLAVE(fifo_size);
+	COPY_SLAVE(buffer_size);
+	COPY_SLAVE(buffer_time);
+	COPY_SLAVE(sample_bits);
+	COPY_SLAVE(frame_bits);
+}
+
+#undef COPY_SLAVE
+
 /*
  * this function initializes hardware and starts playback operation with
  * no stop threshold (it operates all time without xrun checking)
@@ -1006,15 +1054,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	snd_pcm_poll_descriptors(spcm, &fd, 1);
 	dmix->hw_fd = fd.fd;
 	
-	dmix->shmptr->s.boundary = spcm->boundary;
-	dmix->shmptr->s.buffer_size = spcm->buffer_size;
-	dmix->shmptr->s.period_size = spcm->period_size;
-	dmix->shmptr->s.sample_bits = spcm->sample_bits;
-	dmix->shmptr->s.channels = spcm->channels;
-	dmix->shmptr->s.rate = spcm->rate;
-	dmix->shmptr->s.format = spcm->format;
-	dmix->shmptr->s.info = spcm->info & ~SND_PCM_INFO_PAUSE;
-	dmix->shmptr->s.msbits = spcm->msbits;
+	save_slave_setting(dmix, spcm);
 
 	/* Currently, we assume that each dmix client has the same
 	 * hw_params setting.
@@ -1028,6 +1068,14 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	dmix->slave_boundary = spcm->boundary;
 
 	spcm->donot_close = 1;
+
+	{
+		int ver = 0;
+		ioctl(spcm->poll_fd, SNDRV_PCM_IOCTL_PVERSION, &ver);
+		if (ver < SNDRV_PROTOCOL_VERSION(2, 0, 8))
+			dmix->shmptr->use_server = 1;
+	}
+
 	return 0;
 }
 
@@ -1110,6 +1158,48 @@ static snd_pcm_uframes_t recalc_boundary_size(unsigned long long bsize, snd_pcm_
 	return (snd_pcm_uframes_t)bsize;
 }
 
+#define COPY_SLAVE(field) (spcm->field = dmix->shmptr->s.field)
+
+/* copy the slave setting */
+static void copy_slave_setting(snd_pcm_direct_t *dmix, snd_pcm_t *spcm)
+{
+	COPY_SLAVE(access);
+	COPY_SLAVE(format);
+	COPY_SLAVE(subformat);
+	COPY_SLAVE(channels);
+	COPY_SLAVE(rate);
+	COPY_SLAVE(period_size);
+	COPY_SLAVE(period_time);
+	COPY_SLAVE(periods);
+	COPY_SLAVE(tick_time);
+	COPY_SLAVE(tstamp_mode);
+	COPY_SLAVE(period_step);
+	COPY_SLAVE(sleep_min);
+	COPY_SLAVE(avail_min);
+	COPY_SLAVE(start_threshold);
+	COPY_SLAVE(stop_threshold);
+	COPY_SLAVE(silence_threshold);
+	COPY_SLAVE(silence_size);
+	COPY_SLAVE(xfer_align);
+	COPY_SLAVE(boundary);
+	COPY_SLAVE(info);
+	COPY_SLAVE(msbits);
+	COPY_SLAVE(rate_num);
+	COPY_SLAVE(rate_den);
+	COPY_SLAVE(hw_flags);
+	COPY_SLAVE(fifo_size);
+	COPY_SLAVE(buffer_size);
+	COPY_SLAVE(buffer_time);
+	COPY_SLAVE(sample_bits);
+	COPY_SLAVE(frame_bits);
+
+	spcm->info &= ~SND_PCM_INFO_PAUSE;
+	spcm->boundary = recalc_boundary_size(dmix->shmptr->s.boundary, spcm->buffer_size);
+}
+
+#undef COPY_SLAVE
+
+
 /*
  * open a slave PCM as secondary client (dup'ed fd)
  */
@@ -1127,13 +1217,33 @@ int snd_pcm_direct_open_secondary_client(snd_pcm_t **spcmp, snd_pcm_direct_t *dm
 	spcm = *spcmp;
 	spcm->donot_close = 1;
 	spcm->setup = 1;
-	/* we copy the slave setting */
-	spcm->buffer_size = dmix->shmptr->s.buffer_size;
-	spcm->sample_bits = dmix->shmptr->s.sample_bits;
-	spcm->channels = dmix->shmptr->s.channels;
-	spcm->format = dmix->shmptr->s.format;
-	spcm->boundary = recalc_boundary_size(dmix->shmptr->s.boundary, spcm->buffer_size);
-	spcm->info = dmix->shmptr->s.info;
+
+	copy_slave_setting(dmix, spcm);
+
+	/* Use the slave setting as SPCM, so far */
+	dmix->slave_buffer_size = spcm->buffer_size;
+	dmix->slave_period_size = dmix->shmptr->s.period_size;
+	dmix->slave_boundary = spcm->boundary;
+
+	ret = snd_pcm_mmap(spcm);
+	if (ret < 0) {
+		SNDERR("unable to mmap channels");
+		return ret;
+	}
+	return 0;
+}
+
+/*
+ * open a slave PCM as secondary client (dup'ed fd)
+ */
+int snd_pcm_direct_initialize_secondary_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, struct slave_params *params)
+{
+	int ret;
+
+	spcm->donot_close = 1;
+	spcm->setup = 1;
+
+	copy_slave_setting(dmix, spcm);
 
 	/* Use the slave setting as SPCM, so far */
 	dmix->slave_buffer_size = spcm->buffer_size;
@@ -1223,10 +1333,13 @@ int snd_pcm_direct_check_interleave(snd_pcm_direct_t *dmix, snd_pcm_t *pcm)
  * id == client channel
  * value == slave's channel
  */
-int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix, snd_config_t *cfg)
+int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix,
+				  struct slave_params *params,
+				  snd_config_t *cfg)
 {
 	snd_config_iterator_t i, next;
 	unsigned int chn, chn1, count = 0;
+	unsigned int *bindings;
 	int err;
 
 	dmix->channels = UINT_MAX;
@@ -1256,11 +1369,11 @@ int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix, snd_config_t *cfg)
 		SNDERR("client channel out of range");
 		return -EINVAL;
 	}
-	dmix->bindings = malloc(count * sizeof(unsigned int));
-	if (dmix->bindings == NULL)
+	bindings = malloc(count * sizeof(unsigned int));
+	if (bindings == NULL)
 		return -ENOMEM;
 	for (chn = 0; chn < count; chn++)
-		dmix->bindings[chn] = UINT_MAX;		/* don't route */
+		bindings[chn] = UINT_MAX;		/* don't route */
 	snd_config_for_each(i, next, cfg) {
 		snd_config_t *n = snd_config_iterator_entry(i);
 		const char *id;
@@ -1270,23 +1383,33 @@ int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix, snd_config_t *cfg)
 		safe_strtol(id, &cchannel);
 		if (snd_config_get_integer(n, &schannel) < 0) {
 			SNDERR("unable to get slave channel (should be integer type) in binding: %s\n", id);
+			free(bindings);
 			return -EINVAL;
 		}
-		dmix->bindings[cchannel] = schannel;
+		if (schannel < 0 || schannel >= params->channels) {
+			SNDERR("invalid slave channel number %d in binding to %d",
+			       schannel, cchannel);
+			free(bindings);
+			return -EINVAL;
+		}
+		bindings[cchannel] = schannel;
 	}
-	if (dmix->type == SND_PCM_TYPE_DSNOOP)
+	if (dmix->type == SND_PCM_TYPE_DSNOOP ||
+	    ! dmix->bindings)
 		goto __skip_same_dst;
 	for (chn = 0; chn < count; chn++) {
 		for (chn1 = 0; chn1 < count; chn1++) {
 			if (chn == chn1)
 				continue;
-			if (dmix->bindings[chn] == dmix->bindings[chn1]) {
-				SNDERR("unable to route channels %d,%d to same destination %d", chn, chn1, dmix->bindings[chn]);
+			if (bindings[chn] == dmix->bindings[chn1]) {
+				SNDERR("unable to route channels %d,%d to same destination %d", chn, chn1, bindings[chn]);
+				free(bindings);
 				return -EINVAL;
 			}
 		}
 	}
       __skip_same_dst:
+	dmix->bindings = bindings;
 	dmix->channels = count;
 	return 0;
 }
@@ -1432,20 +1555,17 @@ int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf,
 			continue;
 		}
 		if (strcmp(id, "ipc_perm") == 0) {
-			char *perm;
-			char *endp;
-			err = snd_config_get_ascii(n, &perm);
+			long perm;
+			err = snd_config_get_integer(n, &perm);
 			if (err < 0) {
-				SNDERR("The field ipc_perm must be a valid file permission");
+				SNDERR("Invalid type for %s", id);
 				return err;
 			}
-			if (isdigit(*perm) == 0) {
+			if ((perm & ~0777) != 0) {
 				SNDERR("The field ipc_perm must be a valid file permission");
-				free(perm);
 				return -EINVAL;
 			}
-			rec->ipc_perm = strtol(perm, &endp, 8);
-			free(perm);
+			rec->ipc_perm = perm;
 			continue;
 		}
 		if (strcmp(id, "ipc_gid") == 0) {
