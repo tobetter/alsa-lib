@@ -50,9 +50,12 @@ struct slave_params {
 	unsigned int periods;
 };
 
+/* shared among direct plugin clients - be careful to be 32/64bit compatible! */
 typedef struct {
+	unsigned int magic;			/* magic number */
 	char socket_name[256];			/* name of communication socket */
 	snd_pcm_type_t type;			/* PCM type (currently only hw) */
+	int use_server;
 	struct {
 		unsigned int format;
 		snd_interval_t rate;
@@ -63,15 +66,36 @@ typedef struct {
 		snd_interval_t periods;
 	} hw;
 	struct {
-		unsigned int buffer_size;
-		unsigned int period_size;
-		unsigned long long boundary;
-		unsigned int channels;
-		unsigned int sample_bits;
-		unsigned int rate;
+		/* copied to slave PCMs */
+		snd_pcm_access_t access;
 		snd_pcm_format_t format;
+		snd_pcm_subformat_t subformat;
+		unsigned int channels;
+		unsigned int rate;
+		unsigned int period_size;
+		unsigned int period_time;
+		snd_interval_t periods;
+		unsigned int tick_time;
+		snd_pcm_tstamp_t tstamp_mode;
+		unsigned int period_step;
+		unsigned int sleep_min;
+		unsigned int avail_min;
+		unsigned int start_threshold;	
+		unsigned int stop_threshold;	
+		unsigned int silence_threshold;
+		unsigned int silence_size;
+		unsigned int xfer_align;
+		unsigned long long boundary;
 		unsigned int info;
 		unsigned int msbits;
+		unsigned int rate_num;
+		unsigned int rate_den;
+		unsigned int hw_flags;
+		unsigned int fifo_size;
+		unsigned int buffer_size;
+		snd_interval_t buffer_time;
+		unsigned int sample_bits;
+		unsigned int frame_bits;
 	} s;
 	union {
 		struct {
@@ -168,9 +192,12 @@ int snd_pcm_direct_server_discard(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_client_connect(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_client_discard(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, struct slave_params *params);
+int snd_pcm_direct_initialize_secondary_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, struct slave_params *params);
 int snd_pcm_direct_initialize_poll_fd(snd_pcm_direct_t *dmix);
 int snd_pcm_direct_check_interleave(snd_pcm_direct_t *dmix, snd_pcm_t *pcm);
-int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix, snd_config_t *cfg);
+int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix,
+				  struct slave_params *params,
+				  snd_config_t *cfg);
 int snd_pcm_direct_nonblock(snd_pcm_t *pcm, int nonblock);
 int snd_pcm_direct_async(snd_pcm_t *pcm, int sig, pid_t pid);
 int snd_pcm_direct_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);

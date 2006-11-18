@@ -1,3 +1,42 @@
+alsa-lib (1.0.13-1ubuntu1) feisty; urgency=low
+
+  * Merge from Debian unstable, remaining Ubuntu changes:
+    - debian/control: Don't Conflict with ia32-libs (<< 1.9),
+    - debian/rules: Install into /usr/lib32/ on amd64.
+  * Remove Ubuntu changes to debian/patches/ and snd-aoa conf,
+    included in new upstream version already.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Fri, 17 Nov 2006 22:01:56 -0500
+
+alsa-lib (1.0.13-1) unstable; urgency=low
+
+  * New upstream release
+
+  [ Elimar Riesebieter ]
+  * Rebuild patches/40_relibtoolise.dpatch.
+  * Removed debian/patches/11_libtool_version.dpatch. Applied different from
+    upstream
+
+ -- Jordi Mallach <jordi@debian.org>  Tue,  3 Oct 2006 09:53:01 +0200
+
+alsa-lib (1.0.12-1) unstable; urgency=low
+
+  * New upstream release.
+
+  [ Elimar Riesebieter ]
+  * Removed 06_pcm_rate_hwptr_update.dpatch. Applied upstream.
+  * Bumped compat to 5 and debhelper version >=5.0.37.
+  * Cleaned out fuzzes and offsets in patches/*
+  * Rebuild patches/40_relibtoolise.dpatch.
+  * Removed description-synopsis-starts-with-a-capital-letter lintian
+    overrides. No longer needed.
+  * Added lib64asound2.lintian-overrides.
+
+  [ Jordi Mallach ]
+  * Bump shlibs due to newly added symbols.
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 11 Sep 2006 11:14:58 +0200
+
 alsa-lib (1.0.11-7ubuntu3) edgy; urgency=low
 
   * On amd64, install into /usr/lib32.

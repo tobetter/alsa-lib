@@ -9,7 +9,7 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.11)
+AM_INIT_AUTOMAKE(alsa-lib, 1.0.13)
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL(INSTALL_M4, test -n "${ACLOCAL}")
@@ -34,6 +34,7 @@ fi
 	    
 
 AC_PROG_CC
+AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S 
 AC_DISABLE_STATIC
@@ -63,7 +64,7 @@ test "x$prefix" = xNONE && prefix=$ac_default_prefix
 eval dir="$datadir"
 case "$dir" in
 /*) ;;
-*) dir="$PWD/$dir"
+*) dir="$prefix/share"
 esac
 AC_DEFINE_UNQUOTED(DATADIR, "$dir", [directory containing ALSA configuration database])
 
@@ -72,7 +73,7 @@ test "x$exec_prefix" = xNONE && exec_prefix=$prefix
 eval dir="$libdir"
 case "$dir" in
 /*) ;;
-*) dir="$PWD/$dir"
+*) dir="$dir"
 esac
 AC_DEFINE_UNQUOTED(PKGLIBDIR, "$dir/$PACKAGE", [directory containing ALSA add-on modules])
 
@@ -83,7 +84,7 @@ AC_ARG_WITH(versioned,
   versioned="$withval", versioned="yes")
 if test "$versioned" = "yes"; then
   # it seems that GNU ld versions since 2.10 are not broken
-  xres=`grep '^VERSION=' $ac_aux_dir/libtool | cut -d = -f 2`
+  xres=`grep '^VERSION=' $ac_aux_dir/libtool | cut -d = -f 2 | cut -d \" -f 2`
   major=`echo $xres | cut -d . -f 1`
   minor=`echo $xres | cut -d . -f 2`
   pass=0
@@ -104,6 +105,16 @@ else
   AC_MSG_RESULT(no)
 fi
 AM_CONDITIONAL(VERSIONED_SYMBOLS, test x$versioned = xyes)
+
+dnl See if toolchain has a custom prefix for symbols ...
+AC_MSG_CHECKING(for custom symbol prefixes)
+SYMBOL_PREFIX=` \
+	echo "PREFIX=__USER_LABEL_PREFIX__" \
+		| ${CPP-${CC-gcc} -E} - 2>&1 \
+		| ${EGREP-grep} "^PREFIX=" \
+		| ${SED-sed} "s:^PREFIX=::"`
+AC_DEFINE_UNQUOTED([__SYMBOL_PREFIX], "$SYMBOL_PREFIX", [Toolchain Symbol Prefix])
+AC_MSG_RESULT($SYMBOL_PREFIX)
 
 dnl Check for debug...
 AC_MSG_CHECKING(for debug)
@@ -239,6 +250,9 @@ AC_ARG_ENABLE(seq,
 AC_ARG_ENABLE(instr,
   [  --disable-instr     Disable the instrument component],
   [build_instr="$enableval"], [build_instr="yes"])
+AC_ARG_ENABLE(alisp,
+  [  --disable-alisp     Disable the alisp component],
+  [build_alisp="$enableval"], [build_alisp="yes"])
 
 if test "$build_seq" != "yes"; then
   build_instr="no"
@@ -250,6 +264,7 @@ AM_CONDITIONAL(BUILD_RAWMIDI, test x$build_rawmidi = xyes)
 AM_CONDITIONAL(BUILD_HWDEP, test x$build_hwdep = xyes)
 AM_CONDITIONAL(BUILD_SEQ, test x$build_seq = xyes)
 AM_CONDITIONAL(BUILD_INSTR, test x$build_instr = xyes)
+AM_CONDITIONAL(BUILD_ALISP, test x$build_alisp = xyes)
 
 if test "$build_mixer" = "yes"; then
   AC_DEFINE([BUILD_MIXER], "1", [Build mixer component])

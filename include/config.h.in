@@ -126,6 +126,9 @@
 /* compiled with versioned symbols */
 #undef VERSIONED_SYMBOLS
 
+/* Toolchain Symbol Prefix */
+#undef __SYMBOL_PREFIX
+
 /* Define to empty if `const' does not conform to ANSI C. */
 #undef const
 

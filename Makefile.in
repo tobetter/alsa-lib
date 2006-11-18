@@ -37,7 +37,7 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 @BUILD_PCM_PLUGIN_SHM_TRUE@am__append_1 = aserver
-@BUILD_MIXER_TRUE@am__append_2 = alsalisp
+@BUILD_ALISP_TRUE@@BUILD_MIXER_TRUE@am__append_2 = alsalisp
 DIST_COMMON = $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(top_srcdir)/configure COPYING \
 	ChangeLog INSTALL TODO config.guess config.sub depcomp \
@@ -86,6 +86,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BUILD_ALISP_FALSE = @BUILD_ALISP_FALSE@
+BUILD_ALISP_TRUE = @BUILD_ALISP_TRUE@
 BUILD_HWDEP_FALSE = @BUILD_HWDEP_FALSE@
 BUILD_HWDEP_TRUE = @BUILD_HWDEP_TRUE@
 BUILD_INSTR_FALSE = @BUILD_INSTR_FALSE@
@@ -253,7 +255,7 @@ target_os = @target_os@
 target_vendor = @target_vendor@
 SUBDIRS = doc include src modules $(am__append_1) $(am__append_2) test \
 	utils
-EXTRA_DIST = ChangeLog INSTALL TODO NOTES configure cvscompile libtool depcomp version MEMORY-LEAK
+EXTRA_DIST = ChangeLog INSTALL TODO NOTES configure hgcompile libtool depcomp version MEMORY-LEAK
 AUTOMAKE_OPTIONS = foreign
 INCLUDES = -I$(top_srcdir)/include
 all: all-recursive

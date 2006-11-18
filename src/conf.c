@@ -470,7 +470,7 @@ static int safe_strtoll(const char *str, long long *val)
 	if (!*str)
 		return -EINVAL;
 	errno = 0;
-	if (sscanf(str, "%Ld%n", &v, &endidx) < 1)
+	if (sscanf(str, "%Li%n", &v, &endidx) < 1)
 		return -EINVAL;
 	if (str[endidx])
 		return -EINVAL;
@@ -2404,9 +2404,16 @@ int snd_config_save(snd_config_t *config, snd_output_t *out)
 #define SND_CONFIG_SEARCH_ALIAS(config, base, key, result, fcn1, fcn2) \
 { \
 	snd_config_t *res = NULL; \
-	int err, first = 1; \
+	char *old_key; \
+	int err, first = 1, maxloop = 1000; \
 	assert(config && key); \
-	do { \
+	while (1) { \
+		old_key = strdup(key); \
+		if (old_key == NULL) { \
+			err = -ENOMEM; \
+			res = NULL; \
+			break; \
+		} \
 		err = first && base ? -EIO : fcn1(config, config, key, &res); \
 		if (err < 0) { \
 			if (!base) \
@@ -2415,8 +2422,22 @@ int snd_config_save(snd_config_t *config, snd_output_t *out)
 			if (err < 0) \
 				break; \
 		} \
+		if (snd_config_get_string(res, &key) < 0) \
+			break; \
+		if (!first && (strcmp(key, old_key) == 0 || maxloop <= 0)) { \
+			if (maxloop == 0) \
+				SNDERR("maximum loop count reached (circular configuration?)"); \
+			else \
+				SNDERR("key %s refers to itself", key); \
+			err = -EINVAL; \
+			res = NULL; \
+			break; \
+		} \
+		free(old_key); \
 		first = 0; \
-	} while (snd_config_get_string(res, &key) >= 0); \
+		maxloop--; \
+	} \
+	free(old_key); \
 	if (!res) \
 		return err; \
 	if (result) \
@@ -3963,7 +3984,7 @@ int snd_config_expand(snd_config_t *config, snd_config_t *root, const char *args
  * \param name Key suffix.
  * \param result The function puts the handle to the expanded found node at
  *               the address specified by \p result.
- * \return Zero if successful, otherwise a negative error code.
+ * \return A non-negative value if successful, otherwise a negative error code.
  *
  * First the key is tried, then, if nothing is found, base.key is tried.
  * If the value found is a string, this is recursively tried in the

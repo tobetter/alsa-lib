@@ -129,10 +129,8 @@ endif
 	dh_installdocs -plibasound2
 	dh_installexamples -s
 	dh_installchangelogs -plibasound2 debian/changelog.ALSA
-	install -p -m 0644 -o root -g root debian/libasound2.lintian-overrides \
-		debian/libasound2/usr/share/lintian/overrides/libasound2
-	install -p -m 0644 -o root -g root debian/libasound2-dev.lintian-overrides \
-		debian/libasound2-dev/usr/share/lintian/overrides/libasound2-dev
+	install -D -p -m 0644 -o root -g root debian/lib64asound2.lintian-overrides \
+		debian/lib64asound2/usr/share/lintian/overrides/lib64asound2
 	dh_strip -s
 	dh_link -s
 	dh_compress -s
@@ -149,15 +147,13 @@ install-indep: build-indep-stamp
 	dh_installexamples -i
 	dh_installchangelogs -plibasound2-doc debian/changelog.ALSA
 	cp -r doc/doxygen/html debian/libasound2-doc/usr/share/doc/libasound2-doc
-	install -p -m 0644 -o root -g root debian/libasound2-doc.lintian-overrides \
-		debian/libasound2-doc/usr/share/lintian/overrides/libasound2-doc
 	dh_compress -i
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.11)'
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.12)'
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.11)'
+	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.12)'
 endif
 
 	dh_installdeb -s
