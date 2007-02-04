@@ -1,0 +1,32 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 60_init_dl_handles.dpatch by Daniel T Chen <crimsun@ubuntu.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Initialize dl handles appropriately
+## DP: http://hg-mirror.alsa-project.org/alsa-lib?cs=8803655da809;style=raw
+
+@DPATCH@
+diff -urNad alsa-lib-1.0.13~/src/timer/timer.c alsa-lib-1.0.13/src/timer/timer.c
+--- alsa-lib-1.0.13~/src/timer/timer.c	2006-09-29 07:42:57.000000000 -0400
++++ alsa-lib-1.0.13/src/timer/timer.c	2007-02-04 20:08:21.000000000 -0500
+@@ -92,7 +92,7 @@
+ #ifndef PIC
+ 	extern void *snd_timer_open_symbols(void);
+ #endif
+-	void *h;
++	void *h = NULL;
+ 	if (snd_config_get_type(timer_conf) != SND_CONFIG_TYPE_COMPOUND) {
+ 		if (name)
+ 			SNDERR("Invalid type for TIMER %s definition", name);
+diff -urNad alsa-lib-1.0.13~/src/timer/timer_query.c alsa-lib-1.0.13/src/timer/timer_query.c
+--- alsa-lib-1.0.13~/src/timer/timer_query.c	2006-09-29 07:42:57.000000000 -0400
++++ alsa-lib-1.0.13/src/timer/timer_query.c	2007-02-04 20:08:21.000000000 -0500
+@@ -50,7 +50,7 @@
+ #ifndef PIC
+ 	extern void *snd_timer_query_open_symbols(void);
+ #endif
+-	void *h;
++	void *h = NULL;
+ 	if (snd_config_get_type(timer_conf) != SND_CONFIG_TYPE_COMPOUND) {
+ 		if (name)
+ 			SNDERR("Invalid type for TIMER %s definition", name);

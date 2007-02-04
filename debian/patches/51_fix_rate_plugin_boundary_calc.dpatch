@@ -1,0 +1,34 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 51_fix_rate_plugin_boundary_calc.dpatch by Daniel T Chen <crimsun@ubuntu.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix snd_pcm_open_noupdate() to refer alias
+## DP: http://hg-mirror.alsa-project.org/alsa-lib?cs=a37d3b457fb1
+
+@DPATCH@
+diff -urNad alsa-lib-1.0.13~/src/pcm/pcm.c alsa-lib-1.0.13/src/pcm/pcm.c
+--- alsa-lib-1.0.13~/src/pcm/pcm.c	2007-02-04 18:29:35.000000000 -0500
++++ alsa-lib-1.0.13/src/pcm/pcm.c	2007-02-04 18:29:42.000000000 -0500
+@@ -2138,13 +2138,20 @@
+ {
+ 	int err;
+ 	snd_config_t *pcm_conf;
++	const char *str;
++
+ 	err = snd_config_search_definition(root, "pcm", name, &pcm_conf);
+ 	if (err < 0) {
+ 		SNDERR("Unknown PCM %s", name);
+ 		return err;
+ 	}
+-	snd_config_set_hop(pcm_conf, hop);
+-	err = snd_pcm_open_conf(pcmp, name, root, pcm_conf, stream, mode);
++	if (snd_config_get_string(pcm_conf, &str) >= 0)
++		err = snd_pcm_open_noupdate(pcmp, root, str, stream, mode,
++					    hop + 1);
++	else {
++		snd_config_set_hop(pcm_conf, hop);
++		err = snd_pcm_open_conf(pcmp, name, root, pcm_conf, stream, mode);
++	}
+ 	snd_config_delete(pcm_conf);
+ 	return err;
+ }

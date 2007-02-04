@@ -1,0 +1,19 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 61_fix_timer_query_exit_code.dpatch by Daniel T Chen <crimsun@ubuntu.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Fix the returned error code for the invalid timer definition
+## DP: http://hg-mirror.alsa-project.org/alsa-lib?cs=9722c7d2370d;style=raw
+
+@DPATCH@
+diff -urNad alsa-lib-1.0.13~/src/timer/timer_query.c alsa-lib-1.0.13/src/timer/timer_query.c
+--- alsa-lib-1.0.13~/src/timer/timer_query.c	2007-02-04 20:20:45.000000000 -0500
++++ alsa-lib-1.0.13/src/timer/timer_query.c	2007-02-04 20:21:01.000000000 -0500
+@@ -77,6 +77,7 @@
+ 	if (err >= 0) {
+ 		if (snd_config_get_type(type_conf) != SND_CONFIG_TYPE_COMPOUND) {
+ 			SNDERR("Invalid type for TIMER type %s definition", str);
++			err = -EINVAL;
+ 			goto _err;
+ 		}
+ 		snd_config_for_each(i, next, type_conf) {
