@@ -178,7 +178,7 @@ clean: unpatch
 	-rm -f config.sub config.guess config.status config.cache
 	-rm -rf doc/doxygen
 	rm -rf bibuild debian/bitmp
-	rm -f include/alsa
+	-rm -f include/alsa
 	dh_clean
 
 .PHONY: configure build-arch build-indep build install-arch install-indep binary-arch binary-indep binary clean

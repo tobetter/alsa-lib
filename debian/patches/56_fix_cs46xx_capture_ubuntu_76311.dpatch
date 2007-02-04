@@ -1,0 +1,29 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 56_fix_cs46xx_capture_ubuntu_76311.dpatch by Daniel T Chen <crimsun@ubuntu.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Use default PCM hw for CS46xx's capture slave since dsnoop bails.
+## DP: http://hg-mirror.alsa-project.org/alsa-lib?cs=148b8b81af35;style=raw
+
+@DPATCH@
+diff -urNad alsa-lib-1.0.13~/src/conf/cards/CS46xx.conf alsa-lib-1.0.13/src/conf/cards/CS46xx.conf
+--- alsa-lib-1.0.13~/src/conf/cards/CS46xx.conf	2006-09-29 07:42:56.000000000 -0400
++++ alsa-lib-1.0.13/src/conf/cards/CS46xx.conf	2007-02-04 19:28:49.000000000 -0500
+@@ -14,7 +14,7 @@
+ 	device 0
+ }	
+ 
+-# default with plughw/dsnoop
++# default with plughw
+ # CS46xx supports multi-playback
+ CS46xx.pcm.default {
+ 	@args [ CARD ]
+@@ -33,7 +33,7 @@
+ 		type plug
+ 		slave.pcm {
+ 			@func concat
+-			strings [ "dsnoop:" $CARD ]
++			strings [ "hw:" $CARD ]
+ 		}
+ 	}
+ }

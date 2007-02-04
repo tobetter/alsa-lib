@@ -1,3 +1,24 @@
+alsa-lib (1.0.13-1ubuntu2) feisty; urgency=low
+
+  The "What Super Bowl?" release.
+
+  * debian/patches: Add (backported from alsa-lib hg):
+    - 50_fix_error_recovery_path_for_volume_switch_write.dpatch,
+    - 51_fix_rate_plugin_boundary_calc.dpatch,
+    - 52_use_dmix_dsnoop_for_maestro3.dpatch,
+    - 53_fix_pkgconfig_libs.dpatch,
+    - 54_fix_sconf_mem_leak.dpatch,
+    - 55_fix_ipc_offset_calc_for_direct_plugins.dpatch,
+    - 56_fix_cs46xx_capture_ubuntu_76311.dpatch (lp#76311),
+    - 57_fix_channel_number_select_for_direct_plugins.dpatch,
+    - 58_fix_format_select_for_direct_plugins.dpatch,
+    - 59_fix_ladspa_none_policy.dpatch,
+    - 60_init_dl_handles.dpatch,
+    - 61_fix_timer_query_exit_code.dpatch,
+  * debian/rules: Don't bail when removing include/alsa.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun,  4 Feb 2007 17:45:12 -0500
+
 alsa-lib (1.0.13-1ubuntu1) feisty; urgency=low
 
   * Merge from Debian unstable, remaining Ubuntu changes:
