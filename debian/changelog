@@ -1,3 +1,11 @@
+alsa-lib (1.0.13-1ubuntu3) feisty; urgency=low
+
+  * debian/patches: Add 62_add_dmix_usbaudio.dpatch. This patch
+    enables dmix and proper 5.1 routing by default for USB audio
+    devices. Closes LP #33736.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Wed, 14 Feb 2007 21:11:05 -0500
+
 alsa-lib (1.0.13-1ubuntu2) feisty; urgency=low
 
   The "What Super Bowl?" release.
