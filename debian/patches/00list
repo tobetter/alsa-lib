@@ -17,3 +17,5 @@
 60_init_dl_handles
 61_fix_timer_query_exit_code
 62_add_dmix_usbaudio
+63_improved_resampling
+64_duplex_multi
