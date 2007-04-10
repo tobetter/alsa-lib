@@ -1,3 +1,12 @@
+alsa-lib (1.0.13-1ubuntu5) feisty; urgency=low
+
+  * debian/patches/{00list,62_add_dmix_usbaudio.dpatch}:
+    Don't apply for Feisty release. I made a test patch that has
+    yet to receive feedback, so this close to release we take the
+    conservative approach (reopens LP #33736).
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Tue, 10 Apr 2007 10:46:59 -0400
+
 alsa-lib (1.0.13-1ubuntu4) feisty; urgency=low
 
   The "grey is a color" release.
