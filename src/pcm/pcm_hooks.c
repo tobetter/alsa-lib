@@ -27,7 +27,6 @@
  *
  */
   
-#include <dlfcn.h>
 #include "pcm_local.h"
 #include "pcm_generic.h"
 
@@ -151,8 +150,8 @@ static snd_pcm_fast_ops_t snd_pcm_hooks_fast_ops = {
 	.rewind = snd_pcm_generic_rewind,
 	.forward = snd_pcm_generic_forward,
 	.resume = snd_pcm_generic_resume,
-	.link_fd = snd_pcm_generic_link_fd,
 	.link = snd_pcm_generic_link,
+	.link_slaves = snd_pcm_generic_link_slaves,
 	.unlink = snd_pcm_generic_unlink,
 	.writei = snd_pcm_generic_writei,
 	.writen = snd_pcm_generic_writen,
@@ -308,7 +307,7 @@ static int snd_pcm_hook_add_conf(snd_pcm_t *pcm, snd_config_t *root, snd_config_
 	snd_config_t *type = NULL, *args = NULL;
 	snd_config_iterator_t i, next;
 	int (*install_func)(snd_pcm_t *pcm, snd_config_t *args) = NULL;
-	void *h;
+	void *h = NULL;
 	if (snd_config_get_type(conf) != SND_CONFIG_TYPE_COMPOUND) {
 		SNDERR("Invalid hook definition");
 		return -EINVAL;

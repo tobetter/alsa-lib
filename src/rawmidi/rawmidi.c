@@ -139,7 +139,6 @@ This example shows open and read/write rawmidi operations.
 #include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
-#include <dlfcn.h>
 #include "rawmidi_local.h"
 
 /**
@@ -986,4 +985,20 @@ ssize_t snd_rawmidi_read(snd_rawmidi_t *rawmidi, void *buffer, size_t size)
 	assert(rawmidi->stream == SND_RAWMIDI_STREAM_INPUT);
 	assert(buffer || size == 0);
 	return (rawmidi->ops->read)(rawmidi, buffer, size);
+}
+
+int snd_rawmidi_conf_generic_id(const char *id)
+{
+	static const char *ids[] = {
+		"comment",
+		"type",
+		"hint",
+	};
+	unsigned int k;
+
+	for (k = 0; k < sizeof ids / sizeof *ids; ++k) {
+		if (strcmp(id, ids[k]) == 0)
+			return 1;
+	}
+	return 0;
 }

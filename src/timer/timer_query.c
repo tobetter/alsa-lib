@@ -31,7 +31,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
-#include <dlfcn.h>
 #include <sys/ioctl.h>
 #include "timer_local.h"
 
@@ -50,7 +49,7 @@ static int snd_timer_query_open_conf(snd_timer_query_t **timer,
 #ifndef PIC
 	extern void *snd_timer_query_open_symbols(void);
 #endif
-	void *h;
+	void *h = NULL;
 	if (snd_config_get_type(timer_conf) != SND_CONFIG_TYPE_COMPOUND) {
 		if (name)
 			SNDERR("Invalid type for TIMER %s definition", name);
@@ -77,6 +76,7 @@ static int snd_timer_query_open_conf(snd_timer_query_t **timer,
 	if (err >= 0) {
 		if (snd_config_get_type(type_conf) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for TIMER type %s definition", str);
+			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, type_conf) {

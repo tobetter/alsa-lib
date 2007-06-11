@@ -415,12 +415,13 @@ beginning:</P>
 
 
 #include <stdarg.h>
-#include <dlfcn.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <pthread.h>
 #include <locale.h>
 #include "local.h"
+#ifdef HAVE_LIBPTHREAD
+#include <pthread.h>
+#endif
 
 #ifndef DOC_HIDDEN
 
@@ -579,12 +580,12 @@ static int get_char_skip_comments(input_t *input)
 			if (err < 0)
 				return err;
 			if (!strncmp(str, "confdir:", 8)) {
-				char *tmp = malloc(strlen(DATADIR "/alsa") + 1 + strlen(str + 8) + 1);
+				char *tmp = malloc(strlen(ALSA_CONFIG_DIR) + 1 + strlen(str + 8) + 1);
 				if (tmp == NULL) {
 					free(str);
 					return -ENOMEM;
 				}
-				sprintf(tmp, DATADIR "/alsa/%s", str + 8);
+				sprintf(tmp, ALSA_CONFIG_DIR "/%s", str + 8);
 				free(str);
 				str = tmp;
 			}
@@ -2605,7 +2606,7 @@ int snd_config_search_alias_hooks(snd_config_t *config,
 #define ALSA_CONFIG_PATH_VAR "ALSA_CONFIG_PATH"
 
 /** The name of the default files used by #snd_config_update. */
-#define ALSA_CONFIG_PATH_DEFAULT DATADIR "/alsa/alsa.conf"
+#define ALSA_CONFIG_PATH_DEFAULT ALSA_CONFIG_DIR "/alsa.conf"
 
 /**
  * \ingroup Config
@@ -3080,7 +3081,9 @@ int snd_config_update_r(snd_config_t **_top, snd_config_update_t **_update, cons
 	return 1;
 }
 
+#ifdef HAVE_LIBPTHREAD
 static pthread_mutex_t snd_config_update_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 /** 
  * \brief Updates #snd_config by rereading the global configuration files (if needed).
@@ -3099,9 +3102,13 @@ int snd_config_update(void)
 {
 	int err;
 
+#ifdef HAVE_LIBPTHREAD
 	pthread_mutex_lock(&snd_config_update_mutex);
+#endif
 	err = snd_config_update_r(&snd_config, &snd_config_global_update, NULL);
+#ifdef HAVE_LIBPTHREAD
 	pthread_mutex_unlock(&snd_config_update_mutex);
+#endif
 	return err;
 }
 
@@ -3128,15 +3135,18 @@ int snd_config_update_free(snd_config_update_t *update)
  */
 int snd_config_update_free_global(void)
 {
+#ifdef HAVE_LIBPTHREAD
 	pthread_mutex_lock(&snd_config_update_mutex);
+#endif
 	if (snd_config)
 		snd_config_delete(snd_config);
 	snd_config = NULL;
 	if (snd_config_global_update)
 		snd_config_update_free(snd_config_global_update);
 	snd_config_global_update = NULL;
+#ifdef HAVE_LIBPTHREAD
 	pthread_mutex_unlock(&snd_config_update_mutex);
-
+#endif
 	/* FIXME: better to place this in another place... */
 	snd_dlobj_cache_cleanup();
 
@@ -3935,6 +3945,10 @@ int snd_config_expand(snd_config_t *config, snd_config_t *root, const char *args
 	snd_config_t *defs, *subs = NULL, *res;
 	err = snd_config_search(config, "@args", &defs);
 	if (err < 0) {
+		if (args != NULL) {
+			SNDERR("Unknown parameters %s", args);
+			return -EINVAL;
+		}
 		err = snd_config_copy(&res, config);
 		if (err < 0)
 			return err;

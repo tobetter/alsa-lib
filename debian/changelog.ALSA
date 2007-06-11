@@ -1,3 +1,174 @@
+Changelog between 1.0.14rc4 and 1.0.14 releases
+(http://www.alsa-project.org/changes/v1-0-14rc4--v1-0-14.txt)
+********************************************
+
+* alsa-lib
+  + Core
+    - Add config and plugin directory options to configure
+  + PCM API
+    - Add support for gain in softvol plugin
+    - dmix/dshare/dsnoop plugin: enable slowptr by default
+    - Revert the wrong change in src/pcm/Makefile.am
+  + ALSA Lisp
+    - Add config and plugin directory options to configure
+  + Configuration
+    - Add support for gain in softvol plugin
+    - Add config and plugin directory options to configure
+    - Specify subdevice number for Maestor3 dmix setting
+  + Simple Abstraction Mixer Modules
+    - Add config and plugin directory options to configure
+
+Changelog between 1.0.14rc3 and 1.0.14rc4 releases
+(http://www.alsa-project.org/changes/v1-0-14rc3--v1-0-14rc4.txt)
+********************************************
+
+* alsa-lib
+  + Core
+    - Check _POSIX_SOURCE for timeval definition
+    - Fix build with no PCM plugin
+    - release 1.0.14rc3
+    - Allow build without libdl and libpthread
+    - Add --enable-symbolic-functions configure option
+    - Add --with-ctl-plugins configure option
+    - Use AS_HELP_STRING in configure.in
+  + Control API
+    - release 1.0.14rc3
+    - Add --with-ctl-plugins configure option
+    - Add missing control_ext entry
+  + PCM API
+    - Improve the sample conversion in plug layer
+    - fix a signedness warning
+    - String array for default rate plugin list
+    - Trivial fix of compile warning
+    - Fix start/stop of multi plugin
+    - More better fix for linked start/stop
+    - Remove _snd_pcm_link_descriptors() and more comments
+    - Define an array of default rate plugins
+    - Fixed an access to uninitialized variable in pcm_rate.c
+  + PCM Plugin API
+    - String array for default rate plugin list
+  + /Makefile.am
+    - Allow build without libdl and libpthread
+  + /src/Makefile.am
+    - Allow build without libdl and libpthread
+    - Add --enable-symbolic-functions configure option
+  + Async helpers
+    - Allow build without libdl and libpthread
+  + Configuration
+    - Add missing smixer.conf for installation
+    - Allow build without libdl and libpthread
+
+Changelog between 1.0.14rc2 and 1.0.14rc3 releases
+(http://www.alsa-project.org/changes/v1-0-14rc2--v1-0-14rc3.txt)
+********************************************
+
+* alsa-lib
+  + Core
+    - add support for symbol prefixes in shared libraries
+  + Mixer API
+    - fix SNDERR() format strings/arguments
+  + PCM API
+    - fix SNDERR() format strings/arguments
+  + /src/Makefile.am
+    - add support for symbol prefixes in shared libraries
+  + Configuration
+    - add card_name configuration function
+    - remove superfluous strdup() calls
+    - fix SNDERR() format strings/arguments
+    - enable dmix-ing and proper 5.1 routing for USB audio devices
+    - add USB-Audio.conf to Makefile.am
+  + Kernel Headers
+    - Update emu10k1.h for new version
+
+Changelog between 1.0.14rc1 and 1.0.14rc2 releases
+(http://www.alsa-project.org/changes/v1-0-14rc1--v1-0-14rc2.txt)
+********************************************
+
+* alsa-lib
+  + Control API
+    - remove snd_ctl_iface_conf_name() prototype, namehint doxygen cleanups
+  + PCM API
+    - Fix compile warning with internal function
+    - pcm_ladspa - fix none policy
+  + Timer API
+    - initialize dl handles where it needs to
+    - Fix error code in timer_query.c
+
+Changelog between 1.0.13 and 1.0.14rc1 releases
+(http://www.alsa-project.org/changes/v1-0-13--v1-0-14rc1.txt)
+********************************************
+
+* alsa-lib
+  + Core
+    - Add struct timeval and timespec definition when _POSIX_C_SOURCE is not defined
+    - fix various warnings
+    - change iface argument for namehint function to const char *
+    - release 1.0.13
+    - add snd_device_name_get_hint() function, make hints private to alsa-lib (void)
+    - more name hint interace updates
+    - allow building out of tree (sort of)
+    - add snd_device_name_hint() function and initial implementation
+  + Control API
+    - fix various warnings
+    - revert back one diff from changeset 2219 (fix various warnings)
+    - change iface argument for namehint function to const char *
+    - Fix build of static library
+    - namehint changes: longname -> cardname, use get_card_name instead longname
+    - fix string list parameter in snd_device_name_(free_)hint prototypes
+    - Fix device name listing with card = -1
+    - add snd_device_name_get_hint() function, make hints private to alsa-lib (void)
+    - more name hint interace updates
+    - pcm config files cleanups and name hint extension
+    - add snd_device_name_get_hint() prototype to include/control.h
+    - add snd_device_name_hint() function and initial implementation
+    - fix two issues in snd_device_name_hint()
+  + Device Name API
+    - Remove snd_name_list() and snd_name_list_free() functions.
+  + HWDEP API
+    - Fix build of static library
+  + Mixer API
+    - Implements support for capture/playback enums.
+    - simple mixer - fix error recovery path for volume / switch write
+    - add snd_device_name_hint() function and initial implementation
+  + PCM API
+    - fix various warnings
+    - added pcm_empty plugin and .hgignore additions
+    - Fix build of static library
+    - direct pcm plugins: fix channel number selection
+    - direct pcm plugins: fix format selection
+    - pcm: fix ipc offset calculation for direct plugins
+    - more name hint interace updates
+    - pcm direct plugins - fix memory leak (sconf must be deleted)
+    - Fix snd_pcm_open_noupdate() to refer alias
+    - add snd_device_name_hint() function and initial implementation
+  + RawMidi API
+    - rawmidi: do not abort when seeing the hint node
+    - Fix build of static library
+  + Sequencer API
+    - change iface argument for namehint function to const char *
+    - Fix build of static library
+  + Timer API
+    - Fix build of static library
+  + /src/Makefile.am
+    - Compatibility problem with automake 1.10 fixed.
+  + Configuration
+    - Fix CS46xx.conf default capture
+    - Revert dmix.conf and dsnoop.conf
+    - fix a typo
+    - more name hint interace updates
+    - pcm config files cleanups and name hint extension
+    - Use dmix/dsnoop for maestro3 boards
+    - add snd_device_name_hint() function and initial implementation
+    - add card number to ipc key for dmix / dsnoop PCM definitions
+  + Documentation
+    - add snd_device_name_hint() function and initial implementation
+  + Test/Example code
+    - change iface argument for namehint function to const char *
+    - alsa-lib: test dir: make check: static building doesn't work on PIC architectures
+  + Utils
+    - alsa.pc's Libs shouldn't contain -lm -ldl -lpthread
+
+
 Changelog between 1.0.12 and 1.0.13 releases
 (http://www.alsa-project.org/changes/v1-0-12--v1-0-13.txt)
 ********************************************

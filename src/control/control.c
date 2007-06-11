@@ -47,7 +47,6 @@ and IEC958 structure.
 #include <string.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <dlfcn.h>
 #include <sys/poll.h>
 #include "control_local.h"
 
@@ -850,13 +849,13 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 			build_in++;
 		}
 		if (*build_in == NULL) {
-			buf1 = malloc(strlen(str) + sizeof(PKGLIBDIR) + 32);
+			buf1 = malloc(strlen(str) + sizeof(ALSA_PLUGIN_DIR) + 32);
 			if (buf1 == NULL) {
 				err = -ENOMEM;
 				goto _err;
 			}
 			lib = buf1;
-			sprintf(buf1, "%s/libasound_module_ctl_%s.so", PKGLIBDIR, str);
+			sprintf(buf1, "%s/libasound_module_ctl_%s.so", ALSA_PLUGIN_DIR, str);
 		}
 	}
 #ifndef PIC
@@ -950,6 +949,7 @@ int snd_ctl_open_lconf(snd_ctl_t **ctlp, const char *name,
 #ifndef DOC_HIDDEN
 #define TYPE(v) [SND_CTL_ELEM_TYPE_##v] = #v
 #define IFACE(v) [SND_CTL_ELEM_IFACE_##v] = #v
+#define IFACE1(v, n) [SND_CTL_ELEM_IFACE_##v] = #n
 #define EVENT(v) [SND_CTL_EVENT_##v] = #v
 
 static const char *snd_ctl_elem_type_names[] = {

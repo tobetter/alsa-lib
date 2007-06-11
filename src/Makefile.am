@@ -2,9 +2,15 @@ EXTRA_DIST=Versions
 COMPATNUM=@LIBTOOL_VERSION_INFO@
 
 if VERSIONED_SYMBOLS
-VSYMS = -Wl,--version-script=$(srcdir)/Versions
+VSYMS = -Wl,--version-script=Versions
 else
 VSYMS =
+endif
+
+if SYMBOLIC_FUNCTIONS
+SYMFUNCS = -Wl,-Bsymbolic-functions
+else
+SYMFUNCS =
 endif
 
 lib_LTLIBRARIES = libasound.la
@@ -41,10 +47,9 @@ SUBDIRS += alisp
 libasound_la_LIBADD += alisp/libalisp.la
 endif
 SUBDIRS += compat conf
-libasound_la_LIBADD += compat/libcompat.la -lm -ldl -lpthread
+libasound_la_LIBADD += compat/libcompat.la @ALSA_DEPLIBS@
 
-libasound_la_LDFLAGS = -version-info $(COMPATNUM)
-AM_LDFLAGS = $(VSYMS)
+libasound_la_LDFLAGS = -version-info $(COMPATNUM) $(VSYMS) $(SYMFUNCS)
 
 control/libcontrol.la:
 	$(MAKE) -C control libcontrol.la

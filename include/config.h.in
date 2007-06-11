@@ -3,8 +3,14 @@
 /* Directory with aload* device files */
 #undef ALOAD_DEVICE_DIRECTORY
 
+/* directory containing ALSA configuration database */
+#undef ALSA_CONFIG_DIR
+
 /* Directory with ALSA device files */
 #undef ALSA_DEVICE_DIRECTORY
+
+/* directory containing ALSA add-on modules */
+#undef ALSA_PLUGIN_DIR
 
 /* Build instrument component */
 #undef BUILD_INSTR
@@ -39,14 +45,17 @@
 /* Build sequencer component */
 #undef BUILD_SEQ
 
-/* directory containing ALSA configuration database */
-#undef DATADIR
-
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
+
+/* Have libdl */
+#undef HAVE_LIBDL
+
+/* Have libpthread */
+#undef HAVE_LIBPTHREAD
 
 /* Define to 1 if you have the `resmgr' library (-lresmgr). */
 #undef HAVE_LIBRESMGR
@@ -101,9 +110,6 @@
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
-
-/* directory containing ALSA add-on modules */
-#undef PKGLIBDIR
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS

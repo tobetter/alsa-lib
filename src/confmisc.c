@@ -43,14 +43,22 @@
       an environment value. The result is an integer.
   <LI>The concat function - snd_func_concat() - merges all specified
       strings. The result is a string.
+  <LI>The iadd function - snd_func_iadd() - sum all specified integers.
+      The result is an integer.
+  <LI>The imul function - snd_func_imul() - multiply all specified integers.
+      The result is an integer.
   <LI>The datadir function - snd_func_datadir() - returns the
       ALSA data directory. The result is a string.
   <LI>The refer function - snd_func_refer() - copies the referred
       configuration. The result has the same type as the referred node.
+  <LI>The card_inum function - snd_func_card_inum() - returns
+      a card number (integers).
   <LI>The card_driver function - snd_func_card_driver() - returns
       a driver identification. The result is a string.
   <LI>The card_id function - snd_func_card_id() - returns
       a card identification. The result is a string.
+  <LI>The card_name function - snd_func_card_name() - returns
+      a card's name. The result is a string.
   <LI>The pcm_id function - snd_func_pcm_id() - returns
       a pcm identification. The result is a string.
   <LI>The private_string function - snd_func_private_string() - returns the
@@ -219,7 +227,8 @@ int snd_func_getenv(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 {
 	snd_config_t *n, *d;
 	snd_config_iterator_t i, next;
-	char *res, *def = NULL;
+	const char *res, *id;
+	char *def = NULL;
 	int idx = 0, err, hit;
 	
 	err = snd_config_search(src, "vars", &n);
@@ -251,7 +260,7 @@ int snd_func_getenv(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 		hit = 0;
 		snd_config_for_each(i, next, n) {
 			snd_config_t *n = snd_config_iterator_entry(i);
-			const char *id, *ptr, *env;
+			const char *ptr;
 			long i;
 			if (snd_config_get_id(n, &id) < 0)
 				continue;
@@ -274,26 +283,18 @@ int snd_func_getenv(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 					err = -EINVAL;
 					goto __error;
 				}
-				env = getenv(ptr);
-				if (env != NULL && *env != '\0') {
-					res = strdup(env);
+				res = getenv(ptr);
+				if (res != NULL && *res != '\0')
 					goto __ok;
-				}
 				hit = 1;
 			}
 		}
 	} while (hit);
 	res = def;
-	def = NULL;
       __ok:
-	err = res == NULL ? -ENOMEM : 0;
-	if (err >= 0) {
-		const char *id;
-		err = snd_config_get_id(src, &id);
-		if (err >= 0)
-			err = snd_config_imake_string(dst, id, res);
-		free(res);
-	}
+	err = snd_config_get_id(src, &id);
+	if (err >= 0)
+		err = snd_config_imake_string(dst, id, res);
       __error:
 	free(def);
 	return err;
@@ -447,6 +448,121 @@ int snd_func_concat(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 SND_DLSYM_BUILD_VERSION(snd_func_concat, SND_CONFIG_DLSYM_VERSION_EVALUATE);
 #endif
 
+
+static int snd_func_iops(snd_config_t **dst,
+			 snd_config_t *root,
+			 snd_config_t *src,
+			 snd_config_t *private_data,
+			 int op)
+{
+	snd_config_t *n;
+	snd_config_iterator_t i, next;
+	const char *id;
+	char *res = NULL;
+	long result = 0, val;
+	int idx = 0, err, hit;
+	
+	err = snd_config_search(src, "integers", &n);
+	if (err < 0) {
+		SNDERR("field integers not found");
+		goto __error;
+	}
+	err = snd_config_evaluate(n, root, private_data, NULL);
+	if (err < 0) {
+		SNDERR("error evaluating integers");
+		goto __error;
+	}
+	do {
+		hit = 0;
+		snd_config_for_each(i, next, n) {
+			snd_config_t *n = snd_config_iterator_entry(i);
+			const char *id;
+			long i;
+			if (snd_config_get_id(n, &id) < 0)
+				continue;
+			err = safe_strtol(id, &i);
+			if (err < 0) {
+				SNDERR("id of field %s is not an integer", id);
+				err = -EINVAL;
+				goto __error;
+			}
+			if (i == idx) {
+				idx++;
+				err = snd_config_get_integer(n, &val);
+				if (err < 0) {
+					SNDERR("invalid integer for id %s", id);
+					err = -EINVAL;
+					goto __error;
+				}
+				switch (op) {
+				case 0: result += val; break;
+				case 1: result *= val; break;
+				}
+				hit = 1;
+			}
+		}
+	} while (hit);
+	err = snd_config_get_id(src, &id);
+	if (err >= 0)
+		err = snd_config_imake_integer(dst, id, result);
+	free(res);
+      __error:
+	return err;
+}
+
+
+/**
+ * \brief Sum the given integers.
+ * \param dst The function puts the handle to the result configuration node
+ *            (with type integer) at the address specified by \p dst.
+ * \param root Handle to the root source node.
+ * \param src Handle to the source node, with a definition for \c integers.
+ * \param private_data Handle to the \c private_data node.
+ * \return A non-negative value if successful, otherwise a negative error code.
+ *
+ * Example (result is 10):
+\code
+	{
+		@func iadd
+		integers [ 2 3 5 ]
+	}
+\endcode
+ */ 
+int snd_func_iadd(snd_config_t **dst, snd_config_t *root,
+	          snd_config_t *src, snd_config_t *private_data)
+{
+	return snd_func_iops(dst, root, src, private_data, 0);
+}
+#ifndef DOC_HIDDEN
+SND_DLSYM_BUILD_VERSION(snd_func_iadd, SND_CONFIG_DLSYM_VERSION_EVALUATE);
+#endif
+
+/**
+ * \brief Multiply the given integers.
+ * \param dst The function puts the handle to the result configuration node
+ *            (with type integer) at the address specified by \p dst.
+ * \param root Handle to the root source node.
+ * \param src Handle to the source node, with a definition for \c integers.
+ * \param private_data Handle to the \c private_data node.
+ * \return A non-negative value if successful, otherwise a negative error code.
+ *
+ * Example (result is 12):
+\code
+	{
+		@func imul
+		integers [ 2 3 2 ]
+	}
+\endcode
+ */ 
+int snd_func_imul(snd_config_t **dst, snd_config_t *root,
+		  snd_config_t *src, snd_config_t *private_data)
+{
+	return snd_func_iops(dst, root, src, private_data, 1);
+}
+#ifndef DOC_HIDDEN
+SND_DLSYM_BUILD_VERSION(snd_func_imul, SND_CONFIG_DLSYM_VERSION_EVALUATE);
+#endif
+
 /**
  * \brief Returns the ALSA data directory.
  * \param dst The function puts the handle to the result configuration node
@@ -472,7 +588,7 @@ int snd_func_datadir(snd_config_t **dst, snd_config_t *root ATTRIBUTE_UNUSED,
 	err = snd_config_get_id(src, &id);
 	if (err < 0)
 		return err;
-	return snd_config_imake_string(dst, id, DATADIR "/alsa");
+	return snd_config_imake_string(dst, id, ALSA_CONFIG_DIR);
 }
 #ifndef DOC_HIDDEN
 SND_DLSYM_BUILD_VERSION(snd_func_datadir, SND_CONFIG_DLSYM_VERSION_EVALUATE);
@@ -555,7 +671,7 @@ int snd_determine_driver(int card, char **driver)
 	assert(card >= 0 && card <= 32);
 	err = open_ctl(card, &ctl);
 	if (err < 0) {
-		SNDERR("could not open control for card %li", card);
+		SNDERR("could not open control for card %i", card);
 		goto __error;
 	}
 	snd_ctl_card_info_alloca(&info);
@@ -625,6 +741,70 @@ int snd_func_private_card_driver(snd_config_t **dst, snd_config_t *root ATTRIBUT
 SND_DLSYM_BUILD_VERSION(snd_func_private_card_driver, SND_CONFIG_DLSYM_VERSION_EVALUATE);
 #endif
 
+static int parse_card(snd_config_t *root, snd_config_t *src,
+		      snd_config_t *private_data)
+{
+	snd_config_t *n;
+	char *str;
+	int card, err;
+	
+	err = snd_config_search(src, "card", &n);
+	if (err < 0) {
+		SNDERR("field card not found");
+		return err;
+	}
+	err = snd_config_evaluate(n, root, private_data, NULL);
+	if (err < 0) {
+		SNDERR("error evaluating card");
+		return err;
+	}
+	err = snd_config_get_ascii(n, &str);
+	if (err < 0) {
+		SNDERR("field card is not an integer or a string");
+		return err;
+	}
+	card = snd_card_get_index(str);
+	free(str);
+	if (card < 0)
+		SNDERR("cannot find card '%s'", str);
+	return card;
+}
+
+/**
+ * \brief Returns the card number as integer.
+ * \param dst The function puts the handle to the result configuration node
+ *            (with type string) at the address specified by \p dst.
+ * \param root Handle to the root source node.
+ * \param src Handle to the source node, with a \c card definition.
+ * \param private_data Handle to the \c private_data node.
+ * \return A non-negative value if successful, otherwise a negative error code.
+ *
+ * Example:
+\code
+	{
+		@func card_inum
+		card '0'
+	}
+\endcode
+ */ 
+int snd_func_card_inum(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
+		       snd_config_t *private_data)
+{
+	const char *id;
+	int card, err;
+	
+	card = parse_card(root, src, private_data);
+	if (card < 0)
+		return card;
+	err = snd_config_get_id(src, &id);
+	if (err >= 0)
+		err = snd_config_imake_integer(dst, id, card);
+	return err;
+}
+#ifndef DOC_HIDDEN
+SND_DLSYM_BUILD_VERSION(snd_func_card_inum, SND_CONFIG_DLSYM_VERSION_EVALUATE);
+#endif
+
 /**
  * \brief Returns the driver identification for a card.
  * \param dst The function puts the handle to the result configuration node
@@ -645,34 +825,13 @@ SND_DLSYM_BUILD_VERSION(snd_func_private_card_driver, SND_CONFIG_DLSYM_VERSION_E
 int snd_func_card_driver(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 			 snd_config_t *private_data)
 {
-	snd_config_t *n, *val;
-	char *str;
-	long v;
-	int err;
+	snd_config_t *val;
+	int card, err;
 	
-	err = snd_config_search(src, "card", &n);
-	if (err < 0) {
-		SNDERR("field card not found");
-		return err;
-	}
-	err = snd_config_evaluate(n, root, private_data, NULL);
-	if (err < 0) {
-		SNDERR("error evaluating card");
-		return err;
-	}
-	err = snd_config_get_ascii(n, &str);
-	if (err < 0) {
-		SNDERR("field card is not an integer or a string");
-		return err;
-	}
-	v = snd_card_get_index(str);
-	if (v < 0) {
-		SNDERR("cannot find card '%s'", str);
-		free(str);
-		return v;
-	}
-	free(str);
-	err = snd_config_imake_integer(&val, "card", v);
+	card = parse_card(root, src, private_data);
+	if (card < 0)
+		return card;
+	err = snd_config_imake_integer(&val, "card", card);
 	if (err < 0)
 		return err;
 	err = snd_func_private_card_driver(dst, root, src, val);
@@ -703,32 +862,17 @@ SND_DLSYM_BUILD_VERSION(snd_func_card_driver, SND_CONFIG_DLSYM_VERSION_EVALUATE)
 int snd_func_card_id(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 		     snd_config_t *private_data)
 {
-	snd_config_t *n;
-	char *res = NULL;
 	snd_ctl_t *ctl = NULL;
 	snd_ctl_card_info_t *info;
 	const char *id;
-	long v;
-	int err;
+	int card, err;
 	
-	err = snd_config_search(src, "card", &n);
+	card = parse_card(root, src, private_data);
+	if (card < 0)
+		return card;
+	err = open_ctl(card, &ctl);
 	if (err < 0) {
-		SNDERR("field card not found");
-		goto __error;
-	}
-	err = snd_config_evaluate(n, root, private_data, NULL);
-	if (err < 0) {
-		SNDERR("error evaluating card");
-		goto __error;
-	}
-	err = snd_config_get_integer(n, &v);
-	if (err < 0) {
-		SNDERR("field card is not an integer");
-		goto __error;
-	}
-	err = open_ctl(v, &ctl);
-	if (err < 0) {
-		SNDERR("could not open control for card %li", v);
+		SNDERR("could not open control for card %i", card);
 		goto __error;
 	}
 	snd_ctl_card_info_alloca(&info);
@@ -737,15 +881,10 @@ int snd_func_card_id(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 		SNDERR("snd_ctl_card_info error: %s", snd_strerror(err));
 		goto __error;
 	}
-	res = strdup(snd_ctl_card_info_get_id(info));
-	if (res == NULL) {
-		err = -ENOMEM;
-		goto __error;
-	}
 	err = snd_config_get_id(src, &id);
 	if (err >= 0)
-		err = snd_config_imake_string(dst, id, res);
-	free(res);
+		err = snd_config_imake_string(dst, id,
+					      snd_ctl_card_info_get_id(info));
       __error:
       	if (ctl)
       		snd_ctl_close(ctl);
@@ -754,6 +893,60 @@ int snd_func_card_id(snd_config_t **dst, snd_config_t *root, snd_config_t *src,
 #ifndef DOC_HIDDEN
 SND_DLSYM_BUILD_VERSION(snd_func_card_id, SND_CONFIG_DLSYM_VERSION_EVALUATE);
 #endif
+
+/**
+ * \brief Returns the name of a card.
+ * \param dst The function puts the handle to the result configuration node
+ *            (with type string) at the address specified by \p dst.
+ * \param root Handle to the root source node.
+ * \param src Handle to the source node, with a \c card definition.
+ * \param private_data Handle to the \c private_data node.
+ * \return A non-negative value if successful, otherwise a negative error code.
+ *
+ * Example:
+\code
+	{
+		@func card_name
+		card 0
+	}
+\endcode
+ */ 
+int snd_func_card_name(snd_config_t **dst, snd_config_t *root,
+		       snd_config_t *src, snd_config_t *private_data)
+{
+	snd_ctl_t *ctl = NULL;
+	snd_ctl_card_info_t *info;
+	const char *id;
+	int card, err;
+	
+	card = parse_card(root, src, private_data);
+	if (card < 0)
+		return card;
+	err = open_ctl(card, &ctl);
+	if (err < 0) {
+		SNDERR("could not open control for card %i", card);
+		goto __error;
+	}
+	snd_ctl_card_info_alloca(&info);
+	err = snd_ctl_card_info(ctl, info);
+	if (err < 0) {
+		SNDERR("snd_ctl_card_info error: %s", snd_strerror(err));
+		goto __error;
+	}
+	err = snd_config_get_id(src, &id);
+	if (err >= 0)
+		err = snd_config_imake_string(dst, id,
+					      snd_ctl_card_info_get_name(info));
+      __error:
+      	if (ctl)
+      		snd_ctl_close(ctl);
+	return err;
+}
+#ifndef DOC_HIDDEN
+SND_DLSYM_BUILD_VERSION(snd_func_card_name, SND_CONFIG_DLSYM_VERSION_EVALUATE);
+#endif
+
+#ifdef BUILD_PCM
 
 /**
  * \brief Returns the pcm identification of a device.
@@ -784,21 +977,9 @@ int snd_func_pcm_id(snd_config_t **dst, snd_config_t *root, snd_config_t *src, v
 	long card, device, subdevice = 0;
 	int err;
 	
-	err = snd_config_search(src, "card", &n);
-	if (err < 0) {
-		SNDERR("field card not found");
-		goto __error;
-	}
-	err = snd_config_evaluate(n, root, private_data, NULL);
-	if (err < 0) {
-		SNDERR("error evaluating card");
-		goto __error;
-	}
-	err = snd_config_get_integer(n, &card);
-	if (err < 0) {
-		SNDERR("field card is not an integer");
-		goto __error;
-	}
+	card = parse_card(root, src, private_data);
+	if (card < 0)
+		return card;
 	err = snd_config_search(src, "device", &n);
 	if (err < 0) {
 		SNDERR("field device not found");
@@ -924,7 +1105,7 @@ int snd_func_pcm_args_by_class(snd_config_t **dst, snd_config_t *root, snd_confi
 			break;
 		err = open_ctl(card, &ctl);
 		if (err < 0) {
-			SNDERR("could not open control for card %li", card);
+			SNDERR("could not open control for card %i", card);
 			goto __out;
 		}
 		dev = -1;
@@ -932,7 +1113,7 @@ int snd_func_pcm_args_by_class(snd_config_t **dst, snd_config_t *root, snd_confi
 		while(1) {
 			err = snd_ctl_pcm_next_device(ctl, &dev);
 			if (err < 0) {
-				SNDERR("could not get next pcm for card %li", card);
+				SNDERR("could not get next pcm for card %i", card);
 				goto __out;
 			}
 			if (dev < 0)
@@ -956,11 +1137,9 @@ int snd_func_pcm_args_by_class(snd_config_t **dst, snd_config_t *root, snd_confi
 	if (err < 0)
 		return err;
 	if((err = snd_config_get_id(src, &id)) >= 0) {
-		char name[32], *s;
+		char name[32];
 		snprintf(name, sizeof(name), "CARD=%i,DEV=%i", card, dev);
-		if (!(s = strdup(name)))
-			return -ENOMEM;
-		err = snd_config_imake_string(dst, id, s);
+		err = snd_config_imake_string(dst, id, name);
 	}
 	return err;
 }
@@ -1021,6 +1200,8 @@ int snd_func_private_pcm_subdevice(snd_config_t **dst, snd_config_t *root ATTRIB
 #ifndef DOC_HIDDEN
 SND_DLSYM_BUILD_VERSION(snd_func_private_pcm_subdevice, SND_CONFIG_DLSYM_VERSION_EVALUATE);
 #endif
+
+#endif /* BUILD_PCM */
 
 /**
  * \brief Copies the specified configuration node.
