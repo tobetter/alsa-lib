@@ -72,7 +72,6 @@ This example shows opening a timer device and reading of timer events.
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
-#include <dlfcn.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include "timer_local.h"
@@ -92,7 +91,7 @@ static int snd_timer_open_conf(snd_timer_t **timer,
 #ifndef PIC
 	extern void *snd_timer_open_symbols(void);
 #endif
-	void *h;
+	void *h = NULL;
 	if (snd_config_get_type(timer_conf) != SND_CONFIG_TYPE_COMPOUND) {
 		if (name)
 			SNDERR("Invalid type for TIMER %s definition", name);

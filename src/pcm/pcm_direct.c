@@ -877,50 +877,36 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	}
 	ret = snd_pcm_hw_params_set_format(spcm, hw_params, params->format);
 	if (ret < 0) {
+		static const snd_pcm_format_t dmix_formats[] = {
+			SND_PCM_FORMAT_S32,
+			SND_PCM_FORMAT_S32 ^ SND_PCM_FORMAT_S32_LE ^ SND_PCM_FORMAT_S32_BE,
+			SND_PCM_FORMAT_S16,
+			SND_PCM_FORMAT_S16 ^ SND_PCM_FORMAT_S16_LE ^ SND_PCM_FORMAT_S16_BE,
+			SND_PCM_FORMAT_S24_3LE,
+		};
 		snd_pcm_format_t format;
-		if (dmix->type == SND_PCM_TYPE_DMIX) {
-			switch (params->format) {
-			case SND_PCM_FORMAT_S32_LE:
-			case SND_PCM_FORMAT_S32_BE:
-			case SND_PCM_FORMAT_S16_LE:
-			case SND_PCM_FORMAT_S16_BE:
-			case SND_PCM_FORMAT_S24_3LE:
+		unsigned int i;
+
+		for (i = 0; i < sizeof dmix_formats / sizeof dmix_formats[0]; ++i) {
+			format = dmix_formats[i];
+			ret = snd_pcm_hw_params_set_format(spcm, hw_params, format);
+			if (ret >= 0)
 				break;
-			default:
-				SNDERR("invalid format");
-				return -EINVAL;
-			}
 		}
-		format = params->format;
-		ret = snd_pcm_hw_params_set_format(spcm, hw_params, format);
+		if (ret < 0 && dmix->type != SND_PCM_TYPE_DMIX) {
+			/* TODO: try to choose a good format */
+			ret = INTERNAL(snd_pcm_hw_params_set_format_first)(spcm, hw_params, &format);
+		}
 		if (ret < 0) {
 			SNDERR("requested or auto-format is not available");
 			return ret;
 		}
 		params->format = format;
 	}
-	ret = snd_pcm_hw_params_set_channels(spcm, hw_params, params->channels);
+	ret = INTERNAL(snd_pcm_hw_params_set_channels_near)(spcm, hw_params, (unsigned int *)&params->channels);
 	if (ret < 0) {
-		unsigned int min, max;
-		ret = INTERNAL(snd_pcm_hw_params_get_channels_min)(hw_params, &min);
-		if (ret < 0) {
-			SNDERR("cannot obtain minimal count of channels");
-			return ret;
-		}
-		ret = INTERNAL(snd_pcm_hw_params_get_channels_min)(hw_params, &max);
-		if (ret < 0) {
-			SNDERR("cannot obtain maximal count of channels");
-			return ret;
-		}
-		if (min == max) {
-			ret = snd_pcm_hw_params_set_channels(spcm, hw_params, min);
-			if (ret >= 0)
-				params->channels = min;
-		}
-		if (ret < 0) {
-			SNDERR("requested count of channels is not available");
-			return ret;
-		}
+		SNDERR("requested count of channels is not available");
+		return ret;
 	}
 	ret = INTERNAL(snd_pcm_hw_params_set_rate_near)(spcm, hw_params, (unsigned int *)&params->rate, 0);
 	if (ret < 0) {
@@ -1115,7 +1101,7 @@ int snd_pcm_direct_initialize_poll_fd(snd_pcm_direct_t *dmix)
 	}
 
 	if (snd_timer_poll_descriptors_count(dmix->timer) != 1) {
-		SNDERR("unable to use timer with fd more than one!!!", name);
+		SNDERR("unable to use timer '%s' with more than one fd!", name);
 		return ret;
 	}
 	snd_timer_poll_descriptors(dmix->timer, &dmix->timer_fd, 1);
@@ -1236,7 +1222,9 @@ int snd_pcm_direct_open_secondary_client(snd_pcm_t **spcmp, snd_pcm_direct_t *dm
 /*
  * open a slave PCM as secondary client (dup'ed fd)
  */
-int snd_pcm_direct_initialize_secondary_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, struct slave_params *params)
+int snd_pcm_direct_initialize_secondary_slave(snd_pcm_direct_t *dmix,
+					      snd_pcm_t *spcm,
+					      struct slave_params *params ATTRIBUTE_UNUSED)
 {
 	int ret;
 
@@ -1387,7 +1375,7 @@ int snd_pcm_direct_parse_bindings(snd_pcm_direct_t *dmix,
 			return -EINVAL;
 		}
 		if (schannel < 0 || schannel >= params->channels) {
-			SNDERR("invalid slave channel number %d in binding to %d",
+			SNDERR("invalid slave channel number %ld in binding to %ld",
 			       schannel, cchannel);
 			free(bindings);
 			return -EINVAL;
@@ -1424,12 +1412,12 @@ static int _snd_pcm_direct_get_slave_ipc_offset(snd_config_t *root,
 						int hop)
 {
 	snd_config_iterator_t i, next;
+	snd_config_t *pcm_conf;
 	int err;
 	long card = 0, device = 0, subdevice = 0;
 	const char *str;
 
 	if (snd_config_get_string(sconf, &str) >= 0) {
-		snd_config_t *pcm_conf;
 		if (hop > SND_CONF_MAX_HOPS) {
 			SNDERR("Too many definition levels (looped?)");
 			return -EINVAL;
@@ -1445,6 +1433,21 @@ static int _snd_pcm_direct_get_slave_ipc_offset(snd_config_t *root,
 		snd_config_delete(pcm_conf);
 		return err;
 	}
+
+#if 0	/* for debug purposes */
+	{
+		snd_output_t *out;
+		snd_output_stdio_attach(&out, stderr, 0);
+		snd_config_save(sconf, out);
+		snd_output_close(out);
+	}
+#endif
+
+	if (snd_config_search(sconf, "slave", &pcm_conf) >= 0 &&
+	    snd_config_search(pcm_conf, "pcm", &pcm_conf) >= 0)
+		return _snd_pcm_direct_get_slave_ipc_offset(root, pcm_conf,
+							    direction,
+							    hop + 1);
 
 	snd_config_for_each(i, next, sconf) {
 		snd_config_t *n = snd_config_iterator_entry(i);
@@ -1525,7 +1528,7 @@ int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf,
 	rec->ipc_key = 0;
 	rec->ipc_perm = 0600;
 	rec->ipc_gid = -1;
-	rec->slowptr = 0;
+	rec->slowptr = 1;
 	rec->max_periods = 0;
 
 	/* read defaults */
@@ -1629,7 +1632,7 @@ int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf,
 		SNDERR("Unknown field %s", id);
 		return -EINVAL;
 	}
-	if (! rec->slave) {
+	if (!rec->slave) {
 		SNDERR("slave is not defined");
 		return -EINVAL;
 	}
@@ -1639,7 +1642,7 @@ int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf,
 	}
 	if (ipc_key_add_uid)
 		rec->ipc_key += getuid();
-	err = snd_pcm_direct_get_slave_ipc_offset(root, rec->slave, stream);
+	err = snd_pcm_direct_get_slave_ipc_offset(root, conf, stream);
 	if (err < 0)
 		return err;
 	rec->ipc_key += err;

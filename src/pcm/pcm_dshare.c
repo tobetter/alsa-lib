@@ -562,8 +562,8 @@ static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
 	.rewind = snd_pcm_dshare_rewind,
 	.forward = snd_pcm_dshare_forward,
 	.resume = snd_pcm_direct_resume,
-	.link_fd = NULL,
 	.link = NULL,
+	.link_slaves = NULL,
 	.unlink = NULL,
 	.writei = snd_pcm_mmap_writei,
 	.writen = snd_pcm_mmap_writen,
@@ -898,8 +898,7 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 
 	err = snd_pcm_dshare_open(pcmp, name, &dopen, &params,
 				  root, sconf, stream, mode);
-	if (err < 0)
-		snd_config_delete(sconf);
+	snd_config_delete(sconf);
 	return err;
 }
 #ifndef DOC_HIDDEN

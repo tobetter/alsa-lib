@@ -37,6 +37,11 @@
 #ifdef SUPPORT_RESMGR
 #include <resmgr.h>
 #endif
+#ifdef HAVE_LIBDL
+#include <dlfcn.h>
+#else
+#define RTLD_NOW	0
+#endif
 
 #define _snd_config_iterator list_head
 #define _snd_interval sndrv_interval
@@ -258,5 +263,9 @@ void snd_dlobj_cache_cleanup(void);
 void snd_config_set_hop(snd_config_t *conf, int hop);
 int snd_config_check_hop(snd_config_t *conf);
 #define SND_CONF_MAX_HOPS	64
+
+int snd_config_search_alias_hooks(snd_config_t *config,
+                                  const char *base, const char *key,
+				  snd_config_t **result);
 
 #endif
