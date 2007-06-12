@@ -1,3 +1,10 @@
+alsa-lib (1.0.14-1ubuntu3) gutsy; urgency=low
+
+  * debian/patches/fix_plugindir.patch: Omit useless libtool hunk.
+  * debian/rules: Use the prefix, resolving the plugindir issue.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Tue, 12 Jun 2007 18:24:38 -0400
+
 alsa-lib (1.0.14-1ubuntu2) gutsy; urgency=low
 
   * debian/patches/{fix_plugindir.patch,series}: Pull proper upstream
