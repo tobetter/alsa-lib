@@ -1,3 +1,4 @@
+fix_plugindir.patch
 alpha_versioned_symbols.patch
 aclocal_libs_fix.patch
 doxygen_links.patch

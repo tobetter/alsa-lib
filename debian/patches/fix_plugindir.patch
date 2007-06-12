@@ -1,0 +1,86 @@
+diff -uNr -x'*debian*' alsa-lib-1.0.14/configure upstream/alsa-lib-1.0.14a/configure
+--- alsa-lib-1.0.14/configure	2007-05-31 04:05:25.000000000 -0400
++++ upstream/alsa-lib-1.0.14a/configure	2007-06-11 04:53:26.000000000 -0400
+@@ -2470,7 +2470,7 @@
+ 
+ # Define the identity of the package.
+  PACKAGE=alsa-lib
+- VERSION=1.0.14
++ VERSION=1.0.14a
+ 
+ 
+ cat >>confdefs.h <<_ACEOF
+@@ -20666,7 +20666,7 @@
+ fi
+ 
+ cat >>confdefs.h <<_ACEOF
+-#define ALSA_PLUGIN_DIR "plugindir"
++#define ALSA_PLUGIN_DIR "$plugindir"
+ _ACEOF
+ 
+ ALSA_PLUGIN_DIR="$plugindir"
+@@ -20738,6 +20738,7 @@
+   else
+     { echo "$as_me:$LINENO: result: not supported by ld" >&5
+ echo "${ECHO_T}not supported by ld" >&6; }
++    symfuncs="no"
+   fi
+ else
+   { echo "$as_me:$LINENO: result: no" >&5
+diff -uNr -x'*debian*' alsa-lib-1.0.14/configure.in upstream/alsa-lib-1.0.14a/configure.in
+--- alsa-lib-1.0.14/configure.in	2007-05-31 04:05:13.000000000 -0400
++++ upstream/alsa-lib-1.0.14a/configure.in	2007-06-11 04:53:13.000000000 -0400
+@@ -9,7 +9,7 @@
+ dnl remove API = c+1:0:0
+ dnl *************************************************
+ AC_CANONICAL_SYSTEM
+-AM_INIT_AUTOMAKE(alsa-lib, 1.0.14)
++AM_INIT_AUTOMAKE(alsa-lib, 1.0.14a)
+ eval LIBTOOL_VERSION_INFO="2:0:0"
+ dnl *************************************************
+ AM_CONDITIONAL(INSTALL_M4, test -n "${ACLOCAL}")
+@@ -93,7 +93,7 @@
+     esac
+     plugindir="$dir/$PACKAGE"
+ fi
+-AC_DEFINE_UNQUOTED(ALSA_PLUGIN_DIR, "plugindir", [directory containing ALSA add-on modules])
++AC_DEFINE_UNQUOTED(ALSA_PLUGIN_DIR, "$plugindir", [directory containing ALSA add-on modules])
+ ALSA_PLUGIN_DIR="$plugindir"
+ AC_SUBST(ALSA_PLUGIN_DIR)
+ 
+@@ -138,6 +138,7 @@
+     AC_MSG_RESULT(yes)
+   else
+     AC_MSG_RESULT(not supported by ld)
++    symfuncs="no"
+   fi
+ else
+   AC_MSG_RESULT(no)
+diff -uNr -x'*debian*' alsa-lib-1.0.14/include/version.h upstream/alsa-lib-1.0.14a/include/version.h
+--- alsa-lib-1.0.14/include/version.h	2007-05-31 04:05:39.000000000 -0400
++++ upstream/alsa-lib-1.0.14a/include/version.h	2007-06-11 04:53:43.000000000 -0400
+@@ -11,5 +11,5 @@
+ 				 (SND_LIB_MINOR<<8)|\
+ 				  SND_LIB_SUBMINOR)
+ /** library version (string) */
+-#define SND_LIB_VERSION_STR	"1.0.14"
++#define SND_LIB_VERSION_STR	"1.0.14a"
+ 
+diff -uNr -x'*debian*' alsa-lib-1.0.14/libtool upstream/alsa-lib-1.0.14a/libtool
+--- alsa-lib-1.0.14/libtool	2007-05-31 04:05:34.000000000 -0400
++++ upstream/alsa-lib-1.0.14a/libtool	2007-06-11 04:53:37.000000000 -0400
+@@ -1,7 +1,7 @@
+ #! /bin/sh
+ 
+ # libtoolT - Provide generalized library-building support services.
+-# Generated automatically by  (GNU alsa-lib 1.0.14)
++# Generated automatically by  (GNU alsa-lib 1.0.14a)
+ # NOTE: Changes made to this file will be lost: look at ltmain.sh.
+ #
+ # Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001
+diff -uNr -x'*debian*' alsa-lib-1.0.14/version upstream/alsa-lib-1.0.14a/version
+--- alsa-lib-1.0.14/version	2007-05-31 04:05:35.000000000 -0400
++++ upstream/alsa-lib-1.0.14a/version	2007-06-11 04:53:38.000000000 -0400
+@@ -1 +1 @@
+-1.0.14
++1.0.14a
