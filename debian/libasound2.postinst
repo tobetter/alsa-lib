@@ -12,3 +12,11 @@ esac
 
 #DEBHELPER#
 
+echo "You may need to execute the asoundconf(1) set-default-card macro."
+
+unud=/var/lib/update-notifier/user.d
+
+if [ -d $unud ]; then
+	cp -f /usr/share/alsa/user-must-execute-asoundconf-set-default-card.update-notifier \
+	    "$unud/user-must-execute-asoundconf-set-default-card" 
+fi

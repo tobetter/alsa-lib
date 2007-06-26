@@ -1,3 +1,16 @@
+alsa-lib (1.0.14-1ubuntu4) gutsy; urgency=low
+
+  * debian/:
+    - libasound2.p{ostinst,rerm}: Install/remove, respectively, the
+      update-notifier hook mentioned next,
+    - user-must-execute-asoundconf-set-default-card.update-notifier:
+      Add this update-notifier hook so that the user is informed that
+      he/she needs to execute the asoundconf(1) set-default-card macro,
+      because new ALSA configuration presets have been added
+      (LP: #120691).
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Mon, 25 Jun 2007 23:47:17 -0400
+
 alsa-lib (1.0.14-1ubuntu3) gutsy; urgency=low
 
   * debian/patches/fix_plugindir.patch: Omit useless libtool hunk.
