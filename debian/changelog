@@ -1,3 +1,11 @@
+alsa-lib (1.0.14-1ubuntu5) gutsy; urgency=low
+
+  * debian/user-must-execute-asoundconf-set-default-card.update-notifier:
+    - Fix DisplayIf invocation, and make the message more meaningful,
+      LP: #122252.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Fri, 29 Jun 2007 01:34:15 -0400
+
 alsa-lib (1.0.14-1ubuntu4) gutsy; urgency=low
 
   * debian/:
