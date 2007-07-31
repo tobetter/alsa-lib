@@ -1,3 +1,9 @@
+alsa-lib (1.0.14-1ubuntu6) gutsy; urgency=low
+
+  * Add lpia to the arch lists for libasound and libasound-dev.
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Tue, 31 Jul 2007 14:31:02 +1000
+
 alsa-lib (1.0.14-1ubuntu5) gutsy; urgency=low
 
   * debian/user-must-execute-asoundconf-set-default-card.update-notifier:
