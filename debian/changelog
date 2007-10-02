@@ -1,3 +1,9 @@
+alsa-lib (1.0.14-1ubuntu7) gutsy; urgency=low
+
+  * Trigger rebuild for hppa.
+
+ -- LaMont Jones <lamont@ubuntu.com>  Tue, 02 Oct 2007 06:32:36 -0600
+
 alsa-lib (1.0.14-1ubuntu6) gutsy; urgency=low
 
   * Add lpia to the arch lists for libasound and libasound-dev.
