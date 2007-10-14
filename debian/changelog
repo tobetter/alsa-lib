@@ -1,3 +1,12 @@
+alsa-lib (1.0.14-1ubuntu8) gutsy; urgency=high
+
+  * New patch, fix-sampling-bit-shifts, revert HG r2264 (changeset
+    23c4c0f5de40) as the bit shifts overflow when the volume is high for 32
+    bits to 16 bits resampling; Alsa #3360; GNOME #436192; LP: #116990;
+    Mandriva #33908.
+
+ -- Loic Minier <lool@dooz.org>  Sun, 14 Oct 2007 19:28:45 +0200
+
 alsa-lib (1.0.14-1ubuntu7) gutsy; urgency=low
 
   * Trigger rebuild for hppa.
