@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 #
 # Uncomment this to turn on verbose mode.
-export DH_VERBOSE=1
+#export DH_VERBOSE=1
 
 PACKAGE:= alsa-lib
 include /usr/share/quilt/quilt.make
@@ -26,11 +26,13 @@ ifneq (,$(biarch_cpu))
     bi = 32
     bilibdir = usr/lib32
   endif
-  configure_biarch_stamp = configure-biarch-stamp
-  build_biarch_stamp = build-biarch-stamp
-  BIARCH_CC = gcc -m$(bi)
-  dpkg_ctrl_args = -- '-Vbilib:depends=libc6-$(biarch_cpu)' \
+  ifneq (,$(bi))
+    configure_biarch_stamp = configure-biarch-stamp
+    build_biarch_stamp = build-biarch-stamp
+    BIARCH_CC = gcc -m$(bi)
+    dpkg_ctrl_args = -- '-Vbilib:depends=libc6-$(biarch_cpu)' \
 	'-Vbidev:depends=libc6-dev-$(biarch_cpu)'
+  endif
 endif
 
 CFLAGS = -g -Wall
@@ -50,7 +52,6 @@ configure-stamp: debian/stamp-patched $(configure_biarch_stamp)
 		    --mandir=\$${prefix}/share/man \
 		    --infodir=\$${prefix}/share/info \
 		    --datadir=\$${prefix}/share \
-		    --with-plugindir=/usr/lib/alsa-lib \
 		    --build=$(DEB_BUILD_GNU_TYPE) \
 		    --enable-static --disable-maintainer-mode
 	touch configure-stamp
@@ -67,9 +68,9 @@ configure-biarch-stamp: debian/stamp-patched
 		    --mandir=\$${prefix}/share/man \
 		    --infodir=\$${prefix}/share/info \
 		    --datadir=\$${prefix}/share \
-		    --with-plugindir=/usr/lib/alsa-lib \
 		    --host=$(DEB_HOST_GNU_TYPE) \
-		    --enable-static --disable-maintainer-mode
+		    --enable-static --disable-maintainer-mode \
+		    --disable-python
 	#ln -sf . include/alsa
 	rm -f bibuild/include/alsa
 	ln -s . bibuild/include/alsa
@@ -175,7 +176,8 @@ binary: binary-arch binary-indep
 clean: unpatch
 	dh_testdir
 	dh_testroot
-	-$(MAKE) distclean
+	#-$(MAKE) distclean
+	[ ! -f Makefile ] || $(MAKE) distclean
 	-rm -f *-stamp
 	-rm -f config.sub config.guess config.status config.cache
 	-rm -rf doc/doxygen

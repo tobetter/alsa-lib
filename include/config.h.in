@@ -12,6 +12,9 @@
 /* directory containing ALSA add-on modules */
 #undef ALSA_PLUGIN_DIR
 
+/* Build hwdep component */
+#undef BUILD_HWDEP
+
 /* Build instrument component */
 #undef BUILD_INSTR
 

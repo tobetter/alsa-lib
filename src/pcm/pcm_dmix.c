@@ -2,12 +2,12 @@
  * \file pcm/pcm_dmix.c
  * \ingroup PCM_Plugins
  * \brief PCM Direct Stream Mixing (dmix) Plugin Interface
- * \author Jaroslav Kysela <perex@suse.cz>
+ * \author Jaroslav Kysela <perex@perex.cz>
  * \date 2003
  */
 /*
  *  PCM - Direct Stream Mixing
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -139,12 +139,14 @@ static void dmix_server_free(snd_pcm_direct_t *dmix)
  *  FIXME: optimize it for different architectures
  */
 
+#include "pcm_dmix_generic.c"
 #if defined(__i386__)
 #include "pcm_dmix_i386.c"
 #elif defined(__x86_64__)
 #include "pcm_dmix_x86_64.c"
 #else
-#include "pcm_dmix_generic.c"
+#define mix_select_callbacks(x)	generic_mix_select_callbacks(x)
+#define dmix_supported_format generic_dmix_supported_format
 #endif
 
 static void mix_areas(snd_pcm_direct_t *dmix,

@@ -3,7 +3,7 @@
  * \ingroup Configuration
  * \brief Configuration helper functions
  * \author Abramo Bagnara <abramo@alsa-project.org>
- * \author Jaroslav Kysela <perex@suse.cz>
+ * \author Jaroslav Kysela <perex@perex.cz>
  * \date 2000-2001
  * 
  * Configuration helper functions.
@@ -13,7 +13,7 @@
 /*
  *  Miscellaneous configuration helper functions
  *  Copyright (c) 2000 by Abramo Bagnara <abramo@alsa-project.org>,
- *			  Jaroslav Kysela <perex@suse.cz>
+ *			  Jaroslav Kysela <perex@perex.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -764,9 +764,9 @@ static int parse_card(snd_config_t *root, snd_config_t *src,
 		return err;
 	}
 	card = snd_card_get_index(str);
-	free(str);
 	if (card < 0)
 		SNDERR("cannot find card '%s'", str);
+	free(str);
 	return card;
 }
 
