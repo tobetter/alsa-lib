@@ -37,8 +37,21 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@BUILD_CTL_PLUGIN_EXT_TRUE@am__append_1 = control_external.h
+@BUILD_PCM_TRUE@am__append_2 = pcm.h pcm_old.h timer.h
+@BUILD_PCM_PLUGIN_TRUE@@BUILD_PCM_TRUE@am__append_3 = pcm_plugin.h
+@BUILD_PCM_PLUGIN_RATE_TRUE@@BUILD_PCM_TRUE@am__append_4 = pcm_rate.h 
+@BUILD_PCM_PLUGIN_EXTPLUG_TRUE@@BUILD_PCM_TRUE@am__append_5 = pcm_external.h pcm_extplug.h
+@BUILD_PCM_PLUGIN_EXTPLUG_FALSE@@BUILD_PCM_PLUGIN_IOPLUG_TRUE@@BUILD_PCM_TRUE@am__append_6 = pcm_external.h
+@BUILD_PCM_PLUGIN_IOPLUG_TRUE@@BUILD_PCM_TRUE@am__append_7 = pcm_ioplug.h
+@BUILD_RAWMIDI_TRUE@am__append_8 = rawmidi.h
+@BUILD_HWDEP_TRUE@am__append_9 = hwdep.h
+@BUILD_MIXER_TRUE@am__append_10 = mixer.h mixer_abst.h
+@BUILD_SEQ_TRUE@am__append_11 = seq_event.h seq.h seqmid.h seq_midi_event.h
+@BUILD_INSTR_TRUE@am__append_12 = conv.h instr.h
+@BUILD_ALISP_TRUE@am__append_13 = alisp.h
 subdir = include
-DIST_COMMON = $(alsainclude_HEADERS) $(noinst_HEADERS) \
+DIST_COMMON = $(am__alsainclude_HEADERS_DIST) $(noinst_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(srcdir)/config.h.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -57,6 +70,12 @@ RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	install-recursive installcheck-recursive installdirs-recursive \
 	pdf-recursive ps-recursive uninstall-info-recursive \
 	uninstall-recursive
+am__alsainclude_HEADERS_DIST = asoundlib.h asoundef.h version.h \
+	global.h input.h output.h error.h conf.h control.h iatomic.h \
+	control_external.h pcm.h pcm_old.h timer.h pcm_plugin.h \
+	pcm_rate.h pcm_external.h pcm_extplug.h pcm_ioplug.h rawmidi.h \
+	hwdep.h mixer.h mixer_abst.h seq_event.h seq.h seqmid.h \
+	seq_midi_event.h conv.h instr.h alisp.h
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -136,6 +155,8 @@ BUILD_PCM_PLUGIN_LINEAR_FALSE = @BUILD_PCM_PLUGIN_LINEAR_FALSE@
 BUILD_PCM_PLUGIN_LINEAR_TRUE = @BUILD_PCM_PLUGIN_LINEAR_TRUE@
 BUILD_PCM_PLUGIN_METER_FALSE = @BUILD_PCM_PLUGIN_METER_FALSE@
 BUILD_PCM_PLUGIN_METER_TRUE = @BUILD_PCM_PLUGIN_METER_TRUE@
+BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE = @BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE@
+BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE = @BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE@
 BUILD_PCM_PLUGIN_MULAW_FALSE = @BUILD_PCM_PLUGIN_MULAW_FALSE@
 BUILD_PCM_PLUGIN_MULAW_TRUE = @BUILD_PCM_PLUGIN_MULAW_TRUE@
 BUILD_PCM_PLUGIN_MULTI_FALSE = @BUILD_PCM_PLUGIN_MULTI_FALSE@
@@ -156,6 +177,8 @@ BUILD_PCM_PLUGIN_SOFTVOL_FALSE = @BUILD_PCM_PLUGIN_SOFTVOL_FALSE@
 BUILD_PCM_PLUGIN_SOFTVOL_TRUE = @BUILD_PCM_PLUGIN_SOFTVOL_TRUE@
 BUILD_PCM_PLUGIN_TRUE = @BUILD_PCM_PLUGIN_TRUE@
 BUILD_PCM_TRUE = @BUILD_PCM_TRUE@
+BUILD_PYTHON_FALSE = @BUILD_PYTHON_FALSE@
+BUILD_PYTHON_TRUE = @BUILD_PYTHON_TRUE@
 BUILD_RAWMIDI_FALSE = @BUILD_RAWMIDI_FALSE@
 BUILD_RAWMIDI_TRUE = @BUILD_RAWMIDI_TRUE@
 BUILD_SEQ_FALSE = @BUILD_SEQ_FALSE@
@@ -203,6 +226,8 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PYTHON_INCLUDES = @PYTHON_INCLUDES@
+PYTHON_LIBS = @PYTHON_LIBS@
 RANLIB = @RANLIB@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -272,17 +297,17 @@ target_vendor = @target_vendor@
 SUBDIRS = sound
 sysincludedir = ${includedir}/sys
 alsaincludedir = ${includedir}/alsa
-alsainclude_HEADERS = asoundlib.h asoundef.h \
-		      version.h global.h input.h output.h error.h \
-		      conf.h pcm.h pcm_old.h pcm_plugin.h rawmidi.h timer.h \
-		      hwdep.h control.h mixer.h mixer_abst.h \
-		      seq_event.h seq.h seqmid.h seq_midi_event.h \
-		      conv.h instr.h iatomic.h \
-		      alisp.h pcm_external.h pcm_ioplug.h pcm_extplug.h \
-		      pcm_rate.h control_external.h
+alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
+	input.h output.h error.h conf.h control.h iatomic.h \
+	$(am__append_1) $(am__append_2) $(am__append_3) \
+	$(am__append_4) $(am__append_5) $(am__append_6) \
+	$(am__append_7) $(am__append_8) $(am__append_9) \
+	$(am__append_10) $(am__append_11) $(am__append_12) \
+	$(am__append_13)
+noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
+	asoundlib-head.h asoundlib-tail.h
 
-noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h
-CLEANFILES = stamp-vh version.h alsa
+DISTCLEANFILES = stamp-vh version.h alsa asoundlib.h
 INCLUDES = -I$(top_srcdir)/include
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
@@ -561,10 +586,10 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
-	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
+	-test -z "$(DISTCLEANFILES)" || rm -f $(DISTCLEANFILES)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"

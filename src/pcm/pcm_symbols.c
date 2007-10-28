@@ -1,6 +1,6 @@
 /*
  *  PCM Symbols
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
  *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
@@ -49,6 +49,7 @@ extern const char *_snd_module_pcm_iec958;
 extern const char *_snd_module_pcm_softvol;
 extern const char *_snd_module_pcm_extplug;
 extern const char *_snd_module_pcm_ioplug;
+extern const char *_snd_module_pcm_mmap_emul;
 
 static const char **snd_pcm_open_objects[] = {
 	&_snd_module_pcm_hw,

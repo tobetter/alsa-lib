@@ -9,7 +9,7 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.14)
+AM_INIT_AUTOMAKE(alsa-lib, 1.0.15)
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL(INSTALL_M4, test -n "${ACLOCAL}")
@@ -93,7 +93,7 @@ if test -z "$plugindir"; then
     esac
     plugindir="$dir/$PACKAGE"
 fi
-AC_DEFINE_UNQUOTED(ALSA_PLUGIN_DIR, "plugindir", [directory containing ALSA add-on modules])
+AC_DEFINE_UNQUOTED(ALSA_PLUGIN_DIR, "$plugindir", [directory containing ALSA add-on modules])
 ALSA_PLUGIN_DIR="$plugindir"
 AC_SUBST(ALSA_PLUGIN_DIR)
 
@@ -138,6 +138,7 @@ if test "$symfuncs" = "yes"; then
     AC_MSG_RESULT(yes)
   else
     AC_MSG_RESULT(not supported by ld)
+    symfuncs="no"
   fi
 else
   AC_MSG_RESULT(no)
@@ -184,7 +185,7 @@ AC_ARG_WITH(softfloat,
     [do you have floating point unit on this machine? (optional)]),
   [  AC_DEFINE(HAVE_SOFT_FLOAT, "1", [Avoid calculation in float])
      softfloat=yes ],)
-if test "$softloat" = "yes" ; then
+if test "$softfloat" = "yes" ; then
   AC_MSG_RESULT(yes)
 else
   AC_MSG_RESULT(no)
@@ -335,6 +336,32 @@ AC_ARG_ENABLE(instr,
 AC_ARG_ENABLE(alisp,
   AS_HELP_STRING([--disable-alisp], [disable the alisp component]),
   [build_alisp="$enableval"], [build_alisp="yes"])
+AC_ARG_ENABLE(python,
+  AS_HELP_STRING([--disable-python], [disable the python components]),
+  [build_python="$enableval"], [build_python="yes"])
+PYTHON_LIBS=""
+PYTHON_INCLUDES=""
+if test "$build_python" = "yes"; then
+  AC_ARG_WITH(pythonlibs,
+    AS_HELP_STRING([--with-pythonlibs=ldflags],
+      [specify python libraries (-lpthread -lm -ldl -lpython2.4)]),
+    pythonlibs="$withval", pythonlibs=`python-config --libs`)
+  AC_ARG_WITH(pythonincludes,
+    AS_HELP_STRING([--with-pythonincludes=Cflags],
+      [specify python C header files (-I/usr/include/python)]),
+    pythonincludes="$withval", pythonincludes=`python-config --includes`)
+  if test -z "$pythonlibs"; then
+    echo "Unable to determine python libraries! Probably python-config is not"
+    echo "available on this system. Please, use --with-pythonlibs and"
+    echo "--with-pythonincludes options. Python components are disabled in this build."
+    build_python="no"
+  else
+    PYTHON_LIBS="$pythonlibs"
+    PYTHON_INCLUDES="$pythonincludes"
+  fi
+fi
+AC_SUBST(PYTHON_LIBS)
+AC_SUBST(PYTHON_INCLUDES)
 
 if test "$build_seq" != "yes"; then
   build_instr="no"
@@ -347,6 +374,7 @@ AM_CONDITIONAL(BUILD_HWDEP, test x$build_hwdep = xyes)
 AM_CONDITIONAL(BUILD_SEQ, test x$build_seq = xyes)
 AM_CONDITIONAL(BUILD_INSTR, test x$build_instr = xyes)
 AM_CONDITIONAL(BUILD_ALISP, test x$build_alisp = xyes)
+AM_CONDITIONAL(BUILD_PYTHON, test x$build_python = xyes)
 
 if test "$build_mixer" = "yes"; then
   AC_DEFINE([BUILD_MIXER], "1", [Build mixer component])
@@ -356,6 +384,9 @@ if test "$build_pcm" = "yes"; then
 fi
 if test "$build_rawmidi" = "yes"; then
   AC_DEFINE([BUILD_RAWMIDI], "1", [Build raw MIDI component])
+fi
+if test "$build_hwdep" = "yes"; then
+  AC_DEFINE([BUILD_HWDEP], "1", [Build hwdep component])
 fi
 if test "$build_seq" = "yes"; then
   AC_DEFINE([BUILD_SEQ], "1", [Build sequencer component])
@@ -375,7 +406,7 @@ else
 pcm_plugins=""
 fi
 
-PCM_PLUGIN_LIST="copy linear route mulaw alaw adpcm rate plug multi shm file null empty share meter hooks lfloat ladspa dmix dshare dsnoop asym iec958 softvol extplug ioplug"
+PCM_PLUGIN_LIST="copy linear route mulaw alaw adpcm rate plug multi shm file null empty share meter hooks lfloat ladspa dmix dshare dsnoop asym iec958 softvol extplug ioplug mmap_emul"
 
 build_pcm_plugin="no"
 for t in $PCM_PLUGIN_LIST; do
@@ -413,7 +444,7 @@ if test "$HAVE_LIBPTHREAD" != "yes"; then
   build_pcm_share="no"
 fi
 
-if test "$softfloat" != "yes"; then
+if test "$softfloat" = "yes"; then
   build_pcm_lfloat="no"
 fi
 
@@ -444,6 +475,7 @@ AM_CONDITIONAL(BUILD_PCM_PLUGIN_IEC958, test x$build_pcm_iec958 = xyes)
 AM_CONDITIONAL(BUILD_PCM_PLUGIN_SOFTVOL, test x$build_pcm_softvol = xyes)
 AM_CONDITIONAL(BUILD_PCM_PLUGIN_EXTPLUG, test x$build_pcm_extplug = xyes)
 AM_CONDITIONAL(BUILD_PCM_PLUGIN_IOPLUG, test x$build_pcm_ioplug = xyes)
+AM_CONDITIONAL(BUILD_PCM_PLUGIN_MMAP_EMUL, test x$build_pcm_mmap_emul = xyes)
 
 dnl Defines for plug plugin
 if test "$build_pcm_rate" = "yes"; then
@@ -531,3 +563,21 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile include/Makefile
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
 	  alsalisp/Makefile aserver/Makefile test/Makefile utils/Makefile \
           utils/alsa-lib.spec utils/alsa.pc)
+
+dnl Create asoundlib.h dynamically according to configure options
+echo "Creating asoundlib.h..."
+cp "$srcdir"/include/asoundlib-head.h include/asoundlib.h
+test "$build_pcm" = "yes" && echo "#include <alsa/pcm.h>" >> include/asoundlib.h
+test "$build_rawmidi" = "yes" && echo "#include <alsa/rawmidi.h>" >> include/asoundlib.h
+test "$build_pcm" = "yes" && echo "#include <alsa/timer.h>" >> include/asoundlib.h
+test "$build_hwdep" = "yes" && echo "#include <alsa/hwdep.h>" >> include/asoundlib.h
+echo "#include <alsa/control.h>" >> include/asoundlib.h
+test "$build_mixer" = "yes" && echo "#include <alsa/mixer.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seq_event.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seq.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seqmid.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seq_midi_event.h>" >> include/asoundlib.h
+test "$build_instr" = "yes" && echo "#include <alsa/conv.h>" >> include/asoundlib.h
+test "$build_instr" = "yes" && echo "#include <alsa/instr.h>" >> include/asoundlib.h
+cat "$srcdir"/include/asoundlib-tail.h >> include/asoundlib.h
+

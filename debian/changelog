@@ -1,3 +1,60 @@
+alsa-lib (1.0.15-1ubuntu1) hardy; urgency=low
+
+  * Merge from Debian unstable, remaining changes:
+    - Install/remove libasound2.p{ostinst,rerm};
+    - Add lpia to the arch lists for libasound and libasound-dev;
+    - Adhere to DebianMaintainerField;
+  * Remove obsoleted changes:
+    - Fix lfloat plugin logic error, LP: #132037;
+    - Drop debian/patches/fix-sampling-bit-shifts.patch, fixed
+      upstream;
+    - Drop --with-plugindir=\$${prefix}/lib/alsa-lib \
+      for configure targets in debian/rules.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 28 Oct 2007 11:34:42 -0400
+
+alsa-lib (1.0.15-1) unstable; urgency=low
+
+  * New upstream release
+
+  [ Elimar Riesebieter ]
+  * Removed mdw.patch. Applied from upstream.
+  * Added python2.4-dev to BuildDepends.
+  * Added Homepage header in debian/control.
+  * Added --disable-python for crosscompiling 64bit flavour.
+  * debian/rules biarch code doesn't work for new architectures. Patch from
+    Martin Michlmayr (closes: #447879)
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 25 Oct 2007 21:27:14 +0200
+
+alsa-lib (1.0.14a-2) unstable; urgency=low
+
+  [ Elimar Riesebieter ]
+  * PCM plugin `lfloat' not built: patch from Mark Wooding. The patch is
+    applied upstream and should be disabled next rc release. (closes: #430833)
+  * For some reason quilt refreshed relibtoolise.patch.
+  * debian/control: s/${Source-Version}/${binary:Version}/
+  * debian/rules: s/-$(MAKE) distclean/[ ! -f Makefile ] || $(MAKE) distclean/
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 04 Jul 2007 14:40:59 +0200
+
+alsa-lib (1.0.14a-1) unstable; urgency=low
+
+  [ Elimar Riesebieter ]
+  * New upstream release
+    - Fix plugin directory
+    - Properly disable -Bsymbolic-functions if ld doesn't support
+  * Revert passing --with-plugindir.
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 13 Jun 2007 20:31:01 +0200
+
+alsa-lib (1.0.14-2) unstable; urgency=low
+
+  * debian/rules: pass --with-plugindir to configure, as a typo in
+    configure.in sets a bad default (closes: #428334).
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 11 Jun 2007 15:19:20 +0200
+
 alsa-lib (1.0.14-1ubuntu8) gutsy; urgency=high
 
   * New patch, fix-sampling-bit-shifts, revert HG r2264 (changeset
