@@ -1,3 +1,24 @@
+alsa-lib (1.0.15-2ubuntu1) hardy; urgency=low
+
+  * Merge from Debian unstable.
+  * Ubuntu-specific changes:
+    - debian/libasound2.p{ostinst,rerm}: Install,remove update-notifier
+      file, respectively;
+    - debian/control: Add lpia to supported arches, adhere to
+      DebianMaintainerField.
+  * Dmix/dsnoop no longer use sockets (LP: #85157).
+  * Biarch plugins support fixed (LP: #145645).
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sat, 01 Dec 2007 18:50:12 -0500
+
+alsa-lib (1.0.15-2) unstable; urgency=low
+
+  [ Elimar Riesebieter ]
+  * Added --with-plugindir=/$(bilibdir)/alsa-lib to config flags.
+    (closes: #449418)
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 14 Nov 2007 00:57:45 +0100
+
 alsa-lib (1.0.15-1ubuntu1) hardy; urgency=low
 
   * Merge from Debian unstable, remaining changes:
