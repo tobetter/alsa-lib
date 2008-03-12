@@ -1,0 +1,108 @@
+Index: alsa-lib-1.0.15/src/conf/cards/aliases.conf
+===================================================================
+--- alsa-lib-1.0.15.orig/src/conf/cards/aliases.conf	2008-03-11 23:17:34.000000000 -0400
++++ alsa-lib-1.0.15/src/conf/cards/aliases.conf	2008-03-11 23:17:43.000000000 -0400
+@@ -23,6 +23,7 @@
+ au8830 cards.AU8830
+ Prodigy71 cards.Aureon71
+ Prodigy71LT cards.Aureon71
++Prodigy71HIFI cards.Aureon71
+ Aureon71Univ cards.Aureon71
+ VIA82XX-MODEM cards.ICH-MODEM
+ 'MPU-401 UART' cards.MPU-401
+Index: alsa-lib-1.0.15/include/sound/asound.h
+===================================================================
+--- alsa-lib-1.0.15.orig/include/sound/asound.h	2008-03-11 23:18:40.000000000 -0400
++++ alsa-lib-1.0.15/include/sound/asound.h	2008-03-11 23:18:55.000000000 -0400
+@@ -59,6 +59,7 @@
+ #ifndef __KERNEL__
+ #include <sys/time.h>
+ #include <sys/types.h>
++#include <sys/ioctl.h>
+ #endif
+ 
+ /*
+Index: alsa-lib-1.0.15/src/conf/cards/NFORCE.conf
+===================================================================
+--- alsa-lib-1.0.15.orig/src/conf/cards/NFORCE.conf	2008-03-11 23:18:41.000000000 -0400
++++ alsa-lib-1.0.15/src/conf/cards/NFORCE.conf	2008-03-11 23:18:55.000000000 -0400
+@@ -171,6 +171,79 @@
+ 	}
+ }
+ 
++<confdir:pcm/surround71.conf>
++
++NFORCE.pcm.surround71.0 {
++    @args [ CARD ]
++    @args.CARD {
++        type string
++    }
++    type softvol
++    slave.pcm {
++        type route
++        ttable.0.0 1
++        ttable.1.1 1
++        ttable.2.4 1
++        ttable.3.5 1
++        ttable.4.2 1
++        ttable.5.3 1
++        ttable.6.6 1
++        ttable.7.7 1
++        slave.pcm {
++            type hooks
++            slave.pcm {
++                type hw
++                card $CARD
++                device 0
++            }
++            hooks.0 {
++                type ctl_elems
++                hook_args [
++                {
++                    name "Channel Mode"
++                    preserve true
++                    value "8ch"
++                    lock true
++                    optional true
++                }
++                # for old drivers
++                {
++                    name "Line-In As Surround"
++                    preserve true
++                    value true
++                    optional true
++                }
++                {
++                    name "Mic As Center/LFE"
++                    preserve true
++                    value true
++                    optional true
++                }
++                {
++                    name "Surround Down Mix"
++                    preserve true
++                    value off
++                    lock true
++                    optional true
++                }
++                {
++                    name "Center/LFE Down Mix"
++                    preserve true
++                    value off
++                    lock true
++                    optional true
++                }
++                ]
++            }
++        }
++        slave.channels 8
++    }
++    control {
++        name "PCM Playback Volume"
++        card $CARD
++    }
++}
++
+ <confdir:pcm/iec958.conf>
+ 
+ NFORCE.pcm.iec958.0 {

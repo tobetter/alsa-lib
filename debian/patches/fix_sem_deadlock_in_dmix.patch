@@ -1,0 +1,18 @@
+Index: alsa-lib-1.0.15/src/pcm/pcm_dmix.c
+===================================================================
+--- alsa-lib-1.0.15.orig/src/pcm/pcm_dmix.c	2008-03-11 16:40:29.000000000 -0400
++++ alsa-lib-1.0.15/src/pcm/pcm_dmix.c	2008-03-11 16:40:38.000000000 -0400
+@@ -652,9 +652,10 @@
+  	if (dmix->client)
+  		snd_pcm_direct_client_discard(dmix);
+  	shm_sum_discard(dmix);
+-	if (snd_pcm_direct_shm_discard(dmix))
+-		snd_pcm_direct_semaphore_discard(dmix);
+-	else
++	if (snd_pcm_direct_shm_discard(dmix)) {
++		if (snd_pcm_direct_semaphore_discard(dmix))
++			snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
++	} else
+ 		snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
+ 	free(dmix->bindings);
+ 	pcm->private_data = NULL;

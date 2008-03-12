@@ -1,3 +1,22 @@
+alsa-lib (1.0.15-3ubuntu4) hardy; urgency=low
+
+  * Backport fixes from hg tip (no API/ABI changes):
+    - fix_sem_deadlock_in_dmix.patch (LP: #190059),
+    - fix_const_casts.patch,
+    - fix_ioplug.patch,
+    - fix_control_range.patch,
+    - dont_use_hackish_callback_in_rate_plugin.patch,
+    - fix_cpu_hog_in_rate_plug.patch,
+    - fix_mmap_with_multi_plug.patch,
+    - fix_wrong_return_values_in_direct_plug.patch,
+    - fix_timestamp_in_status_pcm_direct_plug.patch,
+    - fix_configs_error_handling.patch,
+    - fix_not_updated_bit_set.patch,
+    - fix_device_assignment.patch,
+    - fix_missing_aliases.patch.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Tue, 11 Mar 2008 23:31:24 -0400
+
 alsa-lib (1.0.15-3ubuntu3) hardy; urgency=low
 
   * Fix the inverted logic in the test whether pulseaudio is running.
