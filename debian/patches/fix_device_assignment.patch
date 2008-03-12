@@ -1,0 +1,30 @@
+Index: alsa-lib-1.0.15/src/control/namehint.c
+===================================================================
+--- alsa-lib-1.0.15.orig/src/control/namehint.c	2008-03-11 23:14:58.000000000 -0400
++++ alsa-lib-1.0.15/src/control/namehint.c	2008-03-11 23:15:48.000000000 -0400
+@@ -197,10 +197,11 @@
+ 			free(str1);
+ 			return res;
+ 		}
+-	} else {
+-		return strdup(list->cardname);
+ 	}
+-	return NULL;
++	/* if the specified device doesn't exist, skip this entry */
++	if (list->device_input >= 0 || list->device_output >= 0)
++		return NULL;
++	return strdup(list->cardname);
+ }
+ 
+ #ifndef DOC_HIDDEN
+@@ -304,8 +305,8 @@
+ 				err = -EINVAL;
+ 				goto __cleanup;
+ 			}
+-			list->device_input = -1;
+-			list->device_output = -1;
++			list->device_input = dev;
++			list->device_output = dev;
+ 		}
+ 		if (snd_config_search(cfg, "device_input", &n) >= 0) {
+ 			if (snd_config_get_integer(n, &list->device_input) < 0) {
