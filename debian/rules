@@ -25,10 +25,6 @@ ifneq (,$(biarch_cpu))
   ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
     bi = 32
     bilibdir = usr/lib32
-    ifeq ($(DEB_HOST_ARCH),amd64)
-      # amd64 unstable only!
-      bilibdir = emul/ia32-linux/usr/lib
-    endif
   endif
   ifneq (,$(bi))
     configure_biarch_stamp = configure-biarch-stamp
@@ -187,7 +183,7 @@ clean: unpatch
 	-rm -f config.sub config.guess config.status config.cache
 	-rm -rf doc/doxygen
 	rm -rf bibuild debian/bitmp
-	rm -f include/alsa
+	-rm -f include/alsa
 	dh_clean
 
 .PHONY: configure build-arch build-indep build install-arch install-indep binary-arch binary-indep binary clean stamp-patched
