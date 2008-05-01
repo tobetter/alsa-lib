@@ -12,3 +12,12 @@ esac
 
 #DEBHELPER#
 
+unud=/var/lib/update-notifier/user.d
+
+if [ -d $unud ]; then
+    if [ `/usr/bin/pgrep -x -c pulseaudio` -eq 0 ]; then
+	cp -f /usr/share/alsa/user-must-execute-asoundconf-set-default-card.update-notifier \
+	    "$unud/user-must-execute-asoundconf-set-default-card" 
+	echo "You may need to execute the asoundconf(1) set-default-card macro."
+    fi
+fi
