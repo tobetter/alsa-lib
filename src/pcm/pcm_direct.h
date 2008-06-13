@@ -24,20 +24,30 @@
 #define DIRECT_IPC_SEMS         1
 #define DIRECT_IPC_SEM_CLIENT   0
 
-typedef void (mix_areas1_t)(unsigned int size,
-			volatile signed short *dst, signed short *src,
-			volatile signed int *sum, size_t dst_step,
-			size_t src_step, size_t sum_step);
+typedef void (mix_areas_t)(unsigned int size,
+			   volatile void *dst, void *src,
+			   volatile signed int *sum, size_t dst_step,
+			   size_t src_step, size_t sum_step);
 
-typedef void (mix_areas2_t)(unsigned int size,
-			volatile signed int *dst, signed int *src,
-			volatile signed int *sum, size_t dst_step,
-			size_t src_step, size_t sum_step);
+typedef void (mix_areas_16_t)(unsigned int size,
+			      volatile signed short *dst, signed short *src,
+			      volatile signed int *sum, size_t dst_step,
+			      size_t src_step, size_t sum_step);
 
-typedef void (mix_areas3_t)(unsigned int size,
-			volatile unsigned char *dst, unsigned char *src,
-			volatile signed int *sum, size_t dst_step,
-			size_t src_step, size_t sum_step);
+typedef void (mix_areas_32_t)(unsigned int size,
+			      volatile signed int *dst, signed int *src,
+			      volatile signed int *sum, size_t dst_step,
+			      size_t src_step, size_t sum_step);
+
+typedef void (mix_areas_24_t)(unsigned int size,
+			      volatile unsigned char *dst, unsigned char *src,
+			      volatile signed int *sum, size_t dst_step,
+			      size_t src_step, size_t sum_step);
+
+typedef void (mix_areas_u8_t)(unsigned int size,
+			      volatile unsigned char *dst, unsigned char *src,
+			      volatile signed int *sum, size_t dst_step,
+			      size_t src_step, size_t sum_step);
 
 struct slave_params {
 	snd_pcm_format_t format;
@@ -75,16 +85,16 @@ typedef struct {
 		unsigned int period_size;
 		unsigned int period_time;
 		snd_interval_t periods;
-		unsigned int tick_time;
+		unsigned int monotonic;
 		snd_pcm_tstamp_t tstamp_mode;
 		unsigned int period_step;
-		unsigned int sleep_min;
+		unsigned int sleep_min; /* not used */
 		unsigned int avail_min;
 		unsigned int start_threshold;	
 		unsigned int stop_threshold;	
 		unsigned int silence_threshold;
 		unsigned int silence_size;
-		unsigned int xfer_align;
+		unsigned int xfer_align; /* not used */
 		unsigned long long boundary;
 		unsigned int info;
 		unsigned int msbits;
@@ -148,9 +158,14 @@ struct snd_pcm_direct {
 		struct {
 			int shmid_sum;			/* IPC global sum ring buffer memory identification */
 			signed int *sum_buffer;		/* shared sum buffer */
-			mix_areas1_t *mix_areas1;
-			mix_areas2_t *mix_areas2;
-			mix_areas3_t *mix_areas3;
+			mix_areas_16_t *mix_areas_16;
+			mix_areas_32_t *mix_areas_32;
+			mix_areas_24_t *mix_areas_24;
+			mix_areas_u8_t *mix_areas_u8;
+			mix_areas_16_t *remix_areas_16;
+			mix_areas_32_t *remix_areas_32;
+			mix_areas_24_t *remix_areas_24;
+			mix_areas_u8_t *remix_areas_u8;
 		} dmix;
 		struct {
 		} dsnoop;
@@ -160,6 +175,66 @@ struct snd_pcm_direct {
 	} u;
 	void (*server_free)(snd_pcm_direct_t *direct);
 };
+
+/* make local functions really local */
+#define snd_pcm_direct_semaphore_create_or_connect \
+	snd1_pcm_direct_semaphore_create_or_connect
+#define snd_pcm_direct_shm_create_or_connect \
+	snd1_pcm_direct_shm_create_or_connect
+#define snd_pcm_direct_shm_discard \
+	snd1_pcm_direct_shm_discard
+#define snd_pcm_direct_server_create \
+	snd1_pcm_direct_server_create
+#define snd_pcm_direct_server_discard \
+	snd1_pcm_direct_server_discard
+#define snd_pcm_direct_client_connect \
+	snd1_pcm_direct_client_connect
+#define snd_pcm_direct_client_discard \
+	snd1_pcm_direct_client_discard
+#define snd_pcm_direct_initialize_slave \
+	snd1_pcm_direct_initialize_slave
+#define snd_pcm_direct_initialize_secondary_slave \
+	snd1_pcm_direct_initialize_secondary_slave
+#define snd_pcm_direct_initialize_poll_fd \
+	snd1_pcm_direct_initialize_poll_fd
+#define snd_pcm_direct_check_interleave \
+	snd1_pcm_direct_check_interleave
+#define snd_pcm_direct_parse_bindings \
+	snd1_pcm_direct_parse_bindings
+#define snd_pcm_direct_nonblock \
+	snd1_pcm_direct_nonblock
+#define snd_pcm_direct_async \
+	snd1_pcm_direct_async
+#define snd_pcm_direct_poll_revents \
+	snd1_pcm_direct_poll_revents
+#define snd_pcm_direct_info \
+	snd1_pcm_direct_info
+#define snd_pcm_direct_hw_refine \
+	snd1_pcm_direct_hw_refine
+#define snd_pcm_direct_hw_params \
+	snd1_pcm_direct_hw_params
+#define snd_pcm_direct_hw_free \
+	snd1_pcm_direct_hw_free
+#define snd_pcm_direct_sw_params \
+	snd1_pcm_direct_sw_params
+#define snd_pcm_direct_channel_info \
+	snd1_pcm_direct_channel_info
+#define snd_pcm_direct_mmap \
+	snd1_pcm_direct_mmap
+#define snd_pcm_direct_munmap \
+	snd1_pcm_direct_munmap
+#define snd_pcm_direct_resume \
+	snd1_pcm_direct_resume
+#define snd_pcm_direct_timer_stop \
+	snd1_pcm_direct_timer_stop
+#define snd_pcm_direct_clear_timer_queue \
+	snd1_pcm_direct_clear_timer_queue
+#define snd_pcm_direct_set_timer_params \
+	snd1_pcm_direct_set_timer_params
+#define snd_pcm_direct_open_secondary_client \
+	snd1_pcm_direct_open_secondary_client
+#define snd_pcm_direct_parse_open_conf \
+	snd1_pcm_direct_parse_open_conf
 
 int snd_pcm_direct_semaphore_create_or_connect(snd_pcm_direct_t *dmix);
 

@@ -260,7 +260,6 @@ sync_slave_write(snd_pcm_t *pcm)
 	size = map->appl_ptr - *slave->appl.ptr;
 	if (size < 0)
 		size += pcm->boundary;
-	size -= size % pcm->xfer_align;
 	if (!size)
 		return 0;
 	offset = *slave->appl.ptr % pcm->buffer_size;
@@ -279,7 +278,6 @@ sync_slave_read(snd_pcm_t *pcm)
 	size = *slave->hw.ptr - map->hw_ptr;
 	if (size < 0)
 		size += pcm->boundary;
-	size -= size % pcm->xfer_align;
 	if (!size)
 		return 0;
 	offset = map->hw_ptr % pcm->buffer_size;
@@ -372,6 +370,7 @@ static snd_pcm_fast_ops_t snd_pcm_mmap_emul_fast_ops = {
 	.readn = snd_pcm_generic_readn,
 	.avail_update = snd_pcm_mmap_emul_avail_update,
 	.mmap_commit = snd_pcm_mmap_emul_mmap_commit,
+	.htimestamp = snd_pcm_generic_htimestamp,
 	.poll_descriptors = snd_pcm_generic_poll_descriptors,
 	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
 	.poll_revents = snd_pcm_generic_poll_revents,
@@ -401,6 +400,7 @@ static int snd_pcm_mmap_emul_open(snd_pcm_t **pcmp, const char *name,
 	pcm->private_data = map;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
+	pcm->monotonic = slave->monotonic;
 	snd_pcm_set_hw_ptr(pcm, &map->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &map->appl_ptr, -1, 0);
 	*pcmp = pcm;

@@ -387,15 +387,11 @@ static int snd_pcm_rate_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 
 	recalc(pcm, &sparams->avail_min);
 	rate->orig_avail_min = sparams->avail_min;
-	recalc(pcm, &sparams->xfer_align);
 	recalc(pcm, &sparams->start_threshold);
 	if (sparams->avail_min < 1) sparams->avail_min = 1;
-	if (sparams->xfer_align < 1) sparams->xfer_align = 1;
 	if (sparams->start_threshold <= slave->buffer_size) {
 		if (sparams->start_threshold > (slave->buffer_size / sparams->avail_min) * sparams->avail_min)
 			sparams->start_threshold = (slave->buffer_size / sparams->avail_min) * sparams->avail_min;
-		if (sparams->start_threshold > (slave->buffer_size / sparams->xfer_align) * sparams->xfer_align)
-			sparams->start_threshold = (slave->buffer_size / sparams->xfer_align) * sparams->xfer_align;
 	}
 	if (sparams->stop_threshold >= params->boundary) {
 		sparams->stop_threshold = sparams->boundary;
@@ -715,38 +711,6 @@ static snd_pcm_sframes_t snd_pcm_rate_forward(snd_pcm_t *pcm, snd_pcm_uframes_t 
 	return n;
 }
 
-static int snd_pcm_rate_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int space)
-{
-	snd_pcm_rate_t *rate = pcm->private_data;
-	snd_pcm_uframes_t avail_min;
-	int ret, err;
-
-	ret = snd_pcm_generic_poll_descriptors(pcm, pfds, space);
-	if (ret < 0)
-		return ret;
-
-	avail_min = rate->appl_ptr % pcm->period_size;
-	if (avail_min > 0) {
-		recalc(pcm, &avail_min);
-		if (avail_min < rate->gen.slave->buffer_size &&
-		    avail_min != rate->gen.slave->period_size)
-			avail_min++;	/* 1st small little rounding correction */
-		if (avail_min < rate->gen.slave->buffer_size &&
-		    avail_min != rate->gen.slave->period_size)
-			avail_min++;	/* 2nd small little rounding correction */
-		avail_min += rate->orig_avail_min;
-	} else {
-		avail_min = rate->orig_avail_min;
-	}
-	if (rate->sw_params.avail_min == avail_min)
-		return ret;
-	rate->sw_params.avail_min = avail_min;
-	err = snd_pcm_sw_params(rate->gen.slave, &rate->sw_params);
-	if (err < 0)
-		return err;
-	return ret;
-}
-
 static int snd_pcm_rate_commit_area(snd_pcm_t *pcm, snd_pcm_rate_t *rate,
 				    snd_pcm_uframes_t appl_offset,
 				    snd_pcm_uframes_t size,
@@ -1056,6 +1020,32 @@ static snd_pcm_sframes_t snd_pcm_rate_avail_update(snd_pcm_t *pcm)
  }
 }
 
+static int snd_pcm_rate_htimestamp(snd_pcm_t *pcm,
+				   snd_pcm_uframes_t *avail,
+				   snd_htimestamp_t *tstamp)
+{
+	snd_pcm_rate_t *rate = pcm->private_data;
+	snd_pcm_sframes_t avail1;
+	snd_pcm_uframes_t tmp;
+	int ok = 0, err;
+
+	while (1) {
+		/* the position is from this plugin itself */
+		avail1 = snd_pcm_avail_update(pcm);
+		if (avail1 < 0)
+			return avail1;
+		if (ok && (snd_pcm_uframes_t)avail1 == *avail)
+			break;
+		*avail = avail1;
+		/* timestamp is taken from the slave PCM */
+		err = snd_pcm_htimestamp(rate->gen.slave, &tmp, tstamp);
+		if (err < 0)
+			return err;
+		ok = 1;
+	}
+	return 0;
+}
+
 static int snd_pcm_rate_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
 {
 	snd_pcm_rate_t *rate = pcm->private_data;
@@ -1122,7 +1112,6 @@ static int snd_pcm_rate_start(snd_pcm_t *pcm)
 {
 	snd_pcm_rate_t *rate = pcm->private_data;
 	snd_pcm_uframes_t avail;
-	struct timeval tv;
 		
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE)
 		return snd_pcm_start(rate->gen.slave);
@@ -1130,9 +1119,7 @@ static int snd_pcm_rate_start(snd_pcm_t *pcm)
 	if (snd_pcm_state(rate->gen.slave) != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
 
-	gettimeofday(&tv, 0);
-	rate->trigger_tstamp.tv_sec = tv.tv_sec;
-	rate->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+	gettimestamp(&rate->trigger_tstamp, pcm->monotonic);
 
 	avail = snd_pcm_mmap_playback_hw_avail(rate->gen.slave);
 	if (avail == 0) {
@@ -1228,8 +1215,9 @@ static snd_pcm_fast_ops_t snd_pcm_rate_fast_ops = {
 	.readn = snd_pcm_mmap_readn,
 	.avail_update = snd_pcm_rate_avail_update,
 	.mmap_commit = snd_pcm_rate_mmap_commit,
+	.htimestamp = snd_pcm_rate_htimestamp,
 	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
-	.poll_descriptors = snd_pcm_rate_poll_descriptors,
+	.poll_descriptors = snd_pcm_generic_poll_descriptors,
 	.poll_revents = snd_pcm_rate_poll_revents,
 };
 
@@ -1405,6 +1393,7 @@ int snd_pcm_rate_open(snd_pcm_t **pcmp, const char *name,
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
 	pcm->mmap_rw = 1;
+	pcm->monotonic = slave->monotonic;
 	snd_pcm_set_hw_ptr(pcm, &rate->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &rate->appl_ptr, -1, 0);
 	*pcmp = pcm;

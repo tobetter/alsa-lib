@@ -56,7 +56,5 @@
 #include <alsa/seq.h>
 #include <alsa/seqmid.h>
 #include <alsa/seq_midi_event.h>
-#include <alsa/conv.h>
-#include <alsa/instr.h>
 
 #endif /* __ASOUNDLIB_H */

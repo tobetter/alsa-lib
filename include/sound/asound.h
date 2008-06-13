@@ -157,7 +157,7 @@ enum {
  *                                                                           *
  *****************************************************************************/
 
-#define SNDRV_PCM_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 7)
+#define SNDRV_PCM_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 9)
 
 typedef unsigned long sndrv_pcm_uframes_t;
 typedef long sndrv_pcm_sframes_t;
@@ -380,8 +380,8 @@ struct sndrv_pcm_hw_params {
 
 enum sndrv_pcm_tstamp {
 	SNDRV_PCM_TSTAMP_NONE = 0,
-	SNDRV_PCM_TSTAMP_MMAP,
-	SNDRV_PCM_TSTAMP_LAST = SNDRV_PCM_TSTAMP_MMAP,
+	SNDRV_PCM_TSTAMP_ENABLE,
+	SNDRV_PCM_TSTAMP_LAST = SNDRV_PCM_TSTAMP_ENABLE,
 };
 
 struct sndrv_pcm_sw_params {
@@ -460,10 +460,18 @@ struct sndrv_xfern {
 	sndrv_pcm_uframes_t frames;
 };
 
+
+enum {
+        SNDRV_PCM_TSTAMP_TYPE_GETTIMEOFDAY = 0, /* gettimeofday equivalent */
+        SNDRV_PCM_TSTAMP_TYPE_MONOTONIC,        /* posix_clock_monotonic equivalent */
+        SNDRV_PCM_TSTAMP_TYPE_LAST = SNDRV_PCM_TSTAMP_TYPE_MONOTONIC,
+};
+
 enum {
 	SNDRV_PCM_IOCTL_PVERSION = _IOR('A', 0x00, int),
 	SNDRV_PCM_IOCTL_INFO = _IOR('A', 0x01, struct sndrv_pcm_info),
 	SNDRV_PCM_IOCTL_TSTAMP = _IOW('A', 0x02, int),
+	SNDRV_PCM_IOCTL_TTSTAMP = _IOW('A', 0x03, int),
 	SNDRV_PCM_IOCTL_HW_REFINE = _IOWR('A', 0x10, struct sndrv_pcm_hw_params),
 	SNDRV_PCM_IOCTL_HW_PARAMS = _IOWR('A', 0x11, struct sndrv_pcm_hw_params),
 	SNDRV_PCM_IOCTL_HW_FREE = _IO('A', 0x12),
@@ -715,7 +723,7 @@ struct sndrv_timer_tread {
  *                                                                          *
  ****************************************************************************/
 
-#define SNDRV_CTL_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 3)
+#define SNDRV_CTL_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 5)
 
 struct sndrv_ctl_card_info {
 	int card;			/* card number */
@@ -766,8 +774,7 @@ enum sndrv_ctl_elem_iface {
 #define SNDRV_CTL_ELEM_ACCESS_OWNER		(1<<10)	/* write lock owner */
 #define SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK	(1<<28)	/* flag only for kernel */
 #define SNDRV_CTL_ELEM_ACCESS_USER		(1<<29) /* user space element */
-#define SNDRV_CTL_ELEM_ACCESS_DINDIRECT		(1<<30)	/* indirect access for matrix dimensions in the info structure */
-#define SNDRV_CTL_ELEM_ACCESS_INDIRECT		(1<<31)	/* indirect access for element value in the value structure */
+/* bits 30 and 31 are obsoleted (for indirect access) */
 
 /* for further details see the ACPI and PCI power management specification */
 #define SNDRV_CTL_POWER_D0		0x0000	/* full On */
@@ -821,30 +828,30 @@ struct sndrv_ctl_elem_info {
 	} value;
 	union {
 		unsigned short d[4];		/* dimensions */
-		unsigned short *d_ptr;		/* indirect */
+		unsigned short *d_ptr;		/* (obsolete) indirect */
 	} dimen;
 	unsigned char reserved[64-4*sizeof(unsigned short)];
 };
 
 struct sndrv_ctl_elem_value {
 	struct sndrv_ctl_elem_id id;	/* W: element ID */
-	unsigned int indirect: 1;	/* W: use indirect pointer (xxx_ptr member) */
+	unsigned int indirect: 1;	/* (obsolete) W: use indirect pointer (xxx_ptr member) */
         union {
 		union {
 			long value[128];
-			long *value_ptr;
+			long *value_ptr;	/* obsolete */
 		} integer;
 		union {
 			long long value[64];
-			long long *value_ptr;
+			long long *value_ptr;	/* obsolete */
 		} integer64;
 		union {
 			unsigned int item[128];
-			unsigned int *item_ptr;
+			unsigned int *item_ptr;	/* obsolete */
 		} enumerated;
 		union {
 			unsigned char data[512];
-			unsigned char *data_ptr;
+			unsigned char *data_ptr;	/* obsolete */
 		} bytes;
 		struct sndrv_aes_iec958 iec958;
         } value;                /* RO */

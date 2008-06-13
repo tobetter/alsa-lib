@@ -48,8 +48,7 @@ target_triplet = @target@
 @BUILD_HWDEP_TRUE@am__append_9 = hwdep.h
 @BUILD_MIXER_TRUE@am__append_10 = mixer.h mixer_abst.h
 @BUILD_SEQ_TRUE@am__append_11 = seq_event.h seq.h seqmid.h seq_midi_event.h
-@BUILD_INSTR_TRUE@am__append_12 = conv.h instr.h
-@BUILD_ALISP_TRUE@am__append_13 = alisp.h
+@BUILD_ALISP_TRUE@am__append_12 = alisp.h
 subdir = include
 DIST_COMMON = $(am__alsainclude_HEADERS_DIST) $(noinst_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
@@ -75,7 +74,7 @@ am__alsainclude_HEADERS_DIST = asoundlib.h asoundef.h version.h \
 	control_external.h pcm.h pcm_old.h timer.h pcm_plugin.h \
 	pcm_rate.h pcm_external.h pcm_extplug.h pcm_ioplug.h rawmidi.h \
 	hwdep.h mixer.h mixer_abst.h seq_event.h seq.h seqmid.h \
-	seq_midi_event.h conv.h instr.h alisp.h
+	seq_midi_event.h alisp.h
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -113,8 +112,6 @@ BUILD_CTL_PLUGIN_SHM_TRUE = @BUILD_CTL_PLUGIN_SHM_TRUE@
 BUILD_CTL_PLUGIN_TRUE = @BUILD_CTL_PLUGIN_TRUE@
 BUILD_HWDEP_FALSE = @BUILD_HWDEP_FALSE@
 BUILD_HWDEP_TRUE = @BUILD_HWDEP_TRUE@
-BUILD_INSTR_FALSE = @BUILD_INSTR_FALSE@
-BUILD_INSTR_TRUE = @BUILD_INSTR_TRUE@
 BUILD_MIXER_FALSE = @BUILD_MIXER_FALSE@
 BUILD_MIXER_TRUE = @BUILD_MIXER_TRUE@
 BUILD_MODULES_FALSE = @BUILD_MODULES_FALSE@
@@ -210,6 +207,8 @@ INSTALL_M4_TRUE = @INSTALL_M4_TRUE@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+KEEP_OLD_SYMBOLS_FALSE = @KEEP_OLD_SYMBOLS_FALSE@
+KEEP_OLD_SYMBOLS_TRUE = @KEEP_OLD_SYMBOLS_TRUE@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
@@ -302,8 +301,7 @@ alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
 	$(am__append_1) $(am__append_2) $(am__append_3) \
 	$(am__append_4) $(am__append_5) $(am__append_6) \
 	$(am__append_7) $(am__append_8) $(am__append_9) \
-	$(am__append_10) $(am__append_11) $(am__append_12) \
-	$(am__append_13)
+	$(am__append_10) $(am__append_11) $(am__append_12)
 noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
 	asoundlib-head.h asoundlib-tail.h
 
