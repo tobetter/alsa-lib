@@ -30,10 +30,10 @@
 /*
  *  MMX optimized
  */
-static void MIX_AREAS1(unsigned int size,
-		       volatile signed short *dst, signed short *src,
-		       volatile signed int *sum, size_t dst_step,
-		       size_t src_step, size_t sum_step)
+static void MIX_AREAS_16(unsigned int size,
+			 volatile signed short *dst, signed short *src,
+			 volatile signed int *sum, size_t dst_step,
+			 size_t src_step, size_t sum_step)
 {
 	unsigned long long old_rbx;
 
@@ -79,9 +79,9 @@ static void MIX_AREAS1(unsigned int size,
 		"\t" LOCK_PREFIX "cmpxchgw %%cx, (%%rdi)\n"
 		"\tmovswl (%%rsi), %%ecx\n"
 		"\tjnz 2f\n"
-		"\tsubl %%edx, %%ecx\n"
+		"\t" XSUB " %%edx, %%ecx\n"
 		"2:"
-		"\t" LOCK_PREFIX "addl %%ecx, (%%rbx)\n"
+		"\t" LOCK_PREFIX XADD " %%ecx, (%%rbx)\n"
 
 		/*
 		 *   do {
@@ -125,10 +125,10 @@ static void MIX_AREAS1(unsigned int size,
 /*
  *  32-bit version (24-bit resolution)
  */
-static void MIX_AREAS2(unsigned int size,
-		       volatile signed int *dst, signed int *src,
-		       volatile signed int *sum, size_t dst_step,
-		       size_t src_step, size_t sum_step)
+static void MIX_AREAS_32(unsigned int size,
+			 volatile signed int *dst, signed int *src,
+			 volatile signed int *sum, size_t dst_step,
+			 size_t src_step, size_t sum_step)
 {
 	unsigned long long old_rbx;
 
@@ -176,14 +176,14 @@ static void MIX_AREAS2(unsigned int size,
 		"\tmovl (%%rsi), %%ecx\n"
 		/* sample >>= 8 */
 		"\tsarl $8, %%ecx\n"
-		"\tsubl %%edx, %%ecx\n"
+		"\t" XSUB " %%edx, %%ecx\n"
 		"\tjmp 21f\n"
 		"2:"
 		"\tmovl (%%rsi), %%ecx\n"
 		/* sample >>= 8 */
 		"\tsarl $8, %%ecx\n"
 		"21:"
-		"\t" LOCK_PREFIX "addl %%ecx, (%%rbx)\n"
+		"\t" LOCK_PREFIX XADD " %%ecx, (%%rbx)\n"
 
 		/*
 		 *   do {
@@ -240,10 +240,10 @@ static void MIX_AREAS2(unsigned int size,
 /*
  *  24-bit version
  */
-static void MIX_AREAS3(unsigned int size,
-		       volatile unsigned char *dst, unsigned char *src,
-		       volatile signed int *sum, size_t dst_step,
-		       size_t src_step, size_t sum_step)
+static void MIX_AREAS_24(unsigned int size,
+			 volatile unsigned char *dst, unsigned char *src,
+			 volatile signed int *sum, size_t dst_step,
+			 size_t src_step, size_t sum_step)
 {
 	unsigned long long old_rbx;
 
@@ -290,9 +290,9 @@ static void MIX_AREAS3(unsigned int size,
 		"\t" LOCK_PREFIX "btsl $0, (%%rdi)\n"
 		"\t.byte 0x67, 0x8d, 0x0c, 0x01\n"
 		"\tjc 2f\n"
-		"\tsubl %%edx, %%ecx\n"
+		"\t" XSUB " %%edx, %%ecx\n"
 		"2:"
-		"\t" LOCK_PREFIX "addl %%ecx, (%%rbx)\n"
+		"\t" LOCK_PREFIX XADD " %%ecx, (%%rbx)\n"
 
 		/*
 		 *   do {

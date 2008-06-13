@@ -259,6 +259,35 @@ snd_pcm_sframes_t snd_pcm_generic_avail_update(snd_pcm_t *pcm)
 	return snd_pcm_avail_update(generic->slave);
 }
 
+int snd_pcm_generic_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
+			       snd_htimestamp_t *tstamp)
+{
+	snd_pcm_generic_t *generic = pcm->private_data;
+	return snd_pcm_htimestamp(generic->slave, avail, tstamp);
+}
+
+/* stand-alone version - similar like snd_pcm_hw_htimestamp but
+ * taking the tstamp via gettimestamp().
+ */
+int snd_pcm_generic_real_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
+				    snd_htimestamp_t *tstamp)
+{
+	snd_pcm_sframes_t avail1;
+	int ok = 0;
+
+	while (1) {
+		avail1 = snd_pcm_avail_update(pcm);
+		if (avail1 < 0)
+			return avail1;
+		if (ok && (snd_pcm_uframes_t)avail1 == *avail)
+			break;
+		*avail = avail1;
+		gettimestamp(tstamp, pcm->monotonic);
+		ok = 1;
+	}
+	return 0;
+}
+
 int snd_pcm_generic_mmap(snd_pcm_t *pcm)
 {
 	if (pcm->mmap_shadow) {

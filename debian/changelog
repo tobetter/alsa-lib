@@ -1,3 +1,32 @@
+alsa-lib (1.0.16-0ubuntu0.1) hardy-proposed; urgency=low
+
+  * New upstream release to address issues that have arisen since the version
+    of alsa-lib and the kernel drivers are out of sync, (LP: #221673), should
+    also resolve issues in LP #191027.
+  * Dropped the following patches, applied in 1.0.16:
+    - fix_sem_deadlock_in_dmix.patch
+    - fix_const_casts.patch
+    - fix_ioplug.patch
+    - fix_control_range.patch
+    - dont_use_hackish_callback_in_rate_plugin.patch
+    - fix_cpu_hog_in_rate_plug.patch
+    - fix_mmap_with_multi_plug.patch
+    - fix_wrong_return_values_in_direct_plug.patch
+    - fix_timestamp_in_status_pcm_direct_plug.patch
+    - fix_configs_error_handling.patch
+    - fix_not_updated_bit_set.patch
+    - fix_device_assignment.patch
+    - fix_missing_aliases.patch
+    - fix_plugindir.patch
+    - fix-sampling-bit-shifts.patch
+  * fix_dmix_dropped_samples.patch: Patch from upstream hg changeset
+    82802e01be23 to prevent the dmix plugin from dropping the first few
+    samples of played back audio. This patch is also in Debian.
+  * Refresh debian-specific patches for 1.0.16.
+  * Bump shlibs, as new symbols have been added.
+
+ -- Luke Yelavich <luke.yelavich@canonical.com>  Fri, 13 Jun 2008 12:52:20 +1000
+
 alsa-lib (1.0.15-3ubuntu4) hardy; urgency=low
 
   * Backport fixes from hg tip (no API/ABI changes):

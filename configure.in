@@ -9,7 +9,7 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.15)
+AM_INIT_AUTOMAKE(alsa-lib, 1.0.16)
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL(INSTALL_M4, test -n "${ACLOCAL}")
@@ -169,6 +169,20 @@ else
   AC_MSG_RESULT(no)
 fi
 
+if test "$debug" = "yes"; then
+  AC_MSG_CHECKING(for debug assert)
+  AC_ARG_ENABLE(debug-assert,
+    AS_HELP_STRING([--enable-debug],
+      [enable assert call at the default error message handler]),
+    debug_assert="$enableval", debug_assert="no")
+  if test "$debug_assert" = "yes"; then
+    AC_MSG_RESULT(yes)
+    AC_DEFINE(ALSA_DEBUG_ASSERT,,[Enable assert at error message handler])
+  else
+    AC_MSG_RESULT(no)
+  fi
+fi
+
 dnl Temporary directory
 AC_MSG_CHECKING(for tmpdir)
 AC_ARG_WITH(tmpdir,
@@ -222,6 +236,22 @@ if test "$have_pthread" = "yes"; then
   if test "$HAVE_LIBPTHREAD" = "yes"; then
     ALSA_DEPLIBS="$ALSA_DEPLIBS -lpthread"
     AC_DEFINE([HAVE_LIBPTHREAD], 1, [Have libpthread])
+  fi
+else
+  AC_MSG_RESULT(no)
+fi
+
+dnl Check for librt
+AC_MSG_CHECKING(for librt)
+AC_ARG_WITH(librt,
+  AS_HELP_STRING([--with-librt], [Use librt for monotonic clock (default = yes)]),
+  [ have_librt="$withval" ], [ have_librt="yes" ])
+if test "$have_librt" = "yes"; then
+  AC_CHECK_LIB([rt], [clock_gettime], [HAVE_LIBRT="yes"])
+  if test "$HAVE_LIBRT" = "yes" ; then
+    ALSA_DEPLIBS="$ALSA_DEPLIBS -lrt"
+    AC_DEFINE([HAVE_LIBRT], 1, [Have librt])
+    AC_DEFINE([HAVE_CLOCK_GETTIME], 1, [Have clock gettime])
   fi
 else
   AC_MSG_RESULT(no)
@@ -330,12 +360,14 @@ AC_ARG_ENABLE(hwdep,
 AC_ARG_ENABLE(seq,
   AS_HELP_STRING([--disable-seq], [disable the sequencer component]),
   [build_seq="$enableval"], [build_seq="yes"])
-AC_ARG_ENABLE(instr,
-  AS_HELP_STRING([--disable-instr], [disable the instrument component]),
-  [build_instr="$enableval"], [build_instr="yes"])
 AC_ARG_ENABLE(alisp,
   AS_HELP_STRING([--disable-alisp], [disable the alisp component]),
   [build_alisp="$enableval"], [build_alisp="yes"])
+AC_ARG_ENABLE(old-symbols,
+  AS_HELP_STRING([--disable-old-symbols], [disable old obsoleted symbols]),
+  [keep_old_symbols="$enableval"], [keep_old_symbols="yes"])
+AM_CONDITIONAL(KEEP_OLD_SYMBOLS, test x$keep_old_symbols = xyes)
+
 AC_ARG_ENABLE(python,
   AS_HELP_STRING([--disable-python], [disable the python components]),
   [build_python="$enableval"], [build_python="yes"])
@@ -363,16 +395,11 @@ fi
 AC_SUBST(PYTHON_LIBS)
 AC_SUBST(PYTHON_INCLUDES)
 
-if test "$build_seq" != "yes"; then
-  build_instr="no"
-fi
-
 AM_CONDITIONAL(BUILD_MIXER, test x$build_mixer = xyes)
 AM_CONDITIONAL(BUILD_PCM, test x$build_pcm = xyes)
 AM_CONDITIONAL(BUILD_RAWMIDI, test x$build_rawmidi = xyes)
 AM_CONDITIONAL(BUILD_HWDEP, test x$build_hwdep = xyes)
 AM_CONDITIONAL(BUILD_SEQ, test x$build_seq = xyes)
-AM_CONDITIONAL(BUILD_INSTR, test x$build_instr = xyes)
 AM_CONDITIONAL(BUILD_ALISP, test x$build_alisp = xyes)
 AM_CONDITIONAL(BUILD_PYTHON, test x$build_python = xyes)
 
@@ -390,9 +417,6 @@ if test "$build_hwdep" = "yes"; then
 fi
 if test "$build_seq" = "yes"; then
   AC_DEFINE([BUILD_SEQ], "1", [Build sequencer component])
-fi
-if test "$build_instr" = "yes"; then
-  AC_DEFINE([BUILD_INSTR], "1", [Build instrument component])
 fi
 
 dnl PCM Plugins
@@ -556,7 +580,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile include/Makefile
           src/control/Makefile src/mixer/Makefile \
 	  src/pcm/Makefile src/pcm/scopes/Makefile \
 	  src/rawmidi/Makefile src/timer/Makefile \
-          src/hwdep/Makefile src/seq/Makefile src/instr/Makefile \
+          src/hwdep/Makefile src/seq/Makefile \
           src/compat/Makefile src/alisp/Makefile src/conf/Makefile \
 	  src/conf/cards/Makefile \
 	  src/conf/pcm/Makefile \
@@ -577,7 +601,5 @@ test "$build_seq" = "yes" && echo "#include <alsa/seq_event.h>" >> include/asoun
 test "$build_seq" = "yes" && echo "#include <alsa/seq.h>" >> include/asoundlib.h
 test "$build_seq" = "yes" && echo "#include <alsa/seqmid.h>" >> include/asoundlib.h
 test "$build_seq" = "yes" && echo "#include <alsa/seq_midi_event.h>" >> include/asoundlib.h
-test "$build_instr" = "yes" && echo "#include <alsa/conv.h>" >> include/asoundlib.h
-test "$build_instr" = "yes" && echo "#include <alsa/instr.h>" >> include/asoundlib.h
 cat "$srcdir"/include/asoundlib-tail.h >> include/asoundlib.h
 

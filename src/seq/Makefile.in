@@ -37,6 +37,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@KEEP_OLD_SYMBOLS_TRUE@am__append_1 = seq_old.c
 subdir = src/seq
 DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
@@ -49,8 +50,11 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
 libseq_la_LIBADD =
+am__libseq_la_SOURCES_DIST = seq_hw.c seq.c seq_event.c seqmid.c \
+	seq_midi_event.c seq_symbols.c seq_old.c
+@KEEP_OLD_SYMBOLS_TRUE@am__objects_1 = seq_old.lo
 am_libseq_la_OBJECTS = seq_hw.lo seq.lo seq_event.lo seqmid.lo \
-	seq_midi_event.lo seq_symbols.lo
+	seq_midi_event.lo seq_symbols.lo $(am__objects_1)
 libseq_la_OBJECTS = $(am_libseq_la_OBJECTS)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -64,7 +68,7 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
 SOURCES = $(libseq_la_SOURCES)
-DIST_SOURCES = $(libseq_la_SOURCES)
+DIST_SOURCES = $(am__libseq_la_SOURCES_DIST)
 HEADERS = $(noinst_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -93,8 +97,6 @@ BUILD_CTL_PLUGIN_SHM_TRUE = @BUILD_CTL_PLUGIN_SHM_TRUE@
 BUILD_CTL_PLUGIN_TRUE = @BUILD_CTL_PLUGIN_TRUE@
 BUILD_HWDEP_FALSE = @BUILD_HWDEP_FALSE@
 BUILD_HWDEP_TRUE = @BUILD_HWDEP_TRUE@
-BUILD_INSTR_FALSE = @BUILD_INSTR_FALSE@
-BUILD_INSTR_TRUE = @BUILD_INSTR_TRUE@
 BUILD_MIXER_FALSE = @BUILD_MIXER_FALSE@
 BUILD_MIXER_TRUE = @BUILD_MIXER_TRUE@
 BUILD_MODULES_FALSE = @BUILD_MODULES_FALSE@
@@ -190,6 +192,8 @@ INSTALL_M4_TRUE = @INSTALL_M4_TRUE@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+KEEP_OLD_SYMBOLS_FALSE = @KEEP_OLD_SYMBOLS_FALSE@
+KEEP_OLD_SYMBOLS_TRUE = @KEEP_OLD_SYMBOLS_TRUE@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
@@ -275,9 +279,8 @@ target_cpu = @target_cpu@
 target_os = @target_os@
 target_vendor = @target_vendor@
 EXTRA_LTLIBRARIES = libseq.la
-libseq_la_SOURCES = seq_hw.c seq.c seq_event.c seqmid.c seq_midi_event.c \
-		    seq_symbols.c
-
+libseq_la_SOURCES = seq_hw.c seq.c seq_event.c seqmid.c \
+	seq_midi_event.c seq_symbols.c $(am__append_1)
 noinst_HEADERS = seq_local.h
 INCLUDES = -I$(top_srcdir)/include
 all: all-am
@@ -326,6 +329,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq_event.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq_hw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq_midi_event.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq_old.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq_symbols.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seqmid.Plo@am__quote@
 

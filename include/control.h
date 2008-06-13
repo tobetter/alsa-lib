@@ -242,14 +242,20 @@ int snd_ctl_elem_tlv_write(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 			   const unsigned int *tlv);
 int snd_ctl_elem_tlv_command(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 			     const unsigned int *tlv);
+#ifdef __ALSA_HWDEP_H
 int snd_ctl_hwdep_next_device(snd_ctl_t *ctl, int * device);
 int snd_ctl_hwdep_info(snd_ctl_t *ctl, snd_hwdep_info_t * info);
+#endif
+#ifdef __ALSA_PCM_H
 int snd_ctl_pcm_next_device(snd_ctl_t *ctl, int *device);
 int snd_ctl_pcm_info(snd_ctl_t *ctl, snd_pcm_info_t * info);
 int snd_ctl_pcm_prefer_subdevice(snd_ctl_t *ctl, int subdev);
+#endif
+#ifdef __ALSA_RAWMIDI_H
 int snd_ctl_rawmidi_next_device(snd_ctl_t *ctl, int * device);
 int snd_ctl_rawmidi_info(snd_ctl_t *ctl, snd_rawmidi_info_t * info);
 int snd_ctl_rawmidi_prefer_subdevice(snd_ctl_t *ctl, int subdev);
+#endif
 int snd_ctl_set_power_state(snd_ctl_t *ctl, unsigned int state);
 int snd_ctl_get_power_state(snd_ctl_t *ctl, unsigned int *state);
 
@@ -279,7 +285,7 @@ size_t snd_ctl_elem_id_sizeof(void);
  * \brief allocate an invalid #snd_ctl_elem_id_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_id_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_id_t *) alloca(snd_ctl_elem_id_sizeof()); memset(*ptr, 0, snd_ctl_elem_id_sizeof()); } while (0)
+#define snd_ctl_elem_id_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_id)
 int snd_ctl_elem_id_malloc(snd_ctl_elem_id_t **ptr);
 void snd_ctl_elem_id_free(snd_ctl_elem_id_t *obj);
 void snd_ctl_elem_id_clear(snd_ctl_elem_id_t *obj);
@@ -302,7 +308,7 @@ size_t snd_ctl_card_info_sizeof(void);
  * \brief allocate an invalid #snd_ctl_card_info_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_card_info_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_card_info_t *) alloca(snd_ctl_card_info_sizeof()); memset(*ptr, 0, snd_ctl_card_info_sizeof()); } while (0)
+#define snd_ctl_card_info_alloca(ptr) __snd_alloca(ptr, snd_ctl_card_info)
 int snd_ctl_card_info_malloc(snd_ctl_card_info_t **ptr);
 void snd_ctl_card_info_free(snd_ctl_card_info_t *obj);
 void snd_ctl_card_info_clear(snd_ctl_card_info_t *obj);
@@ -320,7 +326,7 @@ size_t snd_ctl_event_sizeof(void);
  * \brief allocate an invalid #snd_ctl_event_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_event_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_event_t *) alloca(snd_ctl_event_sizeof()); memset(*ptr, 0, snd_ctl_event_sizeof()); } while (0)
+#define snd_ctl_event_alloca(ptr) __snd_alloca(ptr, snd_ctl_event)
 int snd_ctl_event_malloc(snd_ctl_event_t **ptr);
 void snd_ctl_event_free(snd_ctl_event_t *obj);
 void snd_ctl_event_clear(snd_ctl_event_t *obj);
@@ -332,7 +338,7 @@ size_t snd_ctl_elem_list_sizeof(void);
  * \brief allocate an invalid #snd_ctl_elem_list_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_list_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_list_t *) alloca(snd_ctl_elem_list_sizeof()); memset(*ptr, 0, snd_ctl_elem_list_sizeof()); } while (0)
+#define snd_ctl_elem_list_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_list)
 int snd_ctl_elem_list_malloc(snd_ctl_elem_list_t **ptr);
 void snd_ctl_elem_list_free(snd_ctl_elem_list_t *obj);
 void snd_ctl_elem_list_clear(snd_ctl_elem_list_t *obj);
@@ -353,7 +359,7 @@ size_t snd_ctl_elem_info_sizeof(void);
  * \brief allocate an invalid #snd_ctl_elem_info_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_info_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_info_t *) alloca(snd_ctl_elem_info_sizeof()); memset(*ptr, 0, snd_ctl_elem_info_sizeof()); } while (0)
+#define snd_ctl_elem_info_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_info)
 int snd_ctl_elem_info_malloc(snd_ctl_elem_info_t **ptr);
 void snd_ctl_elem_info_free(snd_ctl_elem_info_t *obj);
 void snd_ctl_elem_info_clear(snd_ctl_elem_info_t *obj);
@@ -408,7 +414,7 @@ size_t snd_ctl_elem_value_sizeof(void);
  * \brief allocate an invalid #snd_ctl_elem_value_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_value_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_value_t *) alloca(snd_ctl_elem_value_sizeof()); memset(*ptr, 0, snd_ctl_elem_value_sizeof()); } while (0)
+#define snd_ctl_elem_value_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_value)
 int snd_ctl_elem_value_malloc(snd_ctl_elem_value_t **ptr);
 void snd_ctl_elem_value_free(snd_ctl_elem_value_t *obj);
 void snd_ctl_elem_value_clear(snd_ctl_elem_value_t *obj);
@@ -441,6 +447,21 @@ void snd_ctl_elem_set_bytes(snd_ctl_elem_value_t *obj, void *data, size_t size);
 const void * snd_ctl_elem_value_get_bytes(const snd_ctl_elem_value_t *obj);
 void snd_ctl_elem_value_get_iec958(const snd_ctl_elem_value_t *obj, snd_aes_iec958_t *ptr);
 void snd_ctl_elem_value_set_iec958(snd_ctl_elem_value_t *obj, const snd_aes_iec958_t *ptr);
+
+int snd_tlv_parse_dB_info(unsigned int *tlv, unsigned int tlv_size,
+			  unsigned int **db_tlvp);
+int snd_tlv_get_dB_range(unsigned int *tlv, long rangemin, long rangemax,
+			 long *min, long *max);
+int snd_tlv_convert_to_dB(unsigned int *tlv, long rangemin, long rangemax,
+			  long volume, long *db_gain);
+int snd_tlv_convert_from_dB(unsigned int *tlv, long rangemin, long rangemax,
+			    long db_gain, long *value, int xdir);
+int snd_ctl_get_dB_range(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
+			 long *min, long *max);
+int snd_ctl_convert_to_dB(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
+			  long volume, long *db_gain);
+int snd_ctl_convert_from_dB(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
+			    long db_gain, long *value, int xdir);
 
 /**
  *  \defgroup HControl High level Control Interface

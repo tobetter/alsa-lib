@@ -51,14 +51,14 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
 libcontrol_la_LIBADD =
-am__libcontrol_la_SOURCES_DIST = cards.c namehint.c hcontrol.c \
+am__libcontrol_la_SOURCES_DIST = cards.c tlv.c namehint.c hcontrol.c \
 	control.c control_hw.c setup.c control_symbols.c control_shm.c \
 	control_ext.c
 @BUILD_CTL_PLUGIN_SHM_TRUE@am__objects_1 = control_shm.lo
 @BUILD_CTL_PLUGIN_EXT_TRUE@am__objects_2 = control_ext.lo
-am_libcontrol_la_OBJECTS = cards.lo namehint.lo hcontrol.lo control.lo \
-	control_hw.lo setup.lo control_symbols.lo $(am__objects_1) \
-	$(am__objects_2)
+am_libcontrol_la_OBJECTS = cards.lo tlv.lo namehint.lo hcontrol.lo \
+	control.lo control_hw.lo setup.lo control_symbols.lo \
+	$(am__objects_1) $(am__objects_2)
 libcontrol_la_OBJECTS = $(am_libcontrol_la_OBJECTS)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -101,8 +101,6 @@ BUILD_CTL_PLUGIN_SHM_TRUE = @BUILD_CTL_PLUGIN_SHM_TRUE@
 BUILD_CTL_PLUGIN_TRUE = @BUILD_CTL_PLUGIN_TRUE@
 BUILD_HWDEP_FALSE = @BUILD_HWDEP_FALSE@
 BUILD_HWDEP_TRUE = @BUILD_HWDEP_TRUE@
-BUILD_INSTR_FALSE = @BUILD_INSTR_FALSE@
-BUILD_INSTR_TRUE = @BUILD_INSTR_TRUE@
 BUILD_MIXER_FALSE = @BUILD_MIXER_FALSE@
 BUILD_MIXER_TRUE = @BUILD_MIXER_TRUE@
 BUILD_MODULES_FALSE = @BUILD_MODULES_FALSE@
@@ -198,6 +196,8 @@ INSTALL_M4_TRUE = @INSTALL_M4_TRUE@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+KEEP_OLD_SYMBOLS_FALSE = @KEEP_OLD_SYMBOLS_FALSE@
+KEEP_OLD_SYMBOLS_TRUE = @KEEP_OLD_SYMBOLS_TRUE@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
@@ -283,7 +283,7 @@ target_cpu = @target_cpu@
 target_os = @target_os@
 target_vendor = @target_vendor@
 EXTRA_LTLIBRARIES = libcontrol.la
-libcontrol_la_SOURCES = cards.c namehint.c hcontrol.c control.c \
+libcontrol_la_SOURCES = cards.c tlv.c namehint.c hcontrol.c control.c \
 	control_hw.c setup.c control_symbols.c $(am__append_1) \
 	$(am__append_2)
 noinst_HEADERS = control_local.h
@@ -339,6 +339,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hcontrol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/namehint.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/setup.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tlv.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \

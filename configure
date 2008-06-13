@@ -877,6 +877,8 @@ SYMBOL_PREFIX
 BUILD_MODULES_TRUE
 BUILD_MODULES_FALSE
 ALSA_DEPLIBS
+KEEP_OLD_SYMBOLS_TRUE
+KEEP_OLD_SYMBOLS_FALSE
 PYTHON_LIBS
 PYTHON_INCLUDES
 BUILD_MIXER_TRUE
@@ -889,8 +891,6 @@ BUILD_HWDEP_TRUE
 BUILD_HWDEP_FALSE
 BUILD_SEQ_TRUE
 BUILD_SEQ_FALSE
-BUILD_INSTR_TRUE
-BUILD_INSTR_FALSE
 BUILD_ALISP_TRUE
 BUILD_ALISP_FALSE
 BUILD_PYTHON_TRUE
@@ -1562,6 +1562,8 @@ Optional Features:
   --enable-symbolic-functions
                           use -Bsymbolic-functions option if available
                           (optmization for size and speed)
+  --enable-debug          enable assert call at the default error message
+                          handler
   --enable-resmgr         support resmgr (optional)
   --disable-aload         disable reading /dev/aload*
   --disable-mixer         disable the mixer component
@@ -1569,8 +1571,8 @@ Optional Features:
   --disable-rawmidi       disable the raw MIDI component
   --disable-hwdep         disable the hwdep component
   --disable-seq           disable the sequencer component
-  --disable-instr         disable the instrument component
   --disable-alisp         disable the alisp component
+  --disable-old-symbols   disable old obsoleted symbols
   --disable-python        disable the python components
 
 Optional Packages:
@@ -1591,6 +1593,7 @@ Optional Packages:
                           (optional)
   --with-libdl            Use libdl for plugins (default = yes)
   --with-pthread          Use pthread (default = yes)
+  --with-librt            Use librt for monotonic clock (default = yes)
   --with-alsa-devdir=dir  directory with ALSA device files (default /dev/snd)
   --with-aload-devdir=dir directory with aload* device files (default /dev)
   --with-pythonlibs=ldflags
@@ -2483,7 +2486,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=alsa-lib
- VERSION=1.0.15
+ VERSION=1.0.16
 
 
 cat >>confdefs.h <<_ACEOF
@@ -4888,7 +4891,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 4891 "configure"' > conftest.$ac_ext
+  echo '#line 4894 "configure"' > conftest.$ac_ext
   if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -7589,11 +7592,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7592: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7595: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7596: \$? = $ac_status" >&5
+   echo "$as_me:7599: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7857,11 +7860,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7860: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7863: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7864: \$? = $ac_status" >&5
+   echo "$as_me:7867: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7961,11 +7964,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7964: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7967: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:7968: \$? = $ac_status" >&5
+   echo "$as_me:7971: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -10413,7 +10416,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10416 "configure"
+#line 10419 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -10513,7 +10516,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10516 "configure"
+#line 10519 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12881,11 +12884,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:12884: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:12887: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:12888: \$? = $ac_status" >&5
+   echo "$as_me:12891: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -12985,11 +12988,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:12988: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:12991: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:12992: \$? = $ac_status" >&5
+   echo "$as_me:12995: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -14555,11 +14558,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:14558: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:14561: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:14562: \$? = $ac_status" >&5
+   echo "$as_me:14565: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -14659,11 +14662,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:14662: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:14665: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:14666: \$? = $ac_status" >&5
+   echo "$as_me:14669: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -16889,11 +16892,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:16892: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:16895: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:16896: \$? = $ac_status" >&5
+   echo "$as_me:16899: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -17157,11 +17160,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:17160: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:17163: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:17164: \$? = $ac_status" >&5
+   echo "$as_me:17167: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -17261,11 +17264,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:17264: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:17267: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:17268: \$? = $ac_status" >&5
+   echo "$as_me:17271: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -20807,6 +20810,30 @@ _ACEOF
 echo "${ECHO_T}no" >&6; }
 fi
 
+if test "$debug" = "yes"; then
+  { echo "$as_me:$LINENO: checking for debug assert" >&5
+echo $ECHO_N "checking for debug assert... $ECHO_C" >&6; }
+  # Check whether --enable-debug-assert was given.
+if test "${enable_debug_assert+set}" = set; then
+  enableval=$enable_debug_assert; debug_assert="$enableval"
+else
+  debug_assert="no"
+fi
+
+  if test "$debug_assert" = "yes"; then
+    { echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6; }
+
+cat >>confdefs.h <<\_ACEOF
+#define ALSA_DEBUG_ASSERT
+_ACEOF
+
+  else
+    { echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6; }
+  fi
+fi
+
 { echo "$as_me:$LINENO: checking for tmpdir" >&5
 echo $ECHO_N "checking for tmpdir... $ECHO_C" >&6; }
 
@@ -21063,6 +21090,116 @@ fi
 
 cat >>confdefs.h <<\_ACEOF
 #define HAVE_LIBPTHREAD 1
+_ACEOF
+
+  fi
+else
+  { echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6; }
+fi
+
+{ echo "$as_me:$LINENO: checking for librt" >&5
+echo $ECHO_N "checking for librt... $ECHO_C" >&6; }
+
+# Check whether --with-librt was given.
+if test "${with_librt+set}" = set; then
+  withval=$with_librt;  have_librt="$withval"
+else
+   have_librt="yes"
+fi
+
+if test "$have_librt" = "yes"; then
+  { echo "$as_me:$LINENO: checking for clock_gettime in -lrt" >&5
+echo $ECHO_N "checking for clock_gettime in -lrt... $ECHO_C" >&6; }
+if test "${ac_cv_lib_rt_clock_gettime+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lrt  $LIBS"
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char clock_gettime ();
+int
+main ()
+{
+return clock_gettime ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (ac_try="$ac_link"
+case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+  (eval "$ac_link") 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag" || test ! -s conftest.err'
+  { (case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+  (eval "$ac_try") 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval "echo \"\$as_me:$LINENO: $ac_try_echo\"") >&5
+  (eval "$ac_try") 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_lib_rt_clock_gettime=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+	ac_cv_lib_rt_clock_gettime=no
+fi
+
+rm -f core conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ echo "$as_me:$LINENO: result: $ac_cv_lib_rt_clock_gettime" >&5
+echo "${ECHO_T}$ac_cv_lib_rt_clock_gettime" >&6; }
+if test $ac_cv_lib_rt_clock_gettime = yes; then
+  HAVE_LIBRT="yes"
+fi
+
+  if test "$HAVE_LIBRT" = "yes" ; then
+    ALSA_DEPLIBS="$ALSA_DEPLIBS -lrt"
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_LIBRT 1
+_ACEOF
+
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_CLOCK_GETTIME 1
 _ACEOF
 
   fi
@@ -21486,19 +21623,30 @@ else
   build_seq="yes"
 fi
 
-# Check whether --enable-instr was given.
-if test "${enable_instr+set}" = set; then
-  enableval=$enable_instr; build_instr="$enableval"
-else
-  build_instr="yes"
-fi
-
 # Check whether --enable-alisp was given.
 if test "${enable_alisp+set}" = set; then
   enableval=$enable_alisp; build_alisp="$enableval"
 else
   build_alisp="yes"
 fi
+
+# Check whether --enable-old-symbols was given.
+if test "${enable_old_symbols+set}" = set; then
+  enableval=$enable_old_symbols; keep_old_symbols="$enableval"
+else
+  keep_old_symbols="yes"
+fi
+
+
+
+if test x$keep_old_symbols = xyes; then
+  KEEP_OLD_SYMBOLS_TRUE=
+  KEEP_OLD_SYMBOLS_FALSE='#'
+else
+  KEEP_OLD_SYMBOLS_TRUE='#'
+  KEEP_OLD_SYMBOLS_FALSE=
+fi
+
 
 # Check whether --enable-python was given.
 if test "${enable_python+set}" = set; then
@@ -21538,10 +21686,6 @@ fi
 fi
 
 
-
-if test "$build_seq" != "yes"; then
-  build_instr="no"
-fi
 
 
 
@@ -21591,16 +21735,6 @@ if test x$build_seq = xyes; then
 else
   BUILD_SEQ_TRUE='#'
   BUILD_SEQ_FALSE=
-fi
-
-
-
-if test x$build_instr = xyes; then
-  BUILD_INSTR_TRUE=
-  BUILD_INSTR_FALSE='#'
-else
-  BUILD_INSTR_TRUE='#'
-  BUILD_INSTR_FALSE=
 fi
 
 
@@ -21656,13 +21790,6 @@ if test "$build_seq" = "yes"; then
 
 cat >>confdefs.h <<\_ACEOF
 #define BUILD_SEQ "1"
-_ACEOF
-
-fi
-if test "$build_instr" = "yes"; then
-
-cat >>confdefs.h <<\_ACEOF
-#define BUILD_INSTR "1"
 _ACEOF
 
 fi
@@ -22127,7 +22254,7 @@ if test ! -L "$srcdir"/include/alsa ; then
   ln -sf . "$srcdir"/include/alsa
 fi
 
-ac_config_files="$ac_config_files Makefile doc/Makefile doc/pictures/Makefile include/Makefile include/sound/Makefile src/Versions src/Makefile src/control/Makefile src/mixer/Makefile src/pcm/Makefile src/pcm/scopes/Makefile src/rawmidi/Makefile src/timer/Makefile src/hwdep/Makefile src/seq/Makefile src/instr/Makefile src/compat/Makefile src/alisp/Makefile src/conf/Makefile src/conf/cards/Makefile src/conf/pcm/Makefile modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile alsalisp/Makefile aserver/Makefile test/Makefile utils/Makefile utils/alsa-lib.spec utils/alsa.pc"
+ac_config_files="$ac_config_files Makefile doc/Makefile doc/pictures/Makefile include/Makefile include/sound/Makefile src/Versions src/Makefile src/control/Makefile src/mixer/Makefile src/pcm/Makefile src/pcm/scopes/Makefile src/rawmidi/Makefile src/timer/Makefile src/hwdep/Makefile src/seq/Makefile src/compat/Makefile src/alisp/Makefile src/conf/Makefile src/conf/cards/Makefile src/conf/pcm/Makefile modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile alsalisp/Makefile aserver/Makefile test/Makefile utils/Makefile utils/alsa-lib.spec utils/alsa.pc"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -22281,6 +22408,13 @@ echo "$as_me: error: conditional \"BUILD_MODULES\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${KEEP_OLD_SYMBOLS_TRUE}" && test -z "${KEEP_OLD_SYMBOLS_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"KEEP_OLD_SYMBOLS\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"KEEP_OLD_SYMBOLS\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 if test -z "${BUILD_MIXER_TRUE}" && test -z "${BUILD_MIXER_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"BUILD_MIXER\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -22313,13 +22447,6 @@ if test -z "${BUILD_SEQ_TRUE}" && test -z "${BUILD_SEQ_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"BUILD_SEQ\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 echo "$as_me: error: conditional \"BUILD_SEQ\" was never defined.
-Usually this means the macro was only invoked conditionally." >&2;}
-   { (exit 1); exit 1; }; }
-fi
-if test -z "${BUILD_INSTR_TRUE}" && test -z "${BUILD_INSTR_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"BUILD_INSTR\" was never defined.
-Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"BUILD_INSTR\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -23024,7 +23151,6 @@ do
     "src/timer/Makefile") CONFIG_FILES="$CONFIG_FILES src/timer/Makefile" ;;
     "src/hwdep/Makefile") CONFIG_FILES="$CONFIG_FILES src/hwdep/Makefile" ;;
     "src/seq/Makefile") CONFIG_FILES="$CONFIG_FILES src/seq/Makefile" ;;
-    "src/instr/Makefile") CONFIG_FILES="$CONFIG_FILES src/instr/Makefile" ;;
     "src/compat/Makefile") CONFIG_FILES="$CONFIG_FILES src/compat/Makefile" ;;
     "src/alisp/Makefile") CONFIG_FILES="$CONFIG_FILES src/alisp/Makefile" ;;
     "src/conf/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/Makefile" ;;
@@ -23266,6 +23392,8 @@ SYMBOL_PREFIX!$SYMBOL_PREFIX$ac_delim
 BUILD_MODULES_TRUE!$BUILD_MODULES_TRUE$ac_delim
 BUILD_MODULES_FALSE!$BUILD_MODULES_FALSE$ac_delim
 ALSA_DEPLIBS!$ALSA_DEPLIBS$ac_delim
+KEEP_OLD_SYMBOLS_TRUE!$KEEP_OLD_SYMBOLS_TRUE$ac_delim
+KEEP_OLD_SYMBOLS_FALSE!$KEEP_OLD_SYMBOLS_FALSE$ac_delim
 PYTHON_LIBS!$PYTHON_LIBS$ac_delim
 PYTHON_INCLUDES!$PYTHON_INCLUDES$ac_delim
 BUILD_MIXER_TRUE!$BUILD_MIXER_TRUE$ac_delim
@@ -23278,8 +23406,6 @@ BUILD_HWDEP_TRUE!$BUILD_HWDEP_TRUE$ac_delim
 BUILD_HWDEP_FALSE!$BUILD_HWDEP_FALSE$ac_delim
 BUILD_SEQ_TRUE!$BUILD_SEQ_TRUE$ac_delim
 BUILD_SEQ_FALSE!$BUILD_SEQ_FALSE$ac_delim
-BUILD_INSTR_TRUE!$BUILD_INSTR_TRUE$ac_delim
-BUILD_INSTR_FALSE!$BUILD_INSTR_FALSE$ac_delim
 BUILD_ALISP_TRUE!$BUILD_ALISP_TRUE$ac_delim
 BUILD_ALISP_FALSE!$BUILD_ALISP_FALSE$ac_delim
 BUILD_PYTHON_TRUE!$BUILD_PYTHON_TRUE$ac_delim
@@ -23995,7 +24121,5 @@ test "$build_seq" = "yes" && echo "#include <alsa/seq_event.h>" >> include/asoun
 test "$build_seq" = "yes" && echo "#include <alsa/seq.h>" >> include/asoundlib.h
 test "$build_seq" = "yes" && echo "#include <alsa/seqmid.h>" >> include/asoundlib.h
 test "$build_seq" = "yes" && echo "#include <alsa/seq_midi_event.h>" >> include/asoundlib.h
-test "$build_instr" = "yes" && echo "#include <alsa/conv.h>" >> include/asoundlib.h
-test "$build_instr" = "yes" && echo "#include <alsa/instr.h>" >> include/asoundlib.h
 cat "$srcdir"/include/asoundlib-tail.h >> include/asoundlib.h
 

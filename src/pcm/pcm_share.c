@@ -539,8 +539,7 @@ static int snd_pcm_share_hw_refine_schange(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_
 			      SND_PCM_HW_PARBIT_PERIOD_TIME |
 			      SND_PCM_HW_PARBIT_BUFFER_SIZE |
 			      SND_PCM_HW_PARBIT_BUFFER_TIME |
-			      SND_PCM_HW_PARBIT_PERIODS |
-			      SND_PCM_HW_PARBIT_TICK_TIME);
+			      SND_PCM_HW_PARBIT_PERIODS);
 	const snd_pcm_access_mask_t *access_mask = snd_pcm_hw_param_get_mask(params, SND_PCM_HW_PARAM_ACCESS);
 	if (!snd_pcm_access_mask_test(access_mask, SND_PCM_ACCESS_RW_INTERLEAVED) &&
 	    !snd_pcm_access_mask_test(access_mask, SND_PCM_ACCESS_RW_NONINTERLEAVED) &&
@@ -570,8 +569,7 @@ static int snd_pcm_share_hw_refine_cchange(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_
 			      SND_PCM_HW_PARBIT_PERIOD_TIME |
 			      SND_PCM_HW_PARBIT_BUFFER_SIZE |
 			      SND_PCM_HW_PARBIT_BUFFER_TIME |
-			      SND_PCM_HW_PARBIT_PERIODS |
-			      SND_PCM_HW_PARBIT_TICK_TIME);
+			      SND_PCM_HW_PARBIT_PERIODS);
 	snd_pcm_access_mask_t access_mask;
 	const snd_pcm_access_mask_t *saccess_mask = snd_pcm_hw_param_get_mask(sparams, SND_PCM_HW_PARAM_ACCESS);
 	snd_pcm_access_mask_any(&access_mask);
@@ -639,11 +637,6 @@ static int snd_pcm_share_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			goto _err;
 		err = _snd_pcm_hw_param_set(params, SND_PCM_HW_PARAM_BUFFER_SIZE,
 					    spcm->buffer_size, 0);
-		if (err < 0)
-			goto _err;
-		err = _snd_pcm_hw_param_set_minmax(params, SND_PCM_HW_PARAM_TICK_TIME,
-						   spcm->tick_time, 0,
-						   spcm->tick_time, 1);
 	_err:
 		if (err < 0) {
 			SNDERR("slave is already running with incompatible setup");
@@ -805,6 +798,18 @@ static snd_pcm_sframes_t snd_pcm_share_avail_update(snd_pcm_t *pcm)
 	return avail;
 }
 
+static int snd_pcm_share_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
+				    snd_htimestamp_t *tstamp)
+{
+	snd_pcm_share_t *share = pcm->private_data;
+	snd_pcm_share_slave_t *slave = share->slave;
+	int err;
+	Pthread_mutex_lock(&slave->mutex);
+	err = snd_pcm_htimestamp(slave->pcm, avail, tstamp);
+	Pthread_mutex_unlock(&slave->mutex);
+	return err;
+}
+
 /* Call it with mutex held */
 static snd_pcm_sframes_t _snd_pcm_share_mmap_commit(snd_pcm_t *pcm,
 						    snd_pcm_uframes_t offset ATTRIBUTE_UNUSED,
@@ -914,7 +919,6 @@ static int snd_pcm_share_start(snd_pcm_t *pcm)
 	snd_pcm_share_t *share = pcm->private_data;
 	snd_pcm_share_slave_t *slave = share->slave;
 	snd_pcm_t *spcm = slave->pcm;
-	struct timeval tv;
 	int err = 0;
 	if (share->state != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
@@ -970,9 +974,7 @@ static int snd_pcm_share_start(snd_pcm_t *pcm)
 	}
 	slave->running_count++;
 	_snd_pcm_share_update(pcm);
-	gettimeofday(&tv, 0);
-	share->trigger_tstamp.tv_sec = tv.tv_sec;
-	share->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+	gettimestamp(&share->trigger_tstamp, pcm->monotonic);
  _end:
 	Pthread_mutex_unlock(&slave->mutex);
 	return err;
@@ -1099,16 +1101,13 @@ static void _snd_pcm_share_stop(snd_pcm_t *pcm, snd_pcm_state_t state)
 {
 	snd_pcm_share_t *share = pcm->private_data;
 	snd_pcm_share_slave_t *slave = share->slave;
-	struct timeval tv;
 #if 0
 	if (!pcm->mmap_channels) {
 		/* PCM closing already begun in the main thread */
 		return;
 	}
 #endif
-	gettimeofday(&tv, 0);
-	share->trigger_tstamp.tv_sec = tv.tv_sec;
-	share->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+	gettimestamp(&share->trigger_tstamp, pcm->monotonic);
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE) {
 		snd_pcm_areas_copy(pcm->stopped_areas, 0,
 				   pcm->running_areas, 0,
@@ -1321,6 +1320,7 @@ static snd_pcm_fast_ops_t snd_pcm_share_fast_ops = {
 	.forward = snd_pcm_share_forward,
 	.resume = snd_pcm_share_resume,
 	.avail_update = snd_pcm_share_avail_update,
+	.htimestamp = snd_pcm_share_htimestamp,
 	.mmap_commit = snd_pcm_share_mmap_commit,
 };
 
@@ -1505,6 +1505,7 @@ int snd_pcm_share_open(snd_pcm_t **pcmp, const char *name, const char *sname,
 	pcm->private_data = share;
 	pcm->poll_fd = share->client_socket;
 	pcm->poll_events = stream == SND_PCM_STREAM_PLAYBACK ? POLLOUT : POLLIN;
+	pcm->monotonic = pcm->monotonic;
 	snd_pcm_set_hw_ptr(pcm, &share->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &share->appl_ptr, -1, 0);
 
