@@ -1,3 +1,42 @@
+alsa-lib (1.0.17a-0ubuntu1) intrepid; urgency=low
+
+  * New upstream release.
+  * Merge from Debian experimental.
+  * Packaging
+    + debian/libasound2.p{ostinst,rerm}: Install,remove update-notifier
+      file, respectively;
+    + debian/user-must-execute-asoundconf-set-default-card.update-notifier:
+      Tighten Display test;
+    + debian/control: Add Vcs-Bzr URI.
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Fri, 22 Aug 2008 12:39:52 +1000
+
+alsa-lib (1.0.17-1) experimental; urgency=low
+
+  [ Elimar Riesebieter ]
+  * New upstream release.
+    - The "let's cleanup fixed bugs" release ;)
+    (closes: #473384, #372735, #302227, #342026, #257797, #335046, #312577)
+    (closes: #456643, #274951, #275573, #289206, #317426, #356049, #369530)
+    (closes: #400268, #469641, #470568, #470865, #383054, #477991, #407641)
+  * Removed patches as they are not needed anymore:
+    - aclocal_libs_fix.patch
+    - alpha_versioned_symbols.patch
+    - dmix_first_set_fix.patch
+    - doxygen_links.patch
+  * Reorganized relibtoolise.patch
+  * Switched to debhelper 7.
+  * Bumped Standard-Version to 3.8.0; no changes needed.
+  * libasound2-doc.doc-base: s/\/Apps//
+
+  [ Jordi Mallach ]
+  * Bump shlibs to 1.0.17, as new symbols have been added.
+  * Target experimental, due to lenny freeze and the shlibs bump which could
+    interfere.
+  * Add lpia to supported arches for libasound2 and libasound2-dev.
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 24 Jul 2008 22:22:44 +0200
+
 alsa-lib (1.0.16-2ubuntu1) intrepid; urgency=low
 
   * Merge from Debian unstable.

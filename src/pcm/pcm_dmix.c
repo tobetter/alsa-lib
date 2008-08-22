@@ -311,9 +311,9 @@ static void snd_pcm_dmix_sync_area(snd_pcm_t *pcm)
 	if (size >= pcm->boundary / 2)
 		size = pcm->boundary - size;
 
-	/* the slave_app_ptr can be far behing the slave_hw_ptr */
+	/* the slave_app_ptr can be far behind the slave_hw_ptr */
 	/* reduce mixing and errors here - just skip not catched writes */
-	if (dmix->slave_hw_ptr < dmix->slave_appl_ptr)
+	if (dmix->slave_hw_ptr <= dmix->slave_appl_ptr)
 		slave_size = dmix->slave_appl_ptr - dmix->slave_hw_ptr;
 	else
 		slave_size = dmix->slave_appl_ptr + (dmix->slave_boundary - dmix->slave_hw_ptr);
@@ -649,6 +649,11 @@ static int snd_pcm_dmix_pause(snd_pcm_t *pcm ATTRIBUTE_UNUSED, int enable ATTRIB
 	return -EIO;
 }
 
+static snd_pcm_sframes_t snd_pcm_dmix_rewindable(snd_pcm_t *pcm)
+{
+	return snd_pcm_mmap_hw_avail(pcm);
+}
+
 static snd_pcm_sframes_t snd_pcm_dmix_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
@@ -721,6 +726,11 @@ static snd_pcm_sframes_t snd_pcm_dmix_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t f
 	snd_pcm_mmap_appl_backward(pcm, frames);
 
 	return result + frames;
+}
+
+static snd_pcm_sframes_t snd_pcm_dmix_forwardable(snd_pcm_t *pcm)
+{
+	return snd_pcm_mmap_avail(pcm);
 }
 
 static snd_pcm_sframes_t snd_pcm_dmix_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
@@ -885,7 +895,9 @@ static snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
 	.drop = snd_pcm_dmix_drop,
 	.drain = snd_pcm_dmix_drain,
 	.pause = snd_pcm_dmix_pause,
+	.rewindable = snd_pcm_dmix_rewindable,
 	.rewind = snd_pcm_dmix_rewind,
+	.forwardable = snd_pcm_dmix_forwardable,
 	.forward = snd_pcm_dmix_forward,
 	.resume = snd_pcm_direct_resume,
 	.link = NULL,
