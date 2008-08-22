@@ -879,6 +879,7 @@ int snd_pcm_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 	pcm->tstamp_mode = params->tstamp_mode;
 	pcm->period_step = params->period_step;
 	pcm->avail_min = params->avail_min;
+	pcm->period_event = params->period_event;
 	pcm->start_threshold = params->start_threshold;
 	pcm->stop_threshold = params->stop_threshold;
 	pcm->silence_threshold = params->silence_threshold;
@@ -1112,6 +1113,25 @@ int snd_pcm_pause(snd_pcm_t *pcm, int enable)
 }
 
 /**
+ * \brief Get safe count of frames which can be rewinded
+ * \param pcm PCM handle
+ * \return a positive number of frames or negative error code
+ *
+ * Note: The snd_pcm_rewind() can accept bigger value than returned
+ * by this function. But it is not guaranteed that output stream
+ * will be consistent with bigger value.
+ */
+snd_pcm_sframes_t snd_pcm_rewindable(snd_pcm_t *pcm)
+{
+	assert(pcm);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	return pcm->fast_ops->rewindable(pcm->fast_op_arg);
+}
+
+/**
  * \brief Move application frame position backward
  * \param pcm PCM handle
  * \param frames wanted displacement in frames
@@ -1128,6 +1148,25 @@ snd_pcm_sframes_t snd_pcm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 	if (frames == 0)
 		return 0;
 	return pcm->fast_ops->rewind(pcm->fast_op_arg, frames);
+}
+
+/**
+ * \brief Get safe count of frames which can be forwarded
+ * \param pcm PCM handle
+ * \return a positive number of frames or negative error code
+ *
+ * Note: The snd_pcm_forward() can accept bigger value than returned
+ * by this function. But it is not guaranteed that output stream
+ * will be consistent with bigger value.
+ */
+snd_pcm_sframes_t snd_pcm_forwardable(snd_pcm_t *pcm)
+{
+	assert(pcm);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	return pcm->fast_ops->forwardable(pcm->fast_op_arg);
 }
 
 /**
@@ -1809,6 +1848,7 @@ int snd_pcm_dump_sw_setup(snd_pcm_t *pcm, snd_output_t *out)
 	snd_output_printf(out, "  tstamp_mode  : %s\n", snd_pcm_tstamp_mode_name(pcm->tstamp_mode));
 	snd_output_printf(out, "  period_step  : %d\n", pcm->period_step);
 	snd_output_printf(out, "  avail_min    : %ld\n", pcm->avail_min);
+	snd_output_printf(out, "  period_event : %i\n", pcm->period_event);
 	snd_output_printf(out, "  start_threshold  : %ld\n", pcm->start_threshold);
 	snd_output_printf(out, "  stop_threshold   : %ld\n", pcm->stop_threshold);
 	snd_output_printf(out, "  silence_threshold: %ld\n", pcm->silence_threshold);
@@ -2345,16 +2385,13 @@ int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout)
 #endif
 
 /**
- * \brief Return number of frames ready to be read/written
+ * \brief Return number of frames ready to be read (capture) / written (playback)
  * \param pcm PCM handle
  * \return a positive number of frames ready otherwise a negative
  * error code
  *
  * On capture does all the actions needed to transport to application
  * level all the ready frames across underlying layers.
- *
- * Using of this function is useless for the standard read/write
- * operations. Use it only for mmap access. See to #snd_pcm_delay.
  */
 snd_pcm_sframes_t snd_pcm_avail_update(snd_pcm_t *pcm)
 {
@@ -2809,6 +2846,27 @@ int snd_pcm_hw_params_is_block_transfer(const snd_pcm_hw_params_t *params)
 		return 0; /* FIXME: should be a negative error? */
 	}
 	return !!(params->info & SNDRV_PCM_INFO_BLOCK_TRANSFER);
+}
+
+/**
+ * \brief Check, if timestamps are monotonic for given configuration
+ * \param params Configuration space
+ * \return Boolean value
+ * \retval 0 Device doesn't do monotomic timestamps
+ * \retval 1 Device does monotonic timestamps
+ *
+ * It is not allowed to call this function when given configuration is not exactly one.
+ * Usually, #snd_pcm_hw_params() function chooses one configuration
+ * from the configuration space.
+ */
+int snd_pcm_hw_params_is_monotonic(const snd_pcm_hw_params_t *params)
+{
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
+	return !!(params->info & SND_PCM_INFO_MONOTONIC);
 }
 
 /**
@@ -5305,6 +5363,7 @@ int snd_pcm_sw_params_current(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 	params->period_step = pcm->period_step;
 	params->sleep_min = 0;
 	params->avail_min = pcm->avail_min;
+	params->period_event = pcm->period_event;
 	params->xfer_align = 1;
 	params->start_threshold = pcm->start_threshold;
 	params->stop_threshold = pcm->stop_threshold;
@@ -5600,6 +5659,34 @@ int snd_pcm_sw_params_get_avail_min(const snd_pcm_sw_params_t *params, snd_pcm_u
 	return 0;
 }
 
+/**
+ * \brief Set period event inside a software configuration container
+ * \param pcm PCM handle
+ * \param params Software configuration container
+ * \param val 0 = disable period event, 1 = enable period event
+ * \return 0 otherwise a negative error code
+ *
+ * An poll (select) wakeup event is raised if enabled.
+ */
+int snd_pcm_sw_params_set_period_event(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, int val)
+{
+	assert(pcm && params);
+	params->period_event = val;
+	return 0;
+}
+
+/**
+ * \brief Get period event from a software configuration container
+ * \param params Software configuration container
+ * \param val returned period event state
+ * \return 0 otherwise a negative error code
+ */
+int snd_pcm_sw_params_get_period_event(const snd_pcm_sw_params_t *params, int *val)
+{
+	assert(params && val);
+	*val = params->period_event;
+	return 0;
+}
 
 /**
  * \brief (DEPRECATED) Set xfer align inside a software configuration container
@@ -5882,6 +5969,10 @@ snd_pcm_state_t snd_pcm_status_get_state(const snd_pcm_status_t *obj)
  * \brief Get trigger timestamp from a PCM status container
  * \param obj #snd_pcm_status_t pointer
  * \param ptr Pointer to returned timestamp
+ *
+ * Trigger means a PCM state transition (from stopped to running or
+ * versa vice). It applies also to pause and suspend. In other words,
+ * timestamp contains time when stream started or when it was stopped.
  */
 void snd_pcm_status_get_trigger_tstamp(const snd_pcm_status_t *obj, snd_timestamp_t *ptr)
 {
@@ -5894,6 +5985,10 @@ void snd_pcm_status_get_trigger_tstamp(const snd_pcm_status_t *obj, snd_timestam
  * \brief Get trigger hi-res timestamp from a PCM status container
  * \param obj #snd_pcm_status_t pointer
  * \param ptr Pointer to returned timestamp
+ *
+ * Trigger means a PCM state transition (from stopped to running or
+ * versa vice). It applies also to pause and suspend. In other words,
+ * timestamp contains time when stream started or when it was stopped.
  */
 #ifndef DOXYGEN
 void INTERNAL(snd_pcm_status_get_trigger_htstamp)(const snd_pcm_status_t *obj, snd_htimestamp_t *ptr)

@@ -278,7 +278,8 @@ target_vendor = @target_vendor@
 SUBDIRS = cards pcm
 cfg_files = alsa.conf $(am__append_1) $(am__append_2)
 EXTRA_DIST = $(cfg_files)
-alsadir = @ALSA_CONFIG_DIR@
+alsaconfigdir = @ALSA_CONFIG_DIR@
+alsadir = $(alsaconfigdir)
 alsa_DATA = $(cfg_files)
 all: all-recursive
 
