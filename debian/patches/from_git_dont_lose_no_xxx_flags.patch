@@ -1,0 +1,48 @@
+commit 73d20069e072e2b62bbc3ea12e46ae19d8b6cac9
+Author: Lennart Poettering <mznyfn@0pointer.de>
+Date:   Sun Aug 31 03:41:48 2008 +0200
+
+    alsa-lib: Make sure SND_PCM_NO_xxx flags don't get lost when nonblocking mode is enabled
+    
+    The plug PCM copies the 'mode' field from the slave PCM. If blocking mode is
+    enabled for the plug PCM the mode is subsequently overwritten with the original
+    requested 'mode'. If non-blocking mode is requested this does not happen.
+    
+    Because the hw PCM synthesizes the 'mode' from the actual file descriptor flags
+    no SND_PCM_NO_xxx will ever be set for it. This has the effect that the 'mode'
+    of the plug PCM will also not include those flags anymore -- unless they are
+    overwritten as mentioned above. This basically means SND_PCM_NO_xxx is ignored
+    for plug:hw:4711 style device strings opened in non-blocking mode.
+    
+    You can easily test this with "aplay --channels 7 --disable-channels -f S16_LE
+    -r 44100 -D plug:hw:0" on a device that cannot do 7 channels. Normally this
+    call should fail, however if you add "-N" to the command line this call will
+    succeed.
+    
+    This patch simply copies the SND_PCM_NO_xxx flags back into the 'mode' field in
+    case we don't overwrite it with the original anyway.
+    
+    Probably closes bug 3571 for good.
+    
+    From: Lennart Poettering <mznyfn@0pointer.de>
+    Signed-off-by: Jaroslav Kysela <perex@perex.cz>
+
+diff --git a/src/pcm/pcm_hw.c b/src/pcm/pcm_hw.c
+index 1e1889c..c8d9a62 100644
+--- a/src/pcm/pcm_hw.c
++++ b/src/pcm/pcm_hw.c
+@@ -1507,7 +1507,13 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
+ 		/* revert to blocking mode for read/write access */
+ 		snd_pcm_hw_nonblock(*pcmp, 0);
+ 		(*pcmp)->mode = mode;
+-	}
++	} else
++		/* make sure the SND_PCM_NO_xxx flags don't get lost on the
++		 * way */
++		(*pcmp)->mode |= mode & (SND_PCM_NO_AUTO_RESAMPLE|
++					 SND_PCM_NO_AUTO_CHANNELS|
++					 SND_PCM_NO_AUTO_FORMAT|
++					 SND_PCM_NO_SOFTVOL);
+ 
+ 	hw = (*pcmp)->private_data;
+ 	if (format != SND_PCM_FORMAT_UNKNOWN)

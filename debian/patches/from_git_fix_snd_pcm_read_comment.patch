@@ -1,0 +1,31 @@
+commit 1dd1ba94a3deced59f3a699583242b641b4d3771
+Author: Jaroslav Kysela <perex@perex.cz>
+Date:   Tue Sep 9 19:56:17 2008 +0200
+
+    Fix comment typos for snd_pcm_read[in]()
+    
+    From: William Estrada <MrUmunhum@popdial.com>
+    Signed-off-by: Jaroslav Kysela <perex@perex.cz>
+
+diff --git a/src/pcm/pcm.c b/src/pcm/pcm.c
+index a0cc2e0..59e433f 100644
+--- a/src/pcm/pcm.c
++++ b/src/pcm/pcm.c
+@@ -1279,7 +1279,7 @@ snd_pcm_sframes_t snd_pcm_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t
+  * \brief Read interleaved frames from a PCM
+  * \param pcm PCM handle
+  * \param buffer frames containing buffer
+- * \param size frames to be written
++ * \param size frames to be read
+  * \return a positive number of frames actually read otherwise a
+  * negative error code
+  * \retval -EBADFD PCM is not in the right state (#SND_PCM_STATE_PREPARED or #SND_PCM_STATE_RUNNING)
+@@ -1311,7 +1311,7 @@ snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t
+  * \brief Read non interleaved frames to a PCM
+  * \param pcm PCM handle
+  * \param bufs frames containing buffers (one for each channel)
+- * \param size frames to be written
++ * \param size frames to be read
+  * \return a positive number of frames actually read otherwise a
+  * negative error code
+  * \retval -EBADFD PCM is not in the right state (#SND_PCM_STATE_PREPARED or #SND_PCM_STATE_RUNNING)
