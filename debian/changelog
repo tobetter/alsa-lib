@@ -1,3 +1,11 @@
+alsa-lib (1.0.17a-0ubuntu3) intrepid; urgency=low
+
+  * Revert below patches due to 100% CPU usage with amarok: (LP: #273645)
+    - from_git_dont_lose_no_xxx_flags.patch
+    - from_git_remove_access_type_change_for_refine.patch
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Wed, 24 Sep 2008 11:04:22 +1000
+
 alsa-lib (1.0.17a-0ubuntu2) intrepid; urgency=low
 
   * Some fixes from alsa-lib git (no API/ABI changes):
