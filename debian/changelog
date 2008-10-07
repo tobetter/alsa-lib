@@ -1,3 +1,20 @@
+alsa-lib (1.0.17a-0ubuntu4) intrepid; urgency=low
+
+  [ Mario Limonciello ]
+  * debian/patches/bluetooth_configuration.patch:
+    - Adds a pointer to the bluetooth configuration file.
+      If a user has bluez-audio installed and a heaset paired
+      this will allow them to use a headset by the name of
+      "headset" (LP: #274950)
+
+  [ Luke Yelavich ]
+  * Add files to /etc/ld.so.conf.d for libasound2 and libasound2 bi-arch
+    packages. This Allows for alsa plugins to be referred to in alsa
+    configuration files without the need for absolute paths, the pulseaudio
+    runtime check is one such example. (LP: #273693)
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Tue, 07 Oct 2008 17:49:28 +1100
+
 alsa-lib (1.0.17a-0ubuntu3) intrepid; urgency=low
 
   * Revert below patches due to 100% CPU usage with amarok: (LP: #273645)
