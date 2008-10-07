@@ -123,10 +123,14 @@ ifneq (,$(build_biarch_stamp))
 	sed -e "/^libdir=/s,=.*,='/$(bilibdir)'," \
 	  debian/bitmp/usr/lib/libasound.la \
 	    > debian/lib$(bi)asound2-dev/$(bilibdir)/libasound.la
+	mkdir -p debian/lib$(bi)asound2/etc/ld.so.conf.d
+	echo "/$(bilibdir)/alsa-lib" > debian/lib$(bi)asound2/etc/ld.so.conf.d/lib$(bi)asound2.conf
 #	sed -e "/^libdir=.*lib$$/s,=.*,=/$(bilibdir)," \
 #	  debian/bitmp/usr/lib/pkgconfig/alsa.pc \
 #	    > debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig/alsa.pc
 endif
+	mkdir -p debian/libasound2/etc/ld.so.conf.d
+	echo "/usr/lib/alsa-lib" > debian/libasound2/etc/ld.so.conf.d/libasound2.conf
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2

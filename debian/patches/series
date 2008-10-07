@@ -6,3 +6,4 @@ from_git_dont_call_simple_mixer_interface_legacy.patch
 from_git_fix_snd_pcm_read_comment.patch
 from_git_fix_async_callback_error_messages.patch
 pulseaudio_configuration.patch
+bluetooth_configuration.patch
