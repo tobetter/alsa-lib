@@ -111,10 +111,13 @@ install-arch: build-arch-stamp
 ifneq (,$(build_biarch_stamp))
 	rm -rf debian/bitmp
 	$(MAKE) -C bibuild/src install DESTDIR=$(CURDIR)/debian/bitmp
-	mkdir -p debian/lib$(bi)asound2/$(bilibdir)
+	$(MAKE) -C bibuild/modules install DESTDIR=$(CURDIR)/debian/bitmp
+	mkdir -p debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
 	cp -a debian/bitmp/usr/lib/libasound.so.* \
 	    debian/lib$(bi)asound2/$(bilibdir)/
-	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)
+	cp -a debian/bitmp/$(bilibdir)/alsa-lib/smixer/*.so \
+	    debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
+	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/alsa-lib/smixer
 #	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig
 	cp -a \
 	  debian/bitmp/usr/lib/libasound.so \
@@ -158,9 +161,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.18)'
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.18)' --exclude=usr/lib/alsa-lib/smixer
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.18)'
+	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.18)' --exclude=usr/lib$(bi)/alsa-lib/smixer
 endif
 
 	dh_installdeb -s
