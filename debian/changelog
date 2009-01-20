@@ -1,3 +1,16 @@
+alsa-lib (1.0.18-1ubuntu3) jaunty; urgency=low
+
+  * Backport fixes from 1.0.19:
+    - fix_vol_switch_updates.patch,
+    - use_linear_plug_for_ice1724.patch,
+    - fix_uninitialised_type-conf.patch,
+    - fix_softvol_outside_plug.patch,
+    - fix_softvol_access.patch,
+    - fix_alsa-config-patch_check.patch,
+    - add_softvol_for_cmi8788.patch
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Mon, 19 Jan 2009 23:38:43 -0500
+
 alsa-lib (1.0.18-1ubuntu2) jaunty; urgency=low
 
   * debian/libasound2.install: Ship smixer plugins located in

@@ -3,3 +3,10 @@ add-maintainer-mode.patch
 configure_cross_compile.patch
 pulseaudio_configuration.patch
 bluetooth_configuration.patch
+fix_vol_switch_updates.patch
+use_linear_plug_for_ice1724.patch
+fix_uninitialised_type-conf.patch
+fix_softvol_outside_plug.patch
+fix_softvol_access.patch
+fix_alsa-config-patch_check.patch
+add_softvol_for_cmi8788.patch
