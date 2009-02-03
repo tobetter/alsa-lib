@@ -10,3 +10,8 @@ fix_softvol_outside_plug.patch
 fix_softvol_access.patch
 fix_alsa-config-patch_check.patch
 add_softvol_for_cmi8788.patch
+fix_missing_ldl_modules_mixer_simple.patch
+fix_gus_conf.patch
+fix_plug_conv_mmap_emul.patch
+fix_off-t_mmap_offset.patch
+strict_revents.patch
