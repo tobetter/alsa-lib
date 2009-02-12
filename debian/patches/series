@@ -15,3 +15,5 @@ fix_gus_conf.patch
 fix_plug_conv_mmap_emul.patch
 fix_off-t_mmap_offset.patch
 strict_revents.patch
+fix_unhandled_pcm_access_cases.patch
+pcm-set-params-doc.patch
