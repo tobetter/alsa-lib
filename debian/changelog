@@ -1,3 +1,10 @@
+alsa-lib (1.0.18-1ubuntu6) jaunty; urgency=low
+
+  * Backport fix from git HEAD for non-zero device number on
+    HDA codecs' digital stream
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sat, 14 Feb 2009 01:28:26 -0500
+
 alsa-lib (1.0.18-1ubuntu5) jaunty; urgency=low
 
   * Backport fixes from git HEAD:
