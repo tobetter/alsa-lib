@@ -1,3 +1,10 @@
+alsa-lib (1.0.18-1ubuntu7) jaunty; urgency=low
+
+  * Backport fix from git HEAD for validating numid of external
+    plugins (also requires alsa-plugins update)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Tue, 17 Feb 2009 16:34:39 -0500
+
 alsa-lib (1.0.18-1ubuntu6) jaunty; urgency=low
 
   * Backport fix from git HEAD for non-zero device number on
