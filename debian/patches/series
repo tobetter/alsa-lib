@@ -18,3 +18,4 @@ strict_revents.patch
 fix_unhandled_pcm_access_cases.patch
 pcm-set-params-doc.patch
 handle_hda_nonzero_digital_dev_no.patch
+validate_optimise_ext_ctl_plug.patch
