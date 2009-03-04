@@ -56,7 +56,7 @@ configure-stamp: debian/stamp-patched $(configure_biarch_stamp)
 		    --mandir=\$${prefix}/share/man \
 		    --infodir=\$${prefix}/share/info \
 		    --datadir=\$${prefix}/share \
-		    --build=$(DEB_BUILD_GNU_TYPE) \
+		    --build $(DEB_BUILD_GNU_TYPE) \
 		    --enable-static --disable-maintainer-mode
 	touch configure-stamp
 
@@ -72,7 +72,7 @@ configure-biarch-stamp: debian/stamp-patched
 		    --mandir=\$${prefix}/share/man \
 		    --infodir=\$${prefix}/share/info \
 		    --datadir=\$${prefix}/share \
-		    --host=$(DEB_HOST_GNU_TYPE) \
+		    --build $(DEB_BUILD_GNU_TYPE) \
 		    --enable-static --disable-maintainer-mode \
 		    --disable-python --with-plugindir=/$(bilibdir)/alsa-lib
 	#ln -sf . include/alsa
@@ -134,7 +134,7 @@ endif
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2
-	dh_installexamples -s
+	dh_installexamples -s doc/asoundrc.txt
 	dh_installchangelogs -plibasound2 debian/changelog.ALSA
 	install -D -p -m 0644 -o root -g root debian/lib64asound2.lintian-overrides \
 		debian/lib64asound2/usr/share/lintian/overrides/lib64asound2
@@ -158,9 +158,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.16)'
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.18)'
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.16)'
+	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.18)'
 endif
 
 	dh_installdeb -s
