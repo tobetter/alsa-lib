@@ -1,3 +1,61 @@
+alsa-lib (1.0.19-1) unstable; urgency=low
+
+  * New upstream release.
+  * Upload to unstable.
+
+  [ Elimar Riesebieter ]
+  * Install asoundrc.txt as an example. (closes: #505090)
+  * Added libcxxtools-dev to Build-Depends
+
+  [ Jordi Mallach ]
+  * Change configure calls to use --build instead of --host to correct
+    the biarch build for alsa-lib. Thanks to Andreas Metzler and
+    Neil Williams for the advice (closes: #516585).
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 04 Mar 2009 01:44:12 +0100
+
+alsa-lib (1.0.18-1) experimental; urgency=low
+
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Improve libasound2's short description following suggestions by
+    Dan Chen and Barry deFreese. Thanks! (closes: #493512)
+
+  [ Elimar Riesebieter ]
+  * Shorten new short descriptions in debian/control. (closes: #493512)
+  * Pulseaudio 0.9.11 should be supported now. (closes: #499597)
+  * Bump shlibs to 1.0.18, as new symbols have been added.
+    - Adjusted suggested libasound2-plugins versions to 1.0.18.
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 05 Nov 2008 21:17:55 +0100
+
+alsa-lib (1.0.17-1) experimental; urgency=low
+
+  [ Elimar Riesebieter ]
+  * New upstream release.
+    - The "let's cleanup fixed bugs" release ;)
+    (closes: #473384, #372735, #302227, #342026, #257797, #335046, #312577)
+    (closes: #456643, #274951, #275573, #289206, #317426, #356049, #369530)
+    (closes: #400268, #469641, #470568, #470865, #383054, #477991, #407641)
+  * Removed patches as they are not needed anymore:
+    - aclocal_libs_fix.patch
+    - alpha_versioned_symbols.patch
+    - dmix_first_set_fix.patch
+    - doxygen_links.patch
+  * Reorganized relibtoolise.patch
+  * Switched to debhelper 7.
+  * Bumped Standard-Version to 3.8.0; no changes needed.
+  * libasound2-doc.doc-base: s/\/Apps//
+
+  [ Jordi Mallach ]
+  * Bump shlibs to 1.0.17, as new symbols have been added.
+  * Target experimental, due to lenny freeze and the shlibs bump which could
+    interfere.
+  * Add lpia to supported arches for libasound2 and libasound2-dev.
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 24 Jul 2008 22:22:44 +0200
+
 alsa-lib (1.0.16-2) unstable; urgency=medium
 
   [ Elimar Riesebieter ]
