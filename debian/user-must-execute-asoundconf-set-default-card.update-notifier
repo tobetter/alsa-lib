@@ -2,7 +2,7 @@ Name: Refresh Advanced Linux Sound Architecture (ALSA) configuration presets
 Priority: High
 Terminal: True
 DontShowAfterReboot: False
-DisplayIf: ! pgrep -x pulseaudio -U $(id -u) > /dev/null && [ -f ~/.asoundrc.asoundconf ] && asoundconf is-active
+DisplayIf: [ -z "$GNOME_DESKTOP_SESSION_ID" ]
 Description: New Advanced Linux Sound Architecture (ALSA) configuration presets
  have been added.  Please execute the asoundconf(1) set-default-card macro in
  a Terminal now to refresh your user's configuration presets.  You may
