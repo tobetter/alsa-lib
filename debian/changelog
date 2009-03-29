@@ -1,3 +1,10 @@
+alsa-lib (1.0.18-1ubuntu9) jaunty; urgency=low
+
+  * Don't display notifier hint if ~/.asoundrc and
+    ~/.asoundrc.asoundconf aren't writable, either
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 29 Mar 2009 18:10:58 -0400
+
 alsa-lib (1.0.18-1ubuntu8) jaunty; urgency=low
 
   * Don't display notifier hint if in GNOME (LP: #328245)
