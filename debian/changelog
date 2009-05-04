@@ -1,3 +1,9 @@
+alsa-lib (1.0.19-1ubuntu2) karmic; urgency=low
+
+  * debian/control: drop libcxxtools-dev build dependency. Its in universe.
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Mon, 04 May 2009 15:34:10 +1000
+
 alsa-lib (1.0.19-1ubuntu1) karmic; urgency=low
 
   * Merge from debian unstable, remaining changes:
