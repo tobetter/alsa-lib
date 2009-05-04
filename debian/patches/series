@@ -1,3 +1,5 @@
 relibtoolise.patch
 add-maintainer-mode.patch
 configure_cross_compile.patch
+pulseaudio_configuration.patch
+bluetooth_configuration.patch
