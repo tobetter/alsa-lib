@@ -1,7 +1,8 @@
 Source: alsa-lib
 Section: libs
 Priority: optional
-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
+Maintainer: Ubuntu Core Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
 Uploaders: Jordi Mallach <jordi@debian.org>, Mikael Magnusson <mikma@users.sourceforge.net>, Elimar Riesebieter <riesebie@lxtec.de>
 Build-Depends: debhelper (>= 7),
                quilt (>= 0.40),
@@ -22,6 +23,7 @@ Standards-Version: 3.8.0
 Homepage: http://www.alsa-project.org/
 Vcs-Svn: svn://svn.debian.org/pkg-alsa/trunk/alsa-lib
 Vcs-Browser: http://svn.debian.org/wsvn/pkg-alsa/trunk/alsa-lib/
+Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-core-dev/alsa-lib/ubuntu.new
 
 Package: libasound2
 Architecture: alpha amd64 arm armeb armel hppa i386 ia64 lpia m32r m68k mips mipsel powerpc ppc64 s390 s390x sh3 sh3eb sh4 sh4eb sparc
