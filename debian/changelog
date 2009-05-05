@@ -1,3 +1,9 @@
+alsa-lib (1.0.19-1ubuntu3) karmic; urgency=low
+
+  * re-add patch from git head for validating numid of external plugins
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Tue, 05 May 2009 15:31:33 +1000
+
 alsa-lib (1.0.19-1ubuntu2) karmic; urgency=low
 
   * debian/control: drop libcxxtools-dev build dependency. Its in universe.
