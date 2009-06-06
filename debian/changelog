@@ -1,7 +1,13 @@
+alsa-lib (1.0.20-2ubuntu2) karmic; urgency=low
+
+  * Build-depend on python-dev, not python2.4-dev - the latter is a no-op
+    anyway since python-config is not available.
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Sat, 06 Jun 2009 00:05:22 +0000
+
 alsa-lib (1.0.20-2ubuntu1) karmic; urgency=low
 
-  * Merge from debian unstable, remaining changes:
-  * Merge from debian unstable, remaining changes:
+  * Merge from Debian unstable, remaining changes:
     - debian/rules:
       + Install into /usr/lib32/ on amd64 for the lib32asound2 package
       + Don't bail when removing include/alsa
