@@ -16,9 +16,9 @@ Build-Depends: debhelper (>= 7),
                lib32gcc1 [amd64 ppc64],
                lib64gcc1 [i386 powerpc sparc s390],
                gcc-multilib [amd64 i386 powerpc ppc64 s390 sparc],
-               python2.4-dev,
+               python-dev,
                libcxxtools-dev
-Standards-Version: 3.8.1
+Standards-Version: 3.8.2
 Homepage: http://www.alsa-project.org/
 Vcs-Svn: svn://svn.debian.org/pkg-alsa/trunk/alsa-lib
 Vcs-Browser: http://svn.debian.org/wsvn/pkg-alsa/trunk/alsa-lib/
@@ -71,6 +71,7 @@ Description: shared library for ALSA applications -- development files (64 bit)
 
 Package: lib32asound2
 Architecture: amd64 ppc64
+Pre-Depends: libc6-i386 (>= 2.9-18)
 Depends: libasound2 (= ${binary:Version}), ${shlibs:Depends}, ${bilib:depends}
 Suggests: lib32asound2-plugins (>= 1.0.18)
 Conflicts: libasound2-plugins (<< 1.0.18), ia32-libs (<< 1.9)
