@@ -1,0 +1,55 @@
+From e5ca075cde887a50d7a3c42b5c71d9cfc90a46fc Mon Sep 17 00:00:00 2001
+From: Takashi Iwai <tiwai@suse.de>
+Date: Tue, 9 Jun 2009 04:49:57 +0200
+Subject: [PATCH] Fix SB-Xfi.conf
+
+Added missing hint.device for rear, clfe, etc definitions.
+Removed invalid iec958 capture definition.
+
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+---
+ src/conf/cards/SB-XFi.conf |    8 +++-----
+ 1 files changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/src/conf/cards/SB-XFi.conf b/src/conf/cards/SB-XFi.conf
+index f819731..38d0027 100644
+--- a/src/conf/cards/SB-XFi.conf
++++ b/src/conf/cards/SB-XFi.conf
+@@ -24,6 +24,7 @@ SB-XFi.pcm.rear.0 {
+ 	type hw
+ 	card $CARD
+ 	device 1
++	hint.device 1
+ }	
+ 
+ <confdir:pcm/center_lfe.conf>
+@@ -36,6 +37,7 @@ SB-XFi.pcm.center_lfe.0 {
+ 	type hw
+ 	card $CARD
+ 	device 2
++	hint.device 2
+ }	
+ 
+ <confdir:pcm/side.conf>
+@@ -48,6 +50,7 @@ SB-XFi.pcm.side.0 {
+ 	type hw
+ 	card $CARD
+ 	device 3
++	hint.device 3
+ }	
+ 
+ <confdir:pcm/surround40.conf>
+@@ -101,10 +104,5 @@ SB-XFi.pcm.iec958.0 {
+ 			]
+ 		}
+ 	}
+-	capture.pcm {
+-		type hw
+-		card $CARD
+-		device 4
+-	}
+ 	hint.device 4
+ }
+-- 
+1.6.3.3
+

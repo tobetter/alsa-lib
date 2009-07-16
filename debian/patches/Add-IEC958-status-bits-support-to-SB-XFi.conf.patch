@@ -1,0 +1,54 @@
+From bb956b7b70cfa1d0a325e49fecfab7bbe573222b Mon Sep 17 00:00:00 2001
+From: Takashi Iwai <tiwai@suse.de>
+Date: Tue, 2 Jun 2009 17:21:26 +0200
+Subject: [PATCH] Add IEC958 status bits support to SB-XFi.conf
+
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+---
+ src/conf/cards/SB-XFi.conf |   32 ++++++++++++++++++++++++++++----
+ 1 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/src/conf/cards/SB-XFi.conf b/src/conf/cards/SB-XFi.conf
+index c9f3c5f..f819731 100644
+--- a/src/conf/cards/SB-XFi.conf
++++ b/src/conf/cards/SB-XFi.conf
+@@ -79,8 +79,32 @@ SB-XFi.pcm.iec958.0 {
+ 	@args.AES3 {
+ 		type integer
+ 	}
+-	type hw
+-	card $CARD
+-	device 4
+-	# FIXME: AES status bits
++	type asym
++	playback.pcm {
++		type hooks
++		slave.pcm {
++			type hw
++			card $CARD
++			device 4
++		}
++		hooks.0 {
++			type ctl_elems
++			hook_args [
++			{
++				interface PCM
++				name "IEC958 Playback PCM Stream"
++				device 4
++				lock true
++				preserve true
++				value [ $AES0 $AES1 $AES2 $AES3 ]
++			}
++			]
++		}
++	}
++	capture.pcm {
++		type hw
++		card $CARD
++		device 4
++	}
++	hint.device 4
+ }
+-- 
+1.6.3.3
+
