@@ -1,3 +1,10 @@
+alsa-lib (1.0.20-3ubuntu2) karmic; urgency=low
+
+  * Add config file for the Creative SB-XFi series of cards, taken from git
+    master.
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Thu, 16 Jul 2009 12:17:08 +1000
+
 alsa-lib (1.0.20-3ubuntu1) karmic; urgency=low
 
   * Merge from debian unstable, remaining changes:
