@@ -1,0 +1,13 @@
+Index: alsa-lib-1.0.20/src/pcm/pcm_rate.c
+===================================================================
+--- alsa-lib-1.0.20.orig/src/pcm/pcm_rate.c	2009-08-06 17:37:12.000000000 -0400
++++ alsa-lib-1.0.20/src/pcm/pcm_rate.c	2009-08-06 17:40:32.000000000 -0400
+@@ -186,7 +186,7 @@
+ 		if (!snd_interval_checkempty(period_size) &&
+ 		    period_size->openmin && period_size->openmax &&
+ 		    period_size->min + 1 == period_size->max) {
+-		    	if ((buffer_size->min / period_size->min) * period_size->min == buffer_size->min) {
++		    	if (period_size->min > 0 && (buffer_size->min / period_size->min) * period_size->min == buffer_size->min) {
+ 		    		snd_interval_set_value(period_size, period_size->min);
+ 		    	} else if ((buffer_size->max / period_size->max) * period_size->max == buffer_size->max) {
+ 		    		snd_interval_set_value(period_size, period_size->max);
