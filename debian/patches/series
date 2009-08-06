@@ -6,3 +6,4 @@ bluetooth_configuration.patch
 Add-config-file-for-SB-XFi-driver.patch
 Add-IEC958-status-bits-support-to-SB-XFi.conf.patch
 Fix-SB-Xfi.conf.patch
+Fix-fpe-pcm_rate.patch

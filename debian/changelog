@@ -1,3 +1,10 @@
+alsa-lib (1.0.20-3ubuntu3) karmic; urgency=low
+
+  * debian/patches/Fix-fpe-pcm_rate.patch: Fix division by zero
+    (Closes: #539454)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Thu, 06 Aug 2009 17:41:19 -0400
+
 alsa-lib (1.0.20-3ubuntu2) karmic; urgency=low
 
   * Add config file for the Creative SB-XFi series of cards, taken from git
