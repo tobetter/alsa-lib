@@ -1,3 +1,10 @@
+alsa-lib (1.0.20-3ubuntu4) karmic; urgency=low
+
+  * debian/patches/Backport-git-head-fixes.patch: Apply as of
+    changeset cbf5675eef5d4194532d3a57c8b5d4c0af831ed7
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Fri, 21 Aug 2009 16:30:44 -0400
+
 alsa-lib (1.0.20-3ubuntu3) karmic; urgency=low
 
   * debian/patches/Fix-fpe-pcm_rate.patch: Fix division by zero
