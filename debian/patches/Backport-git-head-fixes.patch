@@ -1,0 +1,206 @@
+Index: alsa-lib-1.0.20/include/pcm.h
+===================================================================
+--- alsa-lib-1.0.20.orig/include/pcm.h	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/include/pcm.h	2009-08-21 16:20:43.000000000 -0400
+@@ -1022,7 +1022,8 @@
+ int snd_pcm_meter_add_scope(snd_pcm_t *pcm, snd_pcm_scope_t *scope);
+ snd_pcm_scope_t *snd_pcm_meter_search_scope(snd_pcm_t *pcm, const char *name);
+ int snd_pcm_scope_malloc(snd_pcm_scope_t **ptr);
+-void snd_pcm_scope_set_ops(snd_pcm_scope_t *scope, snd_pcm_scope_ops_t *val);
++void snd_pcm_scope_set_ops(snd_pcm_scope_t *scope,
++			   const snd_pcm_scope_ops_t *val);
+ void snd_pcm_scope_set_name(snd_pcm_scope_t *scope, const char *val);
+ const char *snd_pcm_scope_get_name(snd_pcm_scope_t *scope);
+ void *snd_pcm_scope_get_callback_private(snd_pcm_scope_t *scope);
+Index: alsa-lib-1.0.20/src/conf.c
+===================================================================
+--- alsa-lib-1.0.20.orig/src/conf.c	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/src/conf.c	2009-08-21 16:28:12.000000000 -0400
+@@ -2896,9 +2896,9 @@
+ 			err = snd_determine_driver(card, &fdriver);
+ 			if (err < 0)
+ 				return err;
+-			if (snd_config_search(root, fdriver, &n) >= 0) {
+-				if (snd_config_get_string(n, &driver) < 0)
+-					goto __err;
++			if (snd_config_search(root, fdriver, &n) >= 0 &&
++			    snd_config_get_string(n, &driver) >= 0) {
++				assert(driver);
+ 				while (1) {
+ 					char *s = strchr(driver, '.');
+ 					if (s == NULL)
+Index: alsa-lib-1.0.20/src/control/control.c
+===================================================================
+--- alsa-lib-1.0.20.orig/src/control/control.c	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/src/control/control.c	2009-08-21 16:20:43.000000000 -0400
+@@ -674,8 +674,8 @@
+ int snd_ctl_wait(snd_ctl_t *ctl, int timeout)
+ {
+ 	struct pollfd *pfd;
+-	unsigned short *revents;
+-	int i, npfds, pollio, err, err_poll;
++	unsigned short revents;
++	int i, npfds, err, err_poll;
+ 
+ 	npfds = snd_ctl_poll_descriptors_count(ctl);
+ 	if (npfds <= 0 || npfds >= 16) {
+@@ -683,7 +683,6 @@
+ 		return -EIO;
+ 	}
+ 	pfd = alloca(sizeof(*pfd) * npfds);
+-	revents = alloca(sizeof(*revents) * npfds);
+ 	err = snd_ctl_poll_descriptors(ctl, pfd, npfds);
+ 	if (err < 0)
+ 		return err;
+@@ -691,26 +690,20 @@
+ 		SNDMSG("invalid poll descriptors %d\n", err);
+ 		return -EIO;
+ 	}
+-	do {
++	for (;;) {
+ 		err_poll = poll(pfd, npfds, timeout);
+ 		if (err_poll < 0)
+ 			return -errno;
+ 		if (! err_poll)
+-			break;
+-		err = snd_ctl_poll_descriptors_revents(ctl, pfd, npfds, revents);
++			return 0;
++		err = snd_ctl_poll_descriptors_revents(ctl, pfd, npfds, &revents);
+ 		if (err < 0)
+ 			return err;
+-		pollio = 0;
+-		for (i = 0; i < npfds; i++) {
+-			if (revents[i] & (POLLERR | POLLNVAL))
+-				return -EIO;
+-			if ((revents[i] & (POLLIN | POLLOUT)) == 0)
+-				continue;
+-			pollio++;
+-		}
+-	} while (! pollio);
+-
+-	return err_poll > 0 ? 1 : 0;
++		if (revents & (POLLERR | POLLNVAL))
++			return -EIO;
++		if (revents & (POLLIN | POLLOUT))
++			return 1;
++	}
+ }
+ 
+ /**
+Index: alsa-lib-1.0.20/src/pcm/pcm_ioplug.c
+===================================================================
+--- alsa-lib-1.0.20.orig/src/pcm/pcm_ioplug.c	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/src/pcm/pcm_ioplug.c	2009-08-21 16:20:43.000000000 -0400
+@@ -442,7 +442,7 @@
+ 	int err;
+ 	
+ 	if (io->data->state != SND_PCM_STATE_PREPARED)
+-		return -EBUSY;
++		return -EBADFD;
+ 
+ 	err = io->data->callback->start(io->data);
+ 	if (err < 0)
+Index: alsa-lib-1.0.20/src/pcm/pcm_meter.c
+===================================================================
+--- alsa-lib-1.0.20.orig/src/pcm/pcm_meter.c	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/src/pcm/pcm_meter.c	2009-08-21 16:20:43.000000000 -0400
+@@ -46,7 +46,7 @@
+ struct _snd_pcm_scope {
+ 	int enabled;
+ 	char *name;
+-	snd_pcm_scope_ops_t *ops;
++	const snd_pcm_scope_ops_t *ops;
+ 	void *private_data;
+ 	struct list_head list;
+ };
+@@ -960,7 +960,7 @@
+  * \param scope PCM meter scope
+  * \param val callbacks
+  */
+-void snd_pcm_scope_set_ops(snd_pcm_scope_t *scope, snd_pcm_scope_ops_t *val)
++void snd_pcm_scope_set_ops(snd_pcm_scope_t *scope, const snd_pcm_scope_ops_t *val)
+ {
+ 	scope->ops = val;
+ }
+Index: alsa-lib-1.0.20/src/pcm/pcm_mmap_emul.c
+===================================================================
+--- alsa-lib-1.0.20.orig/src/pcm/pcm_mmap_emul.c	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/src/pcm/pcm_mmap_emul.c	2009-08-21 16:20:43.000000000 -0400
+@@ -43,6 +43,7 @@
+ 	unsigned int mmap_emul :1;
+ 	snd_pcm_uframes_t hw_ptr;
+ 	snd_pcm_uframes_t appl_ptr;
++	snd_pcm_uframes_t start_threshold;
+ } mmap_emul_t;
+ 
+ /*
+@@ -203,6 +204,24 @@
+ 	return err;
+ }
+ 
++static int snd_pcm_mmap_emul_sw_params(snd_pcm_t *pcm,
++				       snd_pcm_sw_params_t *params)
++{
++	mmap_emul_t *map = pcm->private_data;
++	int err;
++
++	map->start_threshold = params->start_threshold;
++
++	/* HACK: don't auto-start in the slave PCM */
++	params->start_threshold = pcm->boundary;
++	err = snd_pcm_generic_sw_params(pcm, params);
++	if (err < 0)
++		return err;
++	/* restore the value for this PCM */
++	params->start_threshold = map->start_threshold;
++	return err;
++}
++
+ static int snd_pcm_mmap_emul_prepare(snd_pcm_t *pcm)
+ {
+ 	mmap_emul_t *map = pcm->private_data;
+@@ -254,13 +273,18 @@
+ 	snd_pcm_uframes_t offset;
+ 	snd_pcm_sframes_t size;
+ 
++	/* HACK: don't start stream automatically at commit in mmap mode */
++	pcm->start_threshold = pcm->boundary;
++
+ 	size = map->appl_ptr - *slave->appl.ptr;
+ 	if (size < 0)
+ 		size += pcm->boundary;
+-	if (!size)
+-		return 0;
+-	offset = *slave->appl.ptr % pcm->buffer_size;
+-	return snd_pcm_write_mmap(pcm, offset, size);
++	if (size) {
++		offset = *slave->appl.ptr % pcm->buffer_size;
++		size = snd_pcm_write_mmap(pcm, offset, size);
++	}
++	pcm->start_threshold = map->start_threshold; /* restore */
++	return size;
+ }
+ 
+ /* read the available chunk on the slave PCM to mmap buffer */
+@@ -335,7 +359,7 @@
+ 	.hw_refine = snd_pcm_mmap_emul_hw_refine,
+ 	.hw_params = snd_pcm_mmap_emul_hw_params,
+ 	.hw_free = snd_pcm_generic_hw_free,
+-	.sw_params = snd_pcm_generic_sw_params,
++	.sw_params = snd_pcm_mmap_emul_sw_params,
+ 	.channel_info = snd_pcm_generic_channel_info,
+ 	.dump = snd_pcm_mmap_emul_dump,
+ 	.nonblock = snd_pcm_generic_nonblock,
+Index: alsa-lib-1.0.20/src/timer/timer_local.h
+===================================================================
+--- alsa-lib-1.0.20.orig/src/timer/timer_local.h	2009-08-21 16:20:05.000000000 -0400
++++ alsa-lib-1.0.20/src/timer/timer_local.h	2009-08-21 16:20:43.000000000 -0400
+@@ -64,7 +64,7 @@
+ 	snd_timer_type_t type;
+ 	int mode;
+ 	int poll_fd;
+-	snd_timer_query_ops_t *ops;
++	const snd_timer_query_ops_t *ops;
+ 	void *private_data;
+ };
+ #endif /* DOC_HIDDEN */
