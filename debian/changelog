@@ -1,3 +1,14 @@
+alsa-lib (1.0.20-4) unstable; urgency=low
+
+  [ Elimar Riesebieter ]
+  * Conflicts: libc6-i386 (<= 2.9-18) to lib32asound2 and lib32asound2-dev as
+    suggested by Aurelien Jarno. (closes: #538835)
+
+  [ Jordi Mallach ]
+  * Update Standards-Version to 3.8.3. No changes needed.
+
+ -- Jordi Mallach <jordi@debian.org>  Fri, 28 Aug 2009 11:37:38 +0200
+
 alsa-lib (1.0.20-3) unstable; urgency=low
 
   [ Jordi Mallach ]
