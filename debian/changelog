@@ -1,3 +1,11 @@
+alsa-lib (1.0.20-3ubuntu5) karmic; urgency=low
+
+  * debian/patches/:
+    + Refresh Add-config-file-for-SB-XFi-driver.patch
+    + Revert conf parsing changes (LP: #421351)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 06 Sep 2009 10:21:01 -0400
+
 alsa-lib (1.0.20-3ubuntu4) karmic; urgency=low
 
   * debian/patches/Backport-git-head-fixes.patch: Apply as of
