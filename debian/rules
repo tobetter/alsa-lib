@@ -124,12 +124,15 @@ ifneq (,$(build_biarch_stamp))
 	  debian/bitmp/usr/lib/libasound.so \
 	  debian/bitmp/usr/lib/libasound.a \
 	    debian/lib$(bi)asound2-dev/$(bilibdir)/
-	sed -e "/^libdir=/s,=.*,='/$(bilibdir)'," \
+	sed -e "/^libdir=/s,=.*,='/$(bilibdir)',;s,^dependency_libs=.*,dependency_libs=''," \
 	  debian/bitmp/usr/lib/libasound.la \
 	    > debian/lib$(bi)asound2-dev/$(bilibdir)/libasound.la
 #	sed -e "/^libdir=.*lib$$/s,=.*,=/$(bilibdir)," \
 #	  debian/bitmp/usr/lib/pkgconfig/alsa.pc \
 #	    > debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig/alsa.pc
+else
+	sed -ie "s,^dependency_libs=.*,dependency_libs=''," \
+	  debian/tmp/usr/lib/libasound.la
 endif
 	dh_installdirs -s
 	dh_install -s
@@ -178,11 +181,15 @@ binary-indep: build-indep-stamp install-indep
 
 binary: binary-arch binary-indep
 
-clean: unpatch
+clean::
 	dh_testdir
 	dh_testroot
 	#-$(MAKE) distclean
 	[ ! -f Makefile ] || $(MAKE) distclean
+
+clean:: unpatch
+	dh_testdir
+	dh_testroot
 	-rm -f *-stamp
 	-rm -f config.sub config.guess config.status config.cache
 	-rm -rf doc/doxygen
