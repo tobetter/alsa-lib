@@ -1,3 +1,10 @@
+alsa-lib (1.0.20-3ubuntu6) karmic; urgency=low
+
+  * debian/patches/Fix-fpe-snd_pcm_mmap_begin.patch: Handle attempts
+    to div by zero (LP: #412677)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 27 Sep 2009 16:49:08 -0400
+
 alsa-lib (1.0.20-3ubuntu5) karmic; urgency=low
 
   * debian/patches/:
