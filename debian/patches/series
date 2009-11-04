@@ -1,3 +1,6 @@
-add-maintainer-mode.patch
 relibtoolise.patch
+add-maintainer-mode.patch
 configure_cross_compile.patch
+pulseaudio_configuration.patch
+bluetooth_configuration.patch
+Fix-fpe-snd_pcm_mmap_begin.patch

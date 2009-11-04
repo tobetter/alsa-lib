@@ -115,10 +115,13 @@ install-arch: build-arch-stamp
 ifneq (,$(build_biarch_stamp))
 	rm -rf debian/bitmp
 	$(MAKE) -C bibuild/src install DESTDIR=$(CURDIR)/debian/bitmp
-	mkdir -p debian/lib$(bi)asound2/$(bilibdir)
+	$(MAKE) -C bibuild/modules install DESTDIR=$(CURDIR)/debian/bitmp
+	mkdir -p debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
 	cp -a debian/bitmp/usr/lib/libasound.so.* \
 	    debian/lib$(bi)asound2/$(bilibdir)/
-	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)
+	cp -a debian/bitmp/$(bilibdir)/alsa-lib/smixer/*.so \
+	    debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
+	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/alsa-lib/smixer
 #	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig
 	cp -a \
 	  debian/bitmp/usr/lib/libasound.so \
@@ -127,6 +130,8 @@ ifneq (,$(build_biarch_stamp))
 	sed -e "/^libdir=/s,=.*,='/$(bilibdir)',;s,^dependency_libs=.*,dependency_libs=''," \
 	  debian/bitmp/usr/lib/libasound.la \
 	    > debian/lib$(bi)asound2-dev/$(bilibdir)/libasound.la
+	mkdir -p debian/lib$(bi)asound2/etc/ld.so.conf.d
+	echo "/$(bilibdir)/alsa-lib" > debian/lib$(bi)asound2/etc/ld.so.conf.d/lib$(bi)asound2.conf
 #	sed -e "/^libdir=.*lib$$/s,=.*,=/$(bilibdir)," \
 #	  debian/bitmp/usr/lib/pkgconfig/alsa.pc \
 #	    > debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig/alsa.pc
@@ -134,6 +139,8 @@ else
 	sed -ie "s,^dependency_libs=.*,dependency_libs=''," \
 	  debian/tmp/usr/lib/libasound.la
 endif
+	mkdir -p debian/libasound2/etc/ld.so.conf.d
+	echo "/usr/lib/alsa-lib" > debian/libasound2/etc/ld.so.conf.d/libasound2.conf
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2
@@ -161,9 +168,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.18)'
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.18)' --exclude=usr/lib/alsa-lib/smixer
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.18)'
+	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.18)' --exclude=usr/lib$(bi)/alsa-lib/smixer
 endif
 
 	dh_installdeb -s
@@ -181,20 +188,16 @@ binary-indep: build-indep-stamp install-indep
 
 binary: binary-arch binary-indep
 
-clean::
+clean: unpatch
 	dh_testdir
 	dh_testroot
 	#-$(MAKE) distclean
 	[ ! -f Makefile ] || $(MAKE) distclean
-
-clean:: unpatch
-	dh_testdir
-	dh_testroot
 	-rm -f *-stamp
 	-rm -f config.sub config.guess config.status config.cache
 	-rm -rf doc/doxygen
 	rm -rf bibuild debian/bitmp
-	rm -f include/alsa
+	-rm -f include/alsa
 	dh_clean
 
 .PHONY: configure build-arch build-indep build install-arch install-indep binary-arch binary-indep binary clean stamp-patched
