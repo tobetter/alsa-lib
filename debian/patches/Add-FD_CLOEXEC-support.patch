@@ -1,0 +1,212 @@
+Index: alsa-lib-1.0.21a/include/local.h
+===================================================================
+--- alsa-lib-1.0.21a.orig/include/local.h	2009-12-12 15:21:07.000000000 -0500
++++ alsa-lib-1.0.21a/include/local.h	2009-12-12 15:23:51.000000000 -0500
+@@ -230,22 +230,28 @@
+ # define link_warning(symbol, msg)
+ #endif
+ 
+-/* open with resmgr */
+-#ifdef SUPPORT_RESMGR
+ static inline int snd_open_device(const char *filename, int fmode)
+ {
+-	int fd = open(filename, fmode);
++	int fd;
++
++#ifdef O_CLOEXEC
++	fmode |= O_CLOEXEC;
++#endif
++	fd = open(filename, fmode);
++
++/* open with resmgr */
++#ifdef SUPPORT_RESMGR
++	if (fd < 0) {
++		if (errno == EAGAIN || errno == EBUSY)
++			return fd;
++		if (! access(filename, F_OK))
++			fd = rsm_open_device(filename, fmode);
++	}
++#endif
+ 	if (fd >= 0)
+-		return fd;
+-	if (errno == EAGAIN || errno == EBUSY)
+-		return fd;
+-	if (! access(filename, F_OK))
+-		return rsm_open_device(filename, fmode);
+-	return -1;
++		fcntl(fd, F_SETFD, FD_CLOEXEC);
++	return fd;
+ }
+-#else
+-#define snd_open_device(filename, fmode) open(filename, fmode);
+-#endif
+ 
+ /* make local functions really local */
+ #define snd_dlobj_cache_lookup \
+Index: alsa-lib-1.0.21a/src/control/control_hw.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/control/control_hw.c	2009-12-12 15:21:07.000000000 -0500
++++ alsa-lib-1.0.21a/src/control/control_hw.c	2009-12-12 15:23:51.000000000 -0500
+@@ -392,17 +392,6 @@
+ 		if (fd < 0)
+ 			return -errno;
+ 	}
+-#if 0
+-	/*
+-	 * this is bogus, an application have to care about open filedescriptors
+-	 */
+-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+-		SYSERR("fcntl FD_CLOEXEC failed");
+-		err = -errno;
+-		close(fd);
+-		return err;
+-	}
+-#endif
+ 	if (ioctl(fd, SNDRV_CTL_IOCTL_PVERSION, &ver) < 0) {
+ 		err = -errno;
+ 		close(fd);
+Index: alsa-lib-1.0.21a/src/hwdep/hwdep_hw.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/hwdep/hwdep_hw.c	2009-12-12 15:21:07.000000000 -0500
++++ alsa-lib-1.0.21a/src/hwdep/hwdep_hw.c	2009-12-12 15:23:51.000000000 -0500
+@@ -122,17 +122,6 @@
+ 		if (fd < 0)
+ 			return -errno;
+ 	}
+-#if 0
+-	/*
+-	 * this is bogus, an application have to care about open filedescriptors
+-	 */
+-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+-		SYSERR("fcntl FD_CLOEXEC failed");
+-		ret = -errno;
+-		close(fd);
+-		return ret;
+-	}
+-#endif
+ 	if (ioctl(fd, SNDRV_HWDEP_IOCTL_PVERSION, &ver) < 0) {
+ 		ret = -errno;
+ 		close(fd);
+Index: alsa-lib-1.0.21a/src/pcm/pcm_hw.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/pcm/pcm_hw.c	2009-12-12 15:23:50.000000000 -0500
++++ alsa-lib-1.0.21a/src/pcm/pcm_hw.c	2009-12-12 15:23:51.000000000 -0500
+@@ -1144,18 +1144,6 @@
+ 	if (fmode & O_ASYNC)
+ 		mode |= SND_PCM_ASYNC;
+ 
+-#if 0
+-	/*
+-	 * this is bogus, an application have to care about open filedescriptors
+-	 */
+-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+-		ret = -errno;
+-		SYSMSG("fcntl FD_CLOEXEC failed");
+-		close(fd);
+-		return ret;
+-	}
+-#endif
+-
+ 	if (ioctl(fd, SNDRV_PCM_IOCTL_PVERSION, &ver) < 0) {
+ 		ret = -errno;
+ 		SYSMSG("SNDRV_PCM_IOCTL_PVERSION failed");
+Index: alsa-lib-1.0.21a/src/rawmidi/rawmidi_hw.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/rawmidi/rawmidi_hw.c	2009-12-12 15:21:07.000000000 -0500
++++ alsa-lib-1.0.21a/src/rawmidi/rawmidi_hw.c	2009-12-12 15:23:51.000000000 -0500
+@@ -234,17 +234,6 @@
+ 			return -errno;
+ 		}
+ 	}
+-#if 0
+-	/*
+-	 * this is bogus, an application have to care about open filedescriptors
+-	 */
+-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+-		SYSERR("fcntl FD_CLOEXEC failed");
+-		ret = -errno;
+-		close(fd);
+-		return ret;
+-	}
+-#endif
+ 	if (ioctl(fd, SNDRV_RAWMIDI_IOCTL_PVERSION, &ver) < 0) {
+ 		ret = -errno;
+ 		SYSERR("SNDRV_RAWMIDI_IOCTL_PVERSION failed");
+Index: alsa-lib-1.0.21a/src/seq/seq_hw.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/seq/seq_hw.c	2009-12-12 15:21:07.000000000 -0500
++++ alsa-lib-1.0.21a/src/seq/seq_hw.c	2009-12-12 15:23:51.000000000 -0500
+@@ -457,17 +457,6 @@
+ 		SYSERR("open %s failed", filename);
+ 		return -errno;
+ 	}
+-#if 0
+-	/*
+-         * this is bogus, an application have to care about open filedescriptors
+-	 */                          
+-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+-		SYSERR("fcntl FD_CLOEXEC failed");
+-		ret = -errno;
+-		close(fd);
+-		return ret;
+-	}
+-#endif
+ 	if (ioctl(fd, SNDRV_SEQ_IOCTL_PVERSION, &ver) < 0) {
+ 		SYSERR("SNDRV_SEQ_IOCTL_PVERSION failed");
+ 		ret = -errno;
+Index: alsa-lib-1.0.21a/src/timer/timer_hw.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/timer/timer_hw.c	2009-12-12 15:21:07.000000000 -0500
++++ alsa-lib-1.0.21a/src/timer/timer_hw.c	2009-12-12 15:23:51.000000000 -0500
+@@ -23,7 +23,6 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <string.h>
+-#define __USE_GNU
+ #include <fcntl.h>
+ #include <sys/ioctl.h>
+ #include "timer_local.h"
+@@ -236,17 +235,6 @@
+ 	fd = snd_open_device(SNDRV_FILE_TIMER, tmode);
+ 	if (fd < 0)
+ 		return -errno;
+-#if 0
+-	/*
+-	 * this is bogus, an application have to care about open filedescriptors
+-	 */
+-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+-		SYSERR("fcntl FD_CLOEXEC failed");
+-		ret = -errno;
+-		close(fd);
+-		return ret;
+-	}
+-#endif
+ 	if (ioctl(fd, SNDRV_TIMER_IOCTL_PVERSION, &ver) < 0) {
+ 		ret = -errno;
+ 		close(fd);
+Index: alsa-lib-1.0.21a/src/control/hcontrol.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/control/hcontrol.c	2009-12-12 15:23:50.000000000 -0500
++++ alsa-lib-1.0.21a/src/control/hcontrol.c	2009-12-12 15:23:51.000000000 -0500
+@@ -48,9 +48,6 @@
+ #include <string.h>
+ #include <fcntl.h>
+ #include <sys/ioctl.h>
+-#ifndef DOC_HIDDEN
+-#define __USE_GNU
+-#endif
+ #include "control_local.h"
+ #ifdef HAVE_LIBPTHREAD
+ #include <pthread.h>
+Index: alsa-lib-1.0.21a/src/dlmisc.c
+===================================================================
+--- alsa-lib-1.0.21a.orig/src/dlmisc.c	2009-12-12 15:23:50.000000000 -0500
++++ alsa-lib-1.0.21a/src/dlmisc.c	2009-12-12 15:23:51.000000000 -0500
+@@ -27,7 +27,6 @@
+  *
+  */
+ 
+-#define _GNU_SOURCE
+ #include "list.h"
+ #include "local.h"
+ 
