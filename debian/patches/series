@@ -3,4 +3,9 @@ add-maintainer-mode.patch
 configure_cross_compile.patch
 pulseaudio_configuration.patch
 bluetooth_configuration.patch
-Fix-fpe-snd_pcm_mmap_begin.patch
+Always-use-delay-ioctl.patch
+Allow-dmix-dsnoop-slave-hook.patch
+Fix-compare_default.patch
+Optimise-and-fix-hints.patch
+Add-FD_CLOEXEC-support.patch
+Fix-enum-check.patch

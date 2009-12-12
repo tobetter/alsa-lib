@@ -1,3 +1,16 @@
+alsa-lib (1.0.21a-1ubuntu2) lucid; urgency=low
+
+  * Backport from origin/master HEAD:
+    + Always-use-delay-ioctl.patch (ecf4b)
+    + Allow-dmix-dsnoop-slave-hook.patch (d9e59)
+    + Fix-compare_default.patch (0110d)
+    + Optimise-and-fix-hints.patch (e1c7d..407e9)
+    + Add-FD_CLOEXEC-support.patch (ef2d3..30f59, 4de76)
+    + Fix-enum-check.patch (34409, 762fe)
+  * Remove Fix-fpe-snd_pcm_mmap_begin.patch; we need to fix this in linux.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sat, 12 Dec 2009 13:47:12 -0500
+
 alsa-lib (1.0.21a-1ubuntu1) lucid; urgency=low
 
   * Merge from debian unstable, remaining changes:
