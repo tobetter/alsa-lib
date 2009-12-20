@@ -9,3 +9,4 @@ Fix-compare_default.patch
 Optimise-and-fix-hints.patch
 Add-FD_CLOEXEC-support.patch
 Fix-enum-check.patch
+0001-ALSA-pcm-Properly-close-timer-when-freeing-slaves.patch
