@@ -1,3 +1,11 @@
+alsa-lib (1.0.20-3ubuntu6.1) karmic-proposed; urgency=low
+
+  * debian/patches/Dont_leak_timer_fd_on_pcm_slave_close.patch:
+    Prevent a local DoS by properly freeing timer fds when closing pcm
+    slaves. Backported from upstream master HEAD (LP: #451893)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Mon, 21 Dec 2009 06:33:01 -0500
+
 alsa-lib (1.0.20-3ubuntu6) karmic; urgency=low
 
   * debian/patches/Fix-fpe-snd_pcm_mmap_begin.patch: Handle attempts
