@@ -9,3 +9,4 @@ Fix-SB-Xfi.conf.patch
 Fix-fpe-pcm_rate.patch
 Backport-git-head-fixes.patch
 Fix-fpe-snd_pcm_mmap_begin.patch
+Dont_leak_timer_fd_on_pcm_slave_close.patch
