@@ -1,3 +1,16 @@
+alsa-lib (1.0.22-0ubuntu1) lucid; urgency=low
+
+  * debian/patches/:
+    - Drop backported Always-use-delay-ioctl.patch,
+      Allow-dmix-dsnoop-slave-hook.patch, Fix-compare_default.patch,
+      Optimise-and-fix-hints.patch, Add-FD_CLOEXEC-support.patch,
+      Fix-enum-check.patch
+    + Add Fix-S24_3LE-softvol-distortion.patch (bdf80) from master
+      HEAD
+  * debian/rules: Bump shlibs to >> 1.0.22 due to added symbols
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Thu, 24 Dec 2009 02:38:07 -0500
+
 alsa-lib (1.0.21a-1ubuntu4) lucid; urgency=low
 
   * debian/patches/:
