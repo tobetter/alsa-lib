@@ -1,12 +1,7 @@
-relibtoolise.patch
 add-maintainer-mode.patch
+relibtoolise.patch
 configure_cross_compile.patch
 pulseaudio_configuration.patch
 bluetooth_configuration.patch
-Always-use-delay-ioctl.patch
-Allow-dmix-dsnoop-slave-hook.patch
-Fix-compare_default.patch
-Optimise-and-fix-hints.patch
-Add-FD_CLOEXEC-support.patch
-Fix-enum-check.patch
 Dont_leak_timer_fd_on_pcm_slave_close.patch
+Fix-S24_3LE-softvol-distortion.patch
