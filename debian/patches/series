@@ -5,3 +5,6 @@ pulseaudio_configuration.patch
 bluetooth_configuration.patch
 Dont_leak_timer_fd_on_pcm_slave_close.patch
 Fix-S24_3LE-softvol-distortion.patch
+Fix-modem-on-hook.patch
+Fix-stream-state-updates.patch
+Fix-str-lit-no-format.patch
