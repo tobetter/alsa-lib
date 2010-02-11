@@ -12,12 +12,17 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_HOST
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.21a)
+AM_INIT_AUTOMAKE(alsa-lib, 1.0.22)
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL(INSTALL_M4, test -n "${ACLOCAL}")
 
+# Test for new silent rules and enable only if they are available
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
+
 AC_PREFIX_DEFAULT(/usr)
+
+AM_MAINTAINER_MODE
 
 dnl Checks for programs.
 
@@ -35,6 +40,8 @@ then
   AC_MSG_RESULT($CC)
 fi
 	    
+CFLAGS="$CFLAGS -D_GNU_SOURCE"
+
 
 AC_PROG_CC
 AC_PROG_CPP
@@ -201,9 +208,12 @@ AC_MSG_CHECKING(for softfloat)
 AC_ARG_WITH(softfloat,
   AS_HELP_STRING([--with-softfloat],
     [do you have floating point unit on this machine? (optional)]),
-  [  AC_DEFINE(HAVE_SOFT_FLOAT, "1", [Avoid calculation in float])
-     softfloat=yes ],)
+  [case "$withval" in
+	y|yes) softfloat=yes ;;
+	*) softfloat=no ;;
+   esac],)
 if test "$softfloat" = "yes" ; then
+  AC_DEFINE(HAVE_SOFT_FLOAT, "1", [Avoid calculation in float])
   AC_MSG_RESULT(yes)
 else
   AC_MSG_RESULT(no)
