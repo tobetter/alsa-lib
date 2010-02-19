@@ -1,3 +1,9 @@
+alsa-lib (1.0.22-0ubuntu4) lucid; urgency=low
+
+  * debian/rules: Fix plugindir prefix application as per gutsy.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Thu, 18 Feb 2010 20:01:46 -0500
+
 alsa-lib (1.0.22-0ubuntu3) lucid; urgency=low
 
   * debian/rules: add --with-plugindir=\$${prefix}/lib/alsa-lib to
