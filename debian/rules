@@ -58,7 +58,7 @@ configure-stamp: debian/stamp-patched $(configure_biarch_stamp)
 		    --datadir=\$${prefix}/share \
 		    --build $(DEB_BUILD_GNU_TYPE) \
 		    --enable-static --disable-maintainer-mode \
-		    --with-plugindir=\$${prefix}/lib/alsa-lib
+		    --with-plugindir=/usr/lib/alsa-lib
 	touch configure-stamp
 
 configure-biarch-stamp: debian/stamp-patched
