@@ -1,3 +1,10 @@
+alsa-lib (1.0.22-0ubuntu5) lucid; urgency=low
+
+  * debian/patches/Fix-pcm-timer-open-subdevice-pcm_hw.patch:
+    Fix hw plugin opening webcams.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 28 Feb 2010 17:22:53 -0500
+
 alsa-lib (1.0.22-0ubuntu4) lucid; urgency=low
 
   * debian/rules: Fix plugindir prefix application as per gutsy.

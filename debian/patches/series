@@ -8,3 +8,4 @@ Fix-S24_3LE-softvol-distortion.patch
 Fix-modem-on-hook.patch
 Fix-stream-state-updates.patch
 Fix-str-lit-no-format.patch
+Fix-pcm-timer-open-subdevice-pcm_hw.patch
