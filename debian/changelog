@@ -1,3 +1,13 @@
+alsa-lib (1.0.22-0ubuntu6) lucid; urgency=low
+
+  * debian/patches/b9dbee6-Fix-threading-drain.patch:
+    Prevent drain() from blocking in threads.
+  * debian/patches/lp433573-Support-Echo3G.patch:
+    Fix missing support for Echo3G devices.  Thanks,
+    unimatrix! (LP: #433573)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Wed, 03 Mar 2010 08:20:24 -0500
+
 alsa-lib (1.0.22-0ubuntu5) lucid; urgency=low
 
   * debian/patches/Fix-pcm-timer-open-subdevice-pcm_hw.patch:
