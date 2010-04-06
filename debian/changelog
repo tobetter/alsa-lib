@@ -1,3 +1,12 @@
+alsa-lib (1.0.22-0ubuntu7) lucid; urgency=low
+
+  * Demote libc6-i386 pre-depends to depends for lib32asound2 to
+    prevent cycle. Ubuntu has always shipped in /usr/lib32 instead
+    of /emul, which makes the pre-depends unnecessary.
+    (LP: #554149)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Tue, 06 Apr 2010 10:46:15 -0400
+
 alsa-lib (1.0.22-0ubuntu6) lucid; urgency=low
 
   * debian/patches/b9dbee6-Fix-threading-drain.patch:

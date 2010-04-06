@@ -20,8 +20,8 @@ Build-Depends: debhelper (>= 7),
                python-dev
 Standards-Version: 3.8.3
 Homepage: http://www.alsa-project.org/
-Vcs-Svn: svn://svn.debian.org/pkg-alsa/trunk/alsa-lib
-Vcs-Browser: http://svn.debian.org/wsvn/pkg-alsa/trunk/alsa-lib/
+XS-Debian-Vcs-Svn: svn://svn.debian.org/pkg-alsa/trunk/alsa-lib
+XS-Debian-Vcs-Browser: http://svn.debian.org/wsvn/pkg-alsa/trunk/alsa-lib/
 Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-core-dev/alsa-lib/ubuntu.new
 
 Package: libasound2
@@ -72,8 +72,7 @@ Description: shared library for ALSA applications -- development files (64 bit)
 
 Package: lib32asound2
 Architecture: amd64 ppc64
-Pre-Depends: libc6-i386 (>= 2.9-18)
-Depends: libasound2 (= ${binary:Version}), ${shlibs:Depends}, ${bilib:depends}
+Depends: libasound2 (= ${binary:Version}), ${shlibs:Depends}, ${bilib:depends}, libc6-i386 (>= 2.9-18)
 Suggests: lib32asound2-plugins (>= 1.0.18)
 Conflicts: libasound2-plugins (<< 1.0.18), ia32-libs (<< 1.9), libc6-i386 (<= 2.9-18)
 Replaces: ia32-libs (<< 1.9)
