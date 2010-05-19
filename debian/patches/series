@@ -1,4 +1,7 @@
 add-maintainer-mode.patch
 relibtoolise.patch
 configure_cross_compile.patch
-Dont_leak_timer_fd_on_pcm_slave_close.patch
+pulseaudio_configuration.patch
+bluetooth_configuration.patch
+Fix-str-lit-no-format.patch
+lp433573-Support-Echo3G.patch
