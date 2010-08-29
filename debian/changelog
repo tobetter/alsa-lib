@@ -1,3 +1,12 @@
+alsa-lib (1.0.23-1ubuntu2) maverick; urgency=low
+
+  * Apply upstream git changesets aadcbab through 72c7260ce
+    and rediff debian/patches/relibtoolise.patch
+    - correctly free dl handles, fixes LP: #552411, #584393
+      (Closes: #589896)
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 29 Aug 2010 13:13:19 -0400
+
 alsa-lib (1.0.23-1ubuntu1) maverick; urgency=low
 
   * Merge from debian unstable.  Remaining changes:
