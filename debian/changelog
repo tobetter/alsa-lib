@@ -1,3 +1,14 @@
+alsa-lib (1.0.23-1ubuntu2.1) maverick-proposed; urgency=low
+
+  * lp652035-fix-missing-hw-devices.patch: Apply upstream git changesets
+    0244370 and c049d48 to help fix LP: #652035.
+  * lp652035-use-extended-namehints.patch: Show hints for non-standard
+    devices that lack configuration files.  This patch is also required
+    to help fix LP: #652035 and by consequence also addresses
+    LP: #425362.
+
+ -- Daniel T Chen <crimsun@ubuntu.com>  Sun, 03 Oct 2010 14:56:12 -0400
+
 alsa-lib (1.0.23-1ubuntu2) maverick; urgency=low
 
   * Apply upstream git changesets aadcbab through 72c7260ce

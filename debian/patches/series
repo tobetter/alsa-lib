@@ -4,3 +4,5 @@ configure_cross_compile.patch
 pulseaudio_configuration.patch
 bluetooth_configuration.patch
 lp433573-Support-Echo3G.patch
+lp652035-fix-missing-hw-devices.patch
+lp652035-use-extended-namehints.patch
