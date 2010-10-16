@@ -24,6 +24,8 @@ AC_PREFIX_DEFAULT(/usr)
 
 AM_MAINTAINER_MODE
 
+AM_MAINTAINER_MODE
+
 dnl Checks for programs.
 
 dnl try to gues cross-compiler if not set
