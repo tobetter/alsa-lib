@@ -10979,6 +10979,17 @@ else
   ALSA_HSEARCH_R_FALSE=
 fi
 
+for ac_func in uselocale
+do :
+  ac_fn_c_check_func "$LINENO" "uselocale" "ac_cv_func_uselocale"
+if test "x$ac_cv_func_uselocale" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_USELOCALE 1
+_ACEOF
+
+fi
+done
+
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library version" >&5

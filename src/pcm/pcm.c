@@ -2058,7 +2058,7 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 	const char *str;
 	char *buf = NULL, *buf1 = NULL;
 	int err;
-	snd_config_t *conf, *type_conf = NULL;
+	snd_config_t *conf, *type_conf = NULL, *tmp;
 	snd_config_iterator_t i, next;
 	const char *id;
 	const char *lib = NULL, *open_name = NULL;
@@ -2168,6 +2168,24 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 		}
 	} else {
 		err = -ENXIO;
+	}
+	if (err >= 0) {
+		err = snd_config_search(pcm_root, "defaults.pcm.compat", &tmp);
+		if (err >= 0) {
+			long i;
+			if (snd_config_get_integer(tmp, &i) >= 0) {
+				if (i > 0)
+					(*pcmp)->compat = 1;
+			}
+		} else {
+			char *str = getenv("LIBASOUND_COMPAT");
+			if (str && *str)
+				(*pcmp)->compat = 1;
+		}
+		err = snd_config_search(pcm_root, "defaults.pcm.minperiodtime", &tmp);
+		if (err >= 0)
+			snd_config_get_integer(tmp, &(*pcmp)->minperiodtime);
+		err = 0;
 	}
        _err:
 	if (type_conf)

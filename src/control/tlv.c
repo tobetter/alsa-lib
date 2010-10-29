@@ -140,10 +140,13 @@ int snd_tlv_get_dB_range(unsigned int *tlv, long rangemin, long rangemax,
 		pos = 2;
 		while (pos + 4 <= len) {
 			long rmin, rmax;
-			rangemin = (int)tlv[pos];
-			rangemax = (int)tlv[pos + 1];
+			long submin, submax;
+			submin = (int)tlv[pos];
+			submax = (int)tlv[pos + 1];
+			if (rangemax < submax)
+				submax = rangemax;
 			err = snd_tlv_get_dB_range(tlv + pos + 2,
-						   rangemin, rangemax,
+						   submin, submax,
 						   &rmin, &rmax);
 			if (err < 0)
 				return err;
@@ -156,6 +159,8 @@ int snd_tlv_get_dB_range(unsigned int *tlv, long rangemin, long rangemax,
 				*min = rmin;
 				*max = rmax;
 			}
+			if (rangemax == submax)
+				return 0;
 			pos += int_index(tlv[pos + 3]) + 4;
 		}
 		return 0;
@@ -280,13 +285,24 @@ int snd_tlv_convert_from_dB(unsigned int *tlv, long rangemin, long rangemax,
 {
 	switch (tlv[0]) {
 	case SND_CTL_TLVT_DB_RANGE: {
+		long dbmin, dbmax, prev_rangemax;
 		unsigned int pos, len;
 		len = int_index(tlv[1]);
 		if (len > MAX_TLV_RANGE_SIZE)
 			return -EINVAL;
+		if (snd_tlv_get_dB_range(tlv, rangemin, rangemax,
+					 &dbmin, &dbmax))
+			return -EINVAL;
+		if (db_gain <= dbmin) {
+			*value = rangemin;
+			return 0;
+		} else if (db_gain >= dbmax) {
+			*value = rangemax;
+			return 0;
+		}
 		pos = 2;
+		prev_rangemax = 0;
 		while (pos + 4 <= len) {
-			long dbmin, dbmax;
 			rangemin = (int)tlv[pos];
 			rangemax = (int)tlv[pos + 1];
 			if (!snd_tlv_get_dB_range(tlv + pos + 2,
@@ -296,6 +312,11 @@ int snd_tlv_convert_from_dB(unsigned int *tlv, long rangemin, long rangemax,
 				return snd_tlv_convert_from_dB(tlv + pos + 2,
 							       rangemin, rangemax,
 							       db_gain, value, xdir);
+			else if (db_gain < dbmin) {
+				*value = xdir ? rangemin : prev_rangemax;
+				return 0;
+			}
+			prev_rangemax = rangemax;
 			pos += int_index(tlv[pos + 3]) + 4;
 		}
 		return -EINVAL;
@@ -421,7 +442,7 @@ int snd_ctl_get_dB_range(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 	return snd_tlv_get_dB_range(info.tlv, info.minval, info.maxval,
 				    min, max);
 }
-	
+
 /**
  * \brief Convert the volume value to dB on the given control element
  * \param ctl the control handler

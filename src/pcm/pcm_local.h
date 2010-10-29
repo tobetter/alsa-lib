@@ -179,11 +179,13 @@ struct _snd_pcm {
 	snd_pcm_type_t type;
 	snd_pcm_stream_t stream;
 	int mode;
+	long minperiodtime;		/* in us */
 	int poll_fd_count;
 	int poll_fd;
 	unsigned short poll_events;
 	int setup: 1,
-	    monotonic: 1;
+	    monotonic: 1,
+	    compat: 1;
 	snd_pcm_access_t access;	/* access mode */
 	snd_pcm_format_t format;	/* SND_PCM_FORMAT_* */
 	snd_pcm_subformat_t subformat;	/* subformat */
