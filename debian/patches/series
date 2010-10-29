@@ -1,7 +1,12 @@
 add-maintainer-mode.patch
 relibtoolise.patch
 configure_cross_compile.patch
-thread-specific-locale.patch
-thread-safe-locale.patch
-refcount-dlobjs.patch
+#thread-specific-locale.patch
+#thread-safe-locale.patch
+pulseaudio_configuration.patch
+bluetooth_configuration.patch
+lp433573-Support-Echo3G.patch
+lp652035-fix-missing-hw-devices.patch
+lp652035-use-extended-namehints.patch
+#refcount-dlobjs.patch
 libtool-out-of-tree.patch
