@@ -1,3 +1,9 @@
+alsa-lib (1.0.23-2.1ubuntu3) natty; urgency=low
+
+  * Disable biarch build on ppc64.
+
+ -- Matthias Klose <doko@ubuntu.com>  Fri, 18 Feb 2011 18:07:50 +0100
+
 alsa-lib (1.0.23-2.1ubuntu2) natty; urgency=low
 
   * Rebuild with python2.7 as the default python version.

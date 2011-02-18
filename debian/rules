@@ -13,7 +13,7 @@ DEB_BUILD_ARCH_CPU ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH_CPU)
 DEB_HOST_ARCH  ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
 
 biarch_map := i386=amd64 powerpc=ppc64 sparc=sparc64 s390=s390x \
-		amd64=i386 ppc64=powerpc
+		amd64=i386 # ppc64=powerpc
 biarch_cpu := $(strip $(patsubst $(DEB_BUILD_ARCH_CPU)=%, %, \
 			   $(filter $(DEB_BUILD_ARCH_CPU)=%, $(biarch_map))))
 
@@ -22,7 +22,8 @@ ifneq (,$(biarch_cpu))
     bi = 64
     bilibdir = usr/lib64
   endif
-  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  #ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/))
     bi = 32
     bilibdir = usr/lib32
     ifeq ($(DEB_HOST_ARCH),amd64)
