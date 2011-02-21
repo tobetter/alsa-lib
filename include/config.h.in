@@ -51,6 +51,9 @@
 /* Build sequencer component */
 #undef BUILD_SEQ
 
+/* Build UCM component */
+#undef BUILD_UCM
+
 /* Have clock gettime */
 #undef HAVE_CLOCK_GETTIME
 

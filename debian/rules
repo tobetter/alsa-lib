@@ -13,7 +13,7 @@ DEB_BUILD_ARCH_CPU ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH_CPU)
 DEB_HOST_ARCH  ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
 
 biarch_map := i386=amd64 powerpc=ppc64 sparc=sparc64 s390=s390x \
-		amd64=i386 ppc64=powerpc
+		amd64=i386 # ppc64=powerpc
 biarch_cpu := $(strip $(patsubst $(DEB_BUILD_ARCH_CPU)=%, %, \
 			   $(filter $(DEB_BUILD_ARCH_CPU)=%, $(biarch_map))))
 
@@ -22,7 +22,8 @@ ifneq (,$(biarch_cpu))
     bi = 64
     bilibdir = usr/lib64
   endif
-  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  #ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/))
     bi = 32
     bilibdir = usr/lib32
     ifeq ($(DEB_HOST_ARCH),amd64)
@@ -113,6 +114,7 @@ install-arch: build-arch-stamp
 	dh_testroot
 	dh_prep -s
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp
+	mkdir -p $(CURDIR)/debian/tmp/usr/share/alsa/ucm
 ifneq (,$(build_biarch_stamp))
 	rm -rf debian/bitmp
 	$(MAKE) -C bibuild/src install DESTDIR=$(CURDIR)/debian/bitmp
@@ -167,9 +169,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.22)' --exclude=usr/lib/alsa-lib/smixer
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.24.1)' --exclude=usr/lib/alsa-lib/smixer
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.22)' --exclude=usr/lib$(bi)/alsa-lib/smixer
+	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.24.1)' --exclude=usr/lib$(bi)/alsa-lib/smixer
 endif
 
 	dh_installdeb -s

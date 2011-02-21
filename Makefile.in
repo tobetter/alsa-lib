@@ -39,7 +39,7 @@ host_triplet = @host@
 subdir = .
 DIST_COMMON = $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(top_srcdir)/configure COPYING \
-	ChangeLog INSTALL TODO compile config.guess config.sub depcomp \
+	ChangeLog INSTALL TODO config.guess config.sub depcomp \
 	install-sh ltconfig ltmain.sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
@@ -153,7 +153,6 @@ LIBTOOL_VERSION_INFO = @LIBTOOL_VERSION_INFO@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
@@ -249,7 +248,7 @@ all: all-recursive
 .SUFFIXES:
 am--refresh:
 	@:
-$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -276,9 +275,9 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	$(SHELL) ./config.status --recheck
 
-$(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
+$(top_srcdir)/configure:  $(am__configure_deps)
 	$(am__cd) $(srcdir) && $(AUTOCONF)
-$(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
+$(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	$(am__cd) $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
 $(am__aclocal_m4_deps):
 
