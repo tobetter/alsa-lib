@@ -1063,18 +1063,25 @@ static int get_value3(const char **value,
  * \return Zero on success (value is filled), otherwise a negative error code
  */
 static int get_value(snd_use_case_mgr_t *uc_mgr,
-                     const char *identifier,
-                     const char **value,
-                     const char *modifier)
+			const char *identifier,
+			const char **value,
+			const char *item)
 {
-        struct use_case_modifier *mod;
+	struct use_case_modifier *mod;
+	struct use_case_device *dev;
 	int err;
 
-	if (modifier != NULL) {
-	        mod = find_modifier(uc_mgr, modifier);
+	if (item != NULL) {
+		mod = find_modifier(uc_mgr, item);
 		if (mod != NULL) {
 			err = get_value1(value, &mod->value_list, identifier);
 			if (err >= 0 || err != -ENOENT)
+				return err;
+		}
+		dev = find_device(uc_mgr->active_verb, item);
+		if (dev != NULL) {
+			err = get_value1(value, &dev->value_list, identifier);
+			if (err >=0 || err != -ENOENT)
 				return err;
 		}
 	}

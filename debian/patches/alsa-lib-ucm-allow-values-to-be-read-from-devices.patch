@@ -1,0 +1,54 @@
+From dcdb15434cd2f55fb9f96c4253938667eb78c08f Mon Sep 17 00:00:00 2001
+From: Margarita Olaya Cabrera <magi@slimlogic.co.uk>
+Date: Tue, 15 Mar 2011 10:15:19 -0600
+Subject: [PATCH] alsa-lib: ucm: allow values to be read from devices
+
+This allows devices value to be read using the get_value().
+Also fix a little formatting.
+
+Signed-off-by: Margarita Olaya Cabrera <magi@slimlogic.co.uk>
+---
+ src/ucm/main.c |   19 +++++++++++++------
+ 1 files changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/src/ucm/main.c b/src/ucm/main.c
+index 42fd373..fb11e61 100644
+--- a/src/ucm/main.c
++++ b/src/ucm/main.c
+@@ -1063,20 +1063,27 @@ static int get_value3(const char **value,
+  * \return Zero on success (value is filled), otherwise a negative error code
+  */
+ static int get_value(snd_use_case_mgr_t *uc_mgr,
+-                     const char *identifier,
+-                     const char **value,
+-                     const char *modifier)
++			const char *identifier,
++			const char **value,
++			const char *item)
+ {
+-        struct use_case_modifier *mod;
++	struct use_case_modifier *mod;
++	struct use_case_device *dev;
+ 	int err;
+ 
+-	if (modifier != NULL) {
+-	        mod = find_modifier(uc_mgr, modifier);
++	if (item != NULL) {
++		mod = find_modifier(uc_mgr, item);
+ 		if (mod != NULL) {
+ 			err = get_value1(value, &mod->value_list, identifier);
+ 			if (err >= 0 || err != -ENOENT)
+ 				return err;
+ 		}
++		dev = find_device(uc_mgr->active_verb, item);
++		if (dev != NULL) {
++			err = get_value1(value, &dev->value_list, identifier);
++			if (err >=0 || err != -ENOENT)
++				return err;
++		}
+ 	}
+ 	err = get_value1(value, &uc_mgr->active_verb->value_list, identifier);
+ 	if (err >= 0 || err != -ENOENT)
+-- 
+1.7.0.4
+
