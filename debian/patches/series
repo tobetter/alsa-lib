@@ -5,3 +5,4 @@ pulseaudio_configuration.patch
 bluetooth_configuration.patch
 lp433573-Support-Echo3G.patch
 lp652035-use-extended-namehints.patch
+alsa-lib-ucm-allow-values-to-be-read-from-devices.patch
