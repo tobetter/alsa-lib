@@ -75,8 +75,10 @@ static int alloc_str_list(struct list_head *list, int mult, char **result[])
         int cnt;
         
         cnt = list_count(list) * mult;
-        if (cnt == 0)
+        if (cnt == 0) {
+		*result = NULL;
                 return cnt;
+	}
         res = calloc(mult, cnt * sizeof(char *));
         if (res == NULL)
                 return -ENOMEM;
@@ -858,6 +860,7 @@ static int add_values(struct list_head *list,
                                 val = malloc(sizeof(struct myvalue));
                                 if (val == NULL)
                                         return -ENOMEM;
+				val->value = v->data;
                                 list_add_tail(&val->list, list);
                         }
                 }
@@ -911,8 +914,8 @@ static int get_value_list(snd_use_case_mgr_t *uc_mgr,
                         goto __fail;
         }
         err = alloc_str_list(&mylist, 1, &res);
-        *list = (const char **)res;
         if (err >= 0) {
+	        *list = (const char **)res;
                 list_for_each(pos, &mylist) {
                         val = list_entry(pos, struct myvalue, list);
                         *res = strdup(val->value);
@@ -1059,7 +1062,7 @@ static int get_value3(const char **value,
  * \param uc_mgr Use case manager
  * \param identifier Value identifier (string)
  * \param value Returned value string
- * \param modifier modifier name (string)
+ * \param item Modifier or Device name (string)
  * \return Zero on success (value is filled), otherwise a negative error code
  */
 static int get_value(snd_use_case_mgr_t *uc_mgr,
@@ -1081,7 +1084,7 @@ static int get_value(snd_use_case_mgr_t *uc_mgr,
 		dev = find_device(uc_mgr->active_verb, item);
 		if (dev != NULL) {
 			err = get_value1(value, &dev->value_list, identifier);
-			if (err >=0 || err != -ENOENT)
+			if (err >= 0 || err != -ENOENT)
 				return err;
 		}
 	}

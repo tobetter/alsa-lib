@@ -1,3 +1,11 @@
+alsa-lib (1.0.24.1-0ubuntu3) natty; urgency=low
+
+  * alsa-lib-ucm-allow-values-to-be-read-from-devices.patch: Refresh to include
+    various fixes to the initial patch, as well as some further fixes from
+    Jaroslav Kysela
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Mon, 21 Mar 2011 17:06:44 +1100
+
 alsa-lib (1.0.24.1-0ubuntu2) natty; urgency=low
 
   * alsa-lib-ucm-allow-values-to-be-read-from-devices.patch: Patch from the
