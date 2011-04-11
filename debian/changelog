@@ -1,3 +1,9 @@
+alsa-lib (1.0.24.1-0ubuntu5) natty; urgency=low
+
+  * Add ALSA UCM config files for omap4 (LP: #746023)
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Mon, 11 Apr 2011 20:52:10 +1000
+
 alsa-lib (1.0.24.1-0ubuntu4) natty; urgency=low
 
   * lp178442-ICE1712.patch: Makes pulseaudio succeed in opening
