@@ -1,3 +1,14 @@
+alsa-lib (1.0.23-3) unstable; urgency=low
+
+  [ Elimar Riesebieter ]
+  * Added armhf to supported arch's of libasound2 and libasound2-dev
+    (closes: #596968)
+
+  [ Jordi Mallach ]
+  * Acknowledge Simon's NMU. Thanks a lot!
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 18 Apr 2011 19:41:43 +0200
+
 alsa-lib (1.0.23-2.1) unstable; urgency=low
 
   * Non-maintainer upload.
