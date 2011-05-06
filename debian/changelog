@@ -1,3 +1,23 @@
+alsa-lib (1.0.24.1-0ubuntu6) oneiric; urgency=low
+
+  * debian/control: Update Vcs-Bzr field
+  * debian/rules, debian/libasound2.install: Change the way that smixer files
+    are installed, following on from the changes made in the addition of an
+    libasound2 udeb
+
+  Cherry-pick changes from debian ALSA svn:
+
+  [ Jordi Mallach ]
+  * Switch to architecture wildcard 'linux-any'.
+
+  [ Elimar Riesebieter ]
+  * Provide libasound2-udeb based on a patch from Samuel Thibault. Thanks.
+    (closes: #613092)
+  * Added armhf to supported arch's of libasound2 and libasound2-dev
+    (closes: #596968)
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Fri, 06 May 2011 10:22:14 +1000
+
 alsa-lib (1.0.24.1-0ubuntu5) natty; urgency=low
 
   * Add ALSA UCM config files for omap4 (LP: #746023)
