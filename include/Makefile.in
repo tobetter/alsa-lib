@@ -76,10 +76,10 @@ RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	ps-recursive uninstall-recursive
 am__alsainclude_HEADERS_DIST = asoundlib.h asoundef.h version.h \
 	global.h input.h output.h error.h conf.h control.h iatomic.h \
-	control_external.h pcm.h pcm_old.h timer.h pcm_plugin.h \
-	pcm_rate.h pcm_external.h pcm_extplug.h pcm_ioplug.h rawmidi.h \
-	hwdep.h mixer.h mixer_abst.h seq_event.h seq.h seqmid.h \
-	seq_midi_event.h alisp.h
+	use-case.h control_external.h pcm.h pcm_old.h timer.h \
+	pcm_plugin.h pcm_rate.h pcm_external.h pcm_extplug.h \
+	pcm_ioplug.h rawmidi.h hwdep.h mixer.h mixer_abst.h \
+	seq_event.h seq.h seqmid.h seq_midi_event.h alisp.h
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -179,7 +179,6 @@ LIBTOOL_VERSION_INFO = @LIBTOOL_VERSION_INFO@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
-MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
@@ -266,7 +265,7 @@ SUBDIRS = sound
 sysincludedir = ${includedir}/sys
 alsaincludedir = ${includedir}/alsa
 alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
-	input.h output.h error.h conf.h control.h iatomic.h \
+	input.h output.h error.h conf.h control.h iatomic.h use-case.h \
 	$(am__append_1) $(am__append_2) $(am__append_3) \
 	$(am__append_4) $(am__append_5) $(am__append_6) \
 	$(am__append_7) $(am__append_8) $(am__append_9) \
@@ -280,7 +279,7 @@ all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
 .SUFFIXES:
-$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -305,9 +304,9 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 
-$(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
+$(top_srcdir)/configure:  $(am__configure_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
-$(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
+$(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
@@ -320,7 +319,7 @@ config.h: stamp-h1
 stamp-h1: $(srcdir)/config.h.in $(top_builddir)/config.status
 	@rm -f stamp-h1
 	cd $(top_builddir) && $(SHELL) ./config.status include/config.h
-$(srcdir)/config.h.in: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
+$(srcdir)/config.h.in:  $(am__configure_deps) 
 	($(am__cd) $(top_srcdir) && $(AUTOHEADER))
 	rm -f stamp-h1
 	touch $@
