@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Ubuntu Core Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 XSBC-Original-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
 Uploaders: Jordi Mallach <jordi@debian.org>, Mikael Magnusson <mikma@users.sourceforge.net>, Elimar Riesebieter <riesebie@lxtec.de>
-Build-Depends: debhelper (>= 7),
+Build-Depends: debhelper (>= 8.1.3),
                autotools-dev,
                doxygen,
                libc6-dev-powerpc [ppc64],
@@ -17,7 +17,7 @@ Build-Depends: debhelper (>= 7),
                lib64gcc1 [i386 powerpc sparc s390],
                gcc-multilib [amd64 i386 powerpc ppc64 s390 sparc],
                python-dev
-Standards-Version: 3.9.1
+Standards-Version: 3.9.2
 Homepage: http://www.alsa-project.org/
 XS-Debian-Vcs-Svn: svn://svn.debian.org/pkg-alsa/trunk/alsa-lib
 XS-Debian-Vcs-Browser: http://svn.debian.org/wsvn/pkg-alsa/trunk/alsa-lib/
@@ -25,9 +25,11 @@ Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu.oneiric
 
 Package: libasound2
 Architecture: linux-any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}, dpkg (>= 1.15.7.2)
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: libasound2-plugins (>= 1.0.18)
-Conflicts: libasound2-plugins (<< 1.0.18)
+Breaks: libasound2-plugins (<< 1.0.24-0ubuntu3), libasound2-plugin-equal (<= 0.6-1), bluez-alsa (<< 4.94-0ubuntu2)
 Description: shared library for ALSA applications
  This package contains the ALSA library and its standard plugins.
  .
@@ -39,8 +41,6 @@ Section: libdevel
 Provides: libasound-dev
 Depends: libc6-dev | libc-dev, libasound2 (= ${binary:Version}), ${misc:Depends}
 Suggests: libasound2-doc
-Conflicts: libasound-dev, alsa-headers
-Replaces: libasound2 (<< 0.9.0rc7-2), alsa-headers
 Description: shared library for ALSA applications -- development files
  This package contains files required for developing software
  that makes use of libasound2, the ALSA library.
@@ -49,9 +49,10 @@ Description: shared library for ALSA applications -- development files
 
 Package: lib64asound2
 Architecture: sparc s390 i386 powerpc
+Pre-Depends: dpkg (>= 1.15.7.2)
 Depends: libasound2 (= ${binary:Version}), ${shlibs:Depends}, ${bilib:depends}, ${misc:Depends}
 Suggests: lib64asound2-plugins (>= 1.0.18)
-Conflicts: libasound2-plugins (<< 1.0.18)
+Breaks: libasound2-plugins (<< 1.0.18)
 Description: shared library for ALSA applications (64 bit)
  This package contains the ALSA library (64 bit) and its standard
  plugins.
@@ -71,9 +72,10 @@ Description: shared library for ALSA applications -- development files (64 bit)
 
 Package: lib32asound2
 Architecture: amd64
-Depends: libasound2 (= ${binary:Version}), ${shlibs:Depends}, ${bilib:depends}, ${misc:Depends}, libc6-i386 (>= 2.9-18)
+Pre-Depends: dpkg (>= 1.15.7.2)
+Depends: libasound2 (= ${binary:Version}), ${shlibs:Depends}, ${bilib:depends}, ${misc:Depends}
 Suggests: lib32asound2-plugins (>= 1.0.18)
-Conflicts: libasound2-plugins (<< 1.0.18), ia32-libs (<< 1.9), libc6-i386 (<= 2.9-18)
+Breaks: libasound2-plugins (<< 1.0.18), ia32-libs (<< 1.9), libc6-i386 (<= 2.9-18)
 Replaces: ia32-libs (<< 1.9)
 Description: shared library for ALSA applications (32 bit)
  This package contains the ALSA library (32 bit) and its standard
@@ -86,7 +88,7 @@ Architecture: amd64
 Section: libdevel
 Depends: lib32asound2 (= ${binary:Version}), libasound2-dev (= ${binary:Version}), ${bidev:depends}, ${misc:Depends}
 Suggests: libasound2-doc
-Conflicts: libc6-i386 (<= 2.9-18)
+Breaks: libc6-i386 (<= 2.9-18)
 Description: shared library for ALSA applications -- development files (32 bit)
  This package contains files required for developing software
  that makes use of lib32asound2, the ALSA library (32 bit).
@@ -94,13 +96,12 @@ Description: shared library for ALSA applications -- development files (32 bit)
  ALSA is the Advanced Linux Sound Architecture.
 
 Package: libasound2-udeb
+Section: debian-installer
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Suggests: libasound2-plugins (>= 1.0.18)
-Conflicts: libasound2-plugins (<< 1.0.18)
 Package-Type: udeb
 Description: shared library for ALSA applications
- This package contains the ALSA library and its standard plugins.
+ This package contains the ALSA library for use in the Debian Installer.
  .
  ALSA is the Advanced Linux Sound Architecture.
 

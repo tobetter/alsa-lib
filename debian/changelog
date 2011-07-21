@@ -1,3 +1,37 @@
+alsa-lib (1.0.24.1-0ubuntu7) oneiric; urgency=low
+
+  * Merge changes from Debian svn:
+    - Bump to debhelper compat v8.
+    - Remove debian/tmp prefixes from .install file.
+    - Add multiarch support:
+      + Build-Depend on debhelper 8.1.3.
+      + Add Pre-Depends: ${misc:Pre-Depends} to libasound2.
+      + Declare DEB_HOST_MULTIARCH and use it to define $libdir.
+      + Add an explicit --with-plugindir argument to base plugindir on the
+        multiarch dir.
+      + Update libasound2-dev.install.
+      + Mark libasound2 Multi-Arch: same.
+    - Break current versions of packages providing ALSA plugins.
+    - Remove libasound2's .la file, as any reference will be now broken.
+    - Remove unneeded Suggests and Conflicts from -udeb.
+    - Set Section to debian-installer.
+    - Replace versioned conflicts with Breaks, and remove some obsolete ones.
+    - Bump Standards-Version to 3.9.2 (no further changes).
+    - Update upstream URL in copyright file.
+    - Use versioned pointer to LGPL 2.1 licence.
+  * Drop the hard-coded versioned dependency on libc6-i386.  If we don't need
+    this as a pre-depends for cycle breaking, we don't need to declare it at
+    all since shlibdeps will do the right thing.
+  * debian/patches/multiarch-safe-dlopen-search-path.patch: compile in
+    the ALSA search path instead of relying on ld.so.conf.
+  * With the plugin path corrected, drop the existing ld.so.conf snippets,
+    removing them on upgrade.
+  * Spell out the plugin dir path: the build system fails to expand
+    substitutions, and '${libdir}' is obviously not present on the
+    filesystem.
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Thu, 21 Jul 2011 18:02:01 +0200
+
 alsa-lib (1.0.24.1-0ubuntu6) oneiric; urgency=low
 
   * debian/control: Update Vcs-Bzr field

@@ -7,3 +7,4 @@ lp433573-Support-Echo3G.patch
 lp652035-use-extended-namehints.patch
 alsa-lib-ucm-allow-values-to-be-read-from-devices.patch
 lp178442-ICE1712.patch
+multiarch-safe-dlopen-search-path.patch
