@@ -6,11 +6,12 @@
 PACKAGE:= alsa-lib
 #include /usr/share/quilt/quilt.make
 
-export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 export DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
 DEB_BUILD_ARCH_CPU ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH_CPU)
 DEB_HOST_ARCH  ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH) 
 
 biarch_map := i386=amd64 powerpc=ppc64 sparc=sparc64 s390=s390x \
 		amd64=i386 # ppc64=powerpc
@@ -54,12 +55,13 @@ configure-stamp: $(configure_biarch_stamp)
 	ln -s /usr/share/misc/config.sub config.sub
 	ln -s /usr/share/misc/config.guess config.guess
 	./configure --prefix=/usr \
+		    --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 		    --mandir=\$${prefix}/share/man \
 		    --infodir=\$${prefix}/share/info \
 		    --datadir=\$${prefix}/share \
+		    --with-plugindir=/usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib \
 		    --build $(DEB_BUILD_GNU_TYPE) \
-		    --enable-static --disable-maintainer-mode \
-		    --with-plugindir=/usr/lib/alsa-lib
+		    --enable-static --disable-maintainer-mode
 	touch configure-stamp
 
 configure-biarch-stamp:
@@ -128,32 +130,29 @@ ifneq (,$(build_biarch_stamp))
 	    debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
 	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/alsa-lib/smixer
 #	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig
-	cp -a \
-	  debian/bitmp/usr/lib/libasound.so \
-	  debian/bitmp/usr/lib/libasound.a \
-	    debian/lib$(bi)asound2-dev/$(bilibdir)/
+	cp -a debian/bitmp/usr/lib/libasound.so \
+	    debian/bitmp/usr/lib/libasound.a \
+	    debian/lib$(bi)asound2-dev/$(bilibdir)
 	sed -e "/^libdir=/s,=.*,='/$(bilibdir)',;s,^dependency_libs=.*,dependency_libs=''," \
 	  debian/bitmp/usr/lib/libasound.la \
 	    > debian/lib$(bi)asound2-dev/$(bilibdir)/libasound.la
-	mkdir -p debian/lib$(bi)asound2/etc/ld.so.conf.d
-	echo "/$(bilibdir)/alsa-lib" > debian/lib$(bi)asound2/etc/ld.so.conf.d/lib$(bi)asound2.conf
 #	sed -e "/^libdir=.*lib$$/s,=.*,=/$(bilibdir)," \
 #	  debian/bitmp/usr/lib/pkgconfig/alsa.pc \
 #	    > debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig/alsa.pc
-else
-	sed -ie "s,^dependency_libs=.*,dependency_libs=''," \
-	  debian/tmp/usr/lib/libasound.la
 endif
-	mkdir -p debian/libasound2/etc/ld.so.conf.d
-	echo "/usr/lib/alsa-lib" > debian/libasound2/etc/ld.so.conf.d/libasound2.conf
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2
 	dh_installexamples -s doc/asoundrc.txt
 	dh_installchangelogs -plibasound2 debian/changelog.ALSA
-	dh_install -plibasound2 /usr/lib/libasound.so.2.0.0 /usr/lib/libasound.so.2 /usr/lib
-	dh_install -plibasound2-udeb /usr/lib/libasound.so.2.0.0 /usr/lib/libasound.so.2 /usr/lib
-	dh_install -plibasound2 /usr/lib/alsa-lib/smixer/*.so /usr/lib/alsa-lib
+	dh_install -plibasound2 \
+	    /usr/lib/$(DEB_HOST_MULTIARCH)/libasound.so.2.0.0 \
+	    /usr/lib/$(DEB_HOST_MULTIARCH)/libasound.so.2 \
+	    /usr/lib/$(DEB_HOST_MULTIARCH)
+	dh_install -plibasound2-udeb \
+	    /usr/lib/$(DEB_HOST_MULTIARCH)/libasound.so.2.0.0 \
+	    /usr/lib/$(DEB_HOST_MULTIARCH)/libasound.so.2 /usr/lib
+	dh_install -plibasound2 /usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer/*.so /usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib
 	cp -a debian/tmp/usr/share/alsa debian/libasound2/usr/share/
 	cp -a debian/tmp/usr/share/alsa debian/libasound2-udeb/usr/share/
 	dh_strip -s
@@ -176,7 +175,7 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.24.1)' --add-udeb=libasound2-udeb --exclude=usr/lib/alsa-lib/smixer
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.24.1)' --add-udeb=libasound2-udeb --exclude=usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer
 ifneq (,$(build_biarch_stamp))
 	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.24.1)' --exclude=usr/lib$(bi)/alsa-lib/smixer
 endif
@@ -202,7 +201,7 @@ clean:
 	#-$(MAKE) distclean
 	[ ! -f Makefile ] || $(MAKE) distclean
 	-rm -f *-stamp
-	rm -f config.sub config.guess config.status config.cache
+	-rm -f config.sub config.guess config.status config.cache
 	-rm -rf doc/doxygen
 	rm -rf bibuild debian/bitmp
 	-rm -f include/alsa

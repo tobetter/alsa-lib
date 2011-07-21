@@ -10,7 +10,7 @@ reported to the upstream bug tracking system:
 
 The source code was downloaded from the ALSA homepage:
 
-  http://alsa.sourceforge.net
+  http://www.alsa-project.org/
 
 alsa-lib
 --------
@@ -32,4 +32,4 @@ Copyright (c) 1998 Jarsolav Kysela <perex@suse.cz> and others.
   MA 02110-1301, USA.
 
 On Debian systems, the complete text of the GNU Lesser General Public License
-can be found in /usr/share/common-licenses/LGPL.
+can be found in /usr/share/common-licenses/LGPL-2.1.
