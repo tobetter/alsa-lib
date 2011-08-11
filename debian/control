@@ -28,10 +28,22 @@ Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}, dpkg (>= 1.15.7.2)
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Suggests: libasound2-plugins (>= 1.0.18)
+Suggests: libasound2-plugins (>= 1.0.18), libasound2-python
 Breaks: libasound2-plugins (<< 1.0.24-0ubuntu3), libasound2-plugin-equal (<= 0.6-1), bluez-alsa (<< 4.94-0ubuntu2)
 Description: shared library for ALSA applications
  This package contains the ALSA library and its standard plugins.
+ .
+ ALSA is the Advanced Linux Sound Architecture.
+
+Package: libasound2-python
+Architecture: linux-any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Breaks: libasound2 (<< 1.0.24.1-0ubuntu8)
+Replaces: libasound2 (<< 1.0.24.1-0ubuntu8)
+Description: ALSA library python mixer
+ This package contains the python mixer plugin for the ALSA library.
  .
  ALSA is the Advanced Linux Sound Architecture.
 

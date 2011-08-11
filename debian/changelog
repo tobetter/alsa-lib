@@ -1,3 +1,10 @@
+alsa-lib (1.0.24.1-0ubuntu8) oneiric; urgency=low
+
+  * Split the python-based mixer into a separate package, so our Multi-Arch
+    libasound2 is actually co-installable.
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Thu, 11 Aug 2011 17:32:34 +0000
+
 alsa-lib (1.0.24.1-0ubuntu7) oneiric; urgency=low
 
   * Merge changes from Debian svn:
