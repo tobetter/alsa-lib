@@ -1,3 +1,12 @@
+alsa-lib (1.0.24.1-0ubuntu9) oneiric; urgency=low
+
+  * Duplicate ucm/SDP4430 configs as ucm/Panda configs, reflecting the
+    fact that Pandaboard now has a non-generic card name (LP: #746023)
+  * Comment out AMIC PDM Switch config from ucm/Panda/record, as that
+    device seems to have stopped existing in recent kernel versions.
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Thu, 29 Sep 2011 11:41:38 -0600
+
 alsa-lib (1.0.24.1-0ubuntu8) oneiric; urgency=low
 
   * Split the python-based mixer into a separate package, so our Multi-Arch
