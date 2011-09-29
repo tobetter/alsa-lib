@@ -119,6 +119,8 @@ install-arch: build-arch-stamp
 	mkdir -p $(CURDIR)/debian/tmp/usr/share/alsa/ucm
 	cp -r $(CURDIR)/debian/ucm/SDP4430 \
 	   $(CURDIR)/debian/tmp/usr/share/alsa/ucm
+	cp -r $(CURDIR)/debian/ucm/Panda \
+	   $(CURDIR)/debian/tmp/usr/share/alsa/ucm
 ifneq (,$(build_biarch_stamp))
 	rm -rf debian/bitmp
 	$(MAKE) -C bibuild/src install DESTDIR=$(CURDIR)/debian/bitmp
