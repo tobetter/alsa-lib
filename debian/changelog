@@ -1,3 +1,9 @@
+alsa-lib (1.0.24.1-0ubuntu10) oneiric; urgency=low
+
+  * No, really, s/SDP4430/Panda/ on the ucm/Panda configs (LP: #820466)
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Fri, 30 Sep 2011 03:30:21 -0600
+
 alsa-lib (1.0.24.1-0ubuntu9) oneiric; urgency=low
 
   * Duplicate ucm/SDP4430 configs as ucm/Panda configs, reflecting the

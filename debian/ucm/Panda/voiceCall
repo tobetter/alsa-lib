@@ -1,9 +1,9 @@
-# Use case Configuration for TI SDP4430 HiFi Music
+# Use case Configuration for TI Panda HiFi Music
 # By Liam Girdwood <lrg@slimlogic.co.uk>
 
 SectionVerb {
   	EnableSequence [
-                cdev "hw:SDP4430"
+                cdev "hw:Panda"
                 cset "name='AMIC_UL PDM Switch' 1"
                 cset "name='Sidetone Mixer Capture' 1"
                 cset "name='MUX_VX0' 9"
@@ -19,7 +19,7 @@ SectionVerb {
 
 
 	DisableSequence [
-                cdev "hw:SDP4430"
+                cdev "hw:Panda"
                 cset "name='AMIC_UL PDM Switch' 0"
                 cset "name='Sidetone Mixer Capture' 0"
                 cset "name='MUX_VX0' 0"
@@ -42,10 +42,10 @@ SectionVerb {
 }
 
 SectionDevice."Headset".0 {
-	Comment "SDP4430 3.5mm Headset"
+	Comment "Panda 3.5mm Headset"
 	
 	EnableSequence [
-                cdev "hw:SDP4430"
+                cdev "hw:Panda"
                 cset "name='Analog Left Capture Route' 0"
                 cset "name='Analog Right Capture Route' 0"
                 cset "name='Capture Preamplifier Volume' 2"
@@ -55,7 +55,7 @@ SectionDevice."Headset".0 {
 	]
 
 	DisableSequence [
-                cdev "hw:SDP4430"
+                cdev "hw:Panda"
                 cset "name='Analog Left Capture Route' 3"
                 cset "name='Analog Right Capture Route' 3"
                 cset "name='Capture Preamplifier Volume' 0"
