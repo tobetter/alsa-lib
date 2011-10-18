@@ -14,7 +14,7 @@ DEB_HOST_ARCH  ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH) 
 
 biarch_map := i386=amd64 powerpc=ppc64 sparc=sparc64 s390=s390x \
-		amd64=i386 ppc64=powerpc
+		amd64=i386 # ppc64=powerpc
 biarch_cpu := $(strip $(patsubst $(DEB_BUILD_ARCH_CPU)=%, %, \
 			   $(filter $(DEB_BUILD_ARCH_CPU)=%, $(biarch_map))))
 
@@ -23,7 +23,8 @@ ifneq (,$(biarch_cpu))
     bi = 64
     bilibdir = usr/lib64
   endif
-  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  #ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/))
     bi = 32
     bilibdir = usr/lib32
     ifeq ($(DEB_HOST_ARCH),amd64)
@@ -115,13 +116,21 @@ install-arch: build-arch-stamp
 	dh_testroot
 	dh_prep -s
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp
+	mkdir -p $(CURDIR)/debian/tmp/usr/share/alsa/ucm
+	cp -r $(CURDIR)/debian/ucm/SDP4430 \
+	   $(CURDIR)/debian/tmp/usr/share/alsa/ucm
+	cp -r $(CURDIR)/debian/ucm/Panda \
+	   $(CURDIR)/debian/tmp/usr/share/alsa/ucm
 ifneq (,$(build_biarch_stamp))
 	rm -rf debian/bitmp
 	$(MAKE) -C bibuild/src install DESTDIR=$(CURDIR)/debian/bitmp
-	mkdir -p debian/lib$(bi)asound2/$(bilibdir)
+	$(MAKE) -C bibuild/modules install DESTDIR=$(CURDIR)/debian/bitmp
+	mkdir -p debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
 	cp -a debian/bitmp/usr/lib/libasound.so.* \
 	    debian/lib$(bi)asound2/$(bilibdir)/
-	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)
+	cp -a debian/bitmp/$(bilibdir)/alsa-lib/smixer/*.so \
+	    debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
+	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/alsa-lib/smixer
 #	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)/pkgconfig
 	cp -a debian/bitmp/usr/lib/libasound.so \
 	    debian/bitmp/usr/lib/libasound.a \
@@ -145,6 +154,10 @@ endif
 	dh_install -plibasound2-udeb \
 	    /usr/lib/$(DEB_HOST_MULTIARCH)/libasound.so.2.0.0 \
 	    /usr/lib/$(DEB_HOST_MULTIARCH)/libasound.so.2 /usr/lib
+	dh_install -plibasound2-python /usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer/smixer-python.so \
+	    /usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib
+	rm debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer/smixer-python.so
+	dh_install -plibasound2 /usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer/*.so /usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib
 	cp -a debian/tmp/usr/share/alsa debian/libasound2/usr/share/
 	cp -a debian/tmp/usr/share/alsa debian/libasound2-udeb/usr/share/
 	dh_strip -plibasound2 --dbg-package=libasound2-dbg
@@ -168,9 +181,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.24.1)' --add-udeb=libasound2-udeb
+	dh_makeshlibs -plibasound2  -V'libasound2 (>> 1.0.24.1)' --add-udeb=libasound2-udeb --exclude=usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.24.1)'
+	dh_makeshlibs -plib$(bi)asound2  -V'lib$(bi)asound2 (>> 1.0.24.1)' --exclude=usr/lib$(bi)/alsa-lib/smixer
 endif
 
 	dh_installdeb -s
