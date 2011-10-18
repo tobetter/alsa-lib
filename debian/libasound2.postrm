@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+dpkg-maintscript-helper rm_conffile /etc/ld.so.conf.d/libasound2.conf 1.0.24.1-0ubuntu6 -- "$@"
+
 case "$1" in
 purge)
 	# Remove very old cruft
@@ -11,4 +13,3 @@ purge)
 esac
 
 #DEBHELPER#
-
