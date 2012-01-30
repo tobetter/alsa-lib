@@ -82,6 +82,7 @@ DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ALSA_CONFIG_DIR = @ALSA_CONFIG_DIR@
 ALSA_DEPLIBS = @ALSA_DEPLIBS@
+ALSA_PKGCONF_DIR = @ALSA_PKGCONF_DIR@
 ALSA_PLUGIN_DIR = @ALSA_PLUGIN_DIR@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -202,7 +203,8 @@ top_srcdir = @top_srcdir@
 @INSTALL_M4_TRUE@aclocaldir = $(datadir)/aclocal
 @INSTALL_M4_TRUE@aclocal_DATA = alsa.m4
 EXTRA_DIST = alsa.m4 buildrpm alsa.pc.in
-pkgconfigdir = $(libdir)/pkgconfig
+alsapkgconfdir = @ALSA_PKGCONF_DIR@
+pkgconfigdir = $(alsapkgconfdir)
 pkgconfig_DATA = alsa.pc
 INCLUDES = -I$(top_srcdir)/include
 all: all-am
