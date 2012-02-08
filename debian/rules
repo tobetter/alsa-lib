@@ -8,10 +8,10 @@ export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
 DEB_BUILD_ARCH_CPU ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH_CPU)
 DEB_HOST_ARCH  ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
-DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH) 
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 biarch_map := i386=amd64 powerpc=ppc64 sparc=sparc64 s390=s390x \
-		amd64=i386 ppc64=powerpc
+		amd64=i386 # ppc64=powerpc
 biarch_cpu := $(strip $(patsubst $(DEB_BUILD_ARCH_CPU)=%, %, \
 			   $(filter $(DEB_BUILD_ARCH_CPU)=%, $(biarch_map))))
 
@@ -20,7 +20,8 @@ ifneq (,$(biarch_cpu))
     bi = 64
     bilibdir = usr/lib64
   endif
-  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  #ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/ppc64/))
+  ifneq (,$(findstring /$(DEB_HOST_ARCH)/, /amd64/))
     bi = 32
     bilibdir = usr/lib32
     ifeq ($(DEB_HOST_ARCH),amd64)
@@ -122,9 +123,13 @@ install-arch: build-arch-stamp
 ifneq (,$(build_biarch_stamp))
 	rm -rf debian/bitmp
 	$(MAKE) -C bibuild/src install DESTDIR=$(CURDIR)/debian/bitmp
+	$(MAKE) -C bibuild/modules install DESTDIR=$(CURDIR)/debian/bitmp
 	mkdir -p debian/lib$(bi)asound2/$(bilibdir)
 	cp -a debian/bitmp/usr/lib/libasound.so.* \
 	    debian/lib$(bi)asound2/$(bilibdir)/
+	mkdir -p debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
+	cp -a debian/bitmp/usr/lib$(bi)/alsa-lib/smixer/*.so \
+	    debian/lib$(bi)asound2/$(bilibdir)/alsa-lib/smixer/
 	mkdir -p debian/lib$(bi)asound2-dev/$(bilibdir)
 	cp -a debian/bitmp/usr/lib/libasound.so \
 	    debian/lib$(bi)asound2-dev/$(bilibdir)
@@ -132,8 +137,10 @@ endif
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2
+	dh_installdocs -plibasound2-python
 	dh_installexamples -s doc/asoundrc.txt
 	dh_installchangelogs -plibasound2 debian/changelog.ALSA
+	dh_installchangelogs -plibasound2-python
 	dh_strip -plibasound2 --dbg-package=libasound2-dbg
 	dh_strip -s --remaining-packages
 	dh_link -s
@@ -156,9 +163,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2 -V'libasound2 (>> 1.0.25)' --add-udeb=libasound2-udeb -- -c4
+	dh_makeshlibs -plibasound2 -V'libasound2 (>> 1.0.25)' --add-udeb=libasound2-udeb --exclude=usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer -- -c4
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib$(bi)asound2 -V'lib$(bi)asound2 (>> 1.0.25)'
+	dh_makeshlibs -plib$(bi)asound2 -V'lib$(bi)asound2 (>> 1.0.25)' --exclude=usr/lib$(bi)/alsa-lib/smixer
 endif
 
 	dh_installdeb -s
