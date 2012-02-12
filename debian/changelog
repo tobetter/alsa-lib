@@ -1,3 +1,10 @@
+alsa-lib (1.0.25-1ubuntu2) precise; urgency=low
+
+  [ Tobin Davis ]
+  * Change control names for Panda (omap4) in ucm config files. (LP: #929813)
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Mon, 13 Feb 2012 10:25:58 +1100
+
 alsa-lib (1.0.25-1ubuntu1) precise; urgency=low
 
   * Merge from debian unstable.  Remaining changes:
