@@ -107,6 +107,7 @@ Description: shared library for ALSA applications -- development files (64 bit)
 
 Package: lib32asound2
 Architecture: amd64
+Pre-Depends: dpkg (>= 1.15.7.2)
 Depends: libasound2 (= ${binary:Version}),
          ${bilib:depends},
          ${misc:Depends},

@@ -1,3 +1,10 @@
+alsa-lib (1.0.25-1ubuntu3) precise; urgency=low
+
+  * Pre-Depends: dpkg (>= 1.15.7.2) in lib32asound2 as well as in the other
+    binary packages using dpkg-maintscript-helper.
+
+ -- Colin Watson <cjwatson@ubuntu.com>  Mon, 13 Feb 2012 16:31:14 +0000
+
 alsa-lib (1.0.25-1ubuntu2) precise; urgency=low
 
   [ Tobin Davis ]
