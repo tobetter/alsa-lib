@@ -4,3 +4,4 @@ spelling_fixes.patch
 lp433573-Support-Echo3G.patch
 lp652035-use-extended-namehints.patch
 add-tegra-alc5632.patch
+pandaES-naming-changes.patch
