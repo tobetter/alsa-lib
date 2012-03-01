@@ -1,3 +1,9 @@
+alsa-lib (1.0.25-1ubuntu7) precise; urgency=low
+
+  * Move PandaES bits to debian/ucm, so they'll actually get used.
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Wed, 29 Feb 2012 18:27:23 -0700
+
 alsa-lib (1.0.25-1ubuntu6) precise; urgency=low
 
   * Fix the patch header of pandaES-naming-changes.patch and  actually add 
