@@ -1,3 +1,11 @@
+alsa-lib (1.0.25-1ubuntu8) precise; urgency=low
+
+  * add tegraalc5632 dir and tegraalc5632.conf to debian/ucm/, shipping a 
+    proper ucm default configuration to make sound work out of the box on
+    ac100 netbooks
+
+ -- Oliver Grawert <ogra@ubuntu.com>  Wed, 07 Mar 2012 15:27:43 +0100
+
 alsa-lib (1.0.25-1ubuntu7) precise; urgency=low
 
   * Move PandaES bits to debian/ucm, so they'll actually get used.
