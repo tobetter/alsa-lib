@@ -1,3 +1,11 @@
+alsa-lib (1.0.25-1ubuntu9) precise; urgency=low
+
+  * 0001-USB-Audio-Blacklist-iec958-for-some-USB-devices.patch:
+    Hide digital devices on some common, analog-only USB devices 
+    (LP: #940145) 
+
+ -- David Henningsson <david.henningsson@canonical.com>  Fri, 09 Mar 2012 11:50:30 +0100
+
 alsa-lib (1.0.25-1ubuntu8) precise; urgency=low
 
   * add tegraalc5632 dir and tegraalc5632.conf to debian/ucm/, shipping a 
