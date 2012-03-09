@@ -1,0 +1,417 @@
+## Description: fix naming of Panda vs PandaES ucm handling as the device name differs between the two boards
+## Origin/Author: Tobin Davis <gruemaster@gmail.com>
+Index: alsa-lib-1.0.25/ucm/PandaES/FMAnalog
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/FMAnalog	2012-02-24 16:10:30.524149002 +0100
+@@ -0,0 +1,46 @@
++# Use case Configurationfor TI PandaES HiFi Music
++# By Liam Girdwood <lrg@slimlogic.co.uk>
++
++SectionVerb {
++  	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='AMIC_UL PDM Switch' 1"
++                cset "name='MUX_UL00' 9"
++                cset "name='MUX_UL01' 10"
++                cset "name='Capture Volume' 4"
++	]
++
++
++	DisableSequence [
++                cdev "hw:PandaES"
++                cset "name='AMIC_UL PDM Switch' 0"
++                cset "name='MUX_UL00' 0"
++                cset "name='MUX_UL01' 0"
++                cset "name='Capture Volume' 0"
++	]
++
++	# Optional TQ and ALSA PCMs
++	Value {
++		TQ "Music"
++                CapturePCM "hw:0,0"
++	}
++}
++
++SectionDevice."Headset".0 {
++	Comment "PandaES 3.5mm Headset"
++	
++	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='Analog Left Capture Route' 2"
++                cset "name='Analog Right Capture Route' 2"
++                cset "name='Capture Preamplifier Volume' 2"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++                cset "name='Analog Left Capture Route' 3"
++                cset "name='Analog Right Capture Route' 3"
++                cset "name='Capture Preamplifier Volume' 0"
++	]
++}
++
+Index: alsa-lib-1.0.25/ucm/PandaES/hifi
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/hifi	2012-02-24 16:10:30.534149002 +0100
+@@ -0,0 +1,83 @@
++# Use case Configuration for TI PandaES HiFi Music
++# By Liam Girdwood <lrg@slimlogic.co.uk>
++
++SectionVerb {
++  	EnableSequence [
++                cdev "hw:PandaES"
++		cset "name='DL1 Mixer Multimedia' 1"
++		cset "name='Sidetone Mixer Playback' 1"
++                cset "name='DL1 PDM Switch' 1"
++		cset "name='DL1 Media Playback Volume' 90,90"
++                cset "name='SDT DL Volume' 120"
++
++                cset "name='Headset Left Playback' 1"
++                cset "name='Headset Right Playback' 1"
++                cset "name='Headset Playback Volume' 13"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++		cset "name='DL1 Mixer Multimedia' 0"
++		cset "name='Sidetone Mixer Playback' 0"
++                cset "name='DL1 PDM Switch' 0"
++		cset "name='DL1 Media Playback Volume' 0,0"
++                cset "name='SDT DL Volume' 0"
++
++		cset "name='Headset Right Playback' 0"
++		cset "name='Headset Left Playback' 0"
++                cset "name='Headset Playback Volume' 0"
++	]
++
++ 	# Optional TQ and ALSA PCMs
++#	Value {
++#		TQ "Music"
++#		PlaybackPCM "hw:0,0"
++#                PlaybackVolume "name='DL1 Media Playback Volume' 90,90"
++#                PlaybackSwitch "name='DL1 PDM Switch' 1"
++#	}
++}
++
++SectionDevice."Headset".0 {
++	Comment "PandaES 3.5mm Headset"
++	
++	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='Headset Left Playback' 1"
++                cset "name='Headset Right Playback' 1"
++                cset "name='Headset Playback Volume' 13"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++		cset "name='Headset Right Playback' 0"
++		cset "name='Headset Left Playback' 0"
++                cset "name='Headset Playback Volume' 0"
++	]
++}
++
++#SectionModifier."RecordMedia".0 {
++#	SupportedDevice [
++#		"Headset"
++#	]
++ #       EnableSequence [
++ #         ....
++ #       ]
++ #
++ #       DisableSequence [
++ #         ...
++ #       ]
++ #
++ #       TransitionSequence."ToModifierName" [
++ #         ...
++ #       ]
++ #
++ #       # Optional TQ and ALSA PCMs
++ #       Value {
++ #               TQ Voice
++ #               CapturePCM "hw:1"
++ #               PlaybackVolume "name='Master Playback Volume',index=2"
++ #               PlaybackSwitch "name='Master Playback Switch',index=2"
++ #       }
++#
++#}
++
+Index: alsa-lib-1.0.25/ucm/PandaES/hifiLP
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/hifiLP	2012-02-24 16:10:30.534149002 +0100
+@@ -0,0 +1,46 @@
++# Use case Configuration for TI PandaES HiFi Music
++# By Liam Girdwood <lrg@slimlogic.co.uk>
++
++SectionVerb {
++  	EnableSequence [
++                cdev "hw:PandaES"
++		cset "name='DL1 Mixer Multimedia' 1"
++		cset "name='Sidetone Mixer Playback' 1"
++                cset "name='DL1 PDM Switch' 1"
++		cset "name='DL1 Media Playback Volume' 90,90"
++                cset "name='SDT DL Volume' 120"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++		cset "name='DL1 Mixer Multimedia' 0"
++		cset "name='Sidetone Mixer Playback' 0"
++                cset "name='DL1 PDM Switch' 0"
++		cset "name='DL1 Media Playback Volume' 0,0"
++                cset "name='SDT DL Volume' 0"
++	]
++
++	# Optional TQ and ALSA PCMs
++	Value {
++		TQ "Music"
++		PlaybackPCM "hw:0,6"
++	}
++}
++
++SectionDevice."Headset".0 {
++	Comment "PandaES 3.5mm Headset"
++	
++	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='Headset Left Playback' 1"
++                cset "name='Headset Right Playback' 1"
++                cset "name='Headset Playback Volume' 13"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++		cset "name='Headset Right Playback' 0"
++		cset "name='Headset Left Playback' 0"
++                cset "name='Headset Playback Volume' 0"
++	]
++}
+Index: alsa-lib-1.0.25/ucm/PandaES/PandaES.conf
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/PandaES.conf	2012-02-24 16:10:30.534149002 +0100
+@@ -0,0 +1,45 @@
++# UCM configuration for PandaES
++SectionUseCase."Record" {
++ 		File "record"
++ 		Comment "Record."
++}
++
++SectionUseCase."HiFi" {
++ 		File "hifi"
++ 		Comment "Play HiFi quality Music."
++}
++
++SectionUseCase."HiFi_Low_Power" {
++ 		File "hifiLP"
++ 		Comment "Play HiFi quality Music in Low Power Mode."
++}
++
++SectionUseCase."Voice" {
++ 		File "voice"
++ 		Comment "Playback Voice quality."
++}
++
++SectionUseCase."Voice_Low_Power" {
++ 		File "voice"
++ 		Comment "Playback Voice quality in Low Power Mode."
++}
++
++SectionUseCase."Voice_Call" {
++ 		File "voiceCall"
++ 		Comment "Capture and Playback in Voice quality."
++}
++
++SectionUseCase."Voice_Call_IP" {
++ 		File "voiceCall"
++ 		Comment "Capture and Playback in Voice quality."
++}
++
++SectionUseCase."FM_Analog_Radio" {
++ 		File "FMAnalog"
++ 		Comment "Capture FM Analog Radio."
++}
++
++SectionDefaults [
++                cdev "hw:PandaES"
++		exec "echo Im setting PandaES defaults"
++]
+Index: alsa-lib-1.0.25/ucm/PandaES/record
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/record	2012-02-24 16:10:30.534149002 +0100
+@@ -0,0 +1,47 @@
++# Use case Configuration for TI PandaES HiFi Music
++# By Liam Girdwood <lrg@slimlogic.co.uk>
++
++SectionVerb {
++  	EnableSequence [
++                cdev "hw:PandaES"
++                # No more AMIC PDM Switch in current kernels
++                #cset "name='AMIC_UL PDM Switch' 1"
++                cset "name='MUX_UL00' 9"
++                cset "name='MUX_UL01' 10"
++                cset "name='Capture Volume' 4"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++                # No more AMIC PDM Switch in current kernels
++                #cset "name='AMIC_UL PDM Switch' 0"
++                cset "name='MUX_UL00' 0"
++                cset "name='MUX_UL01' 0"
++                cset "name='Capture Volume' 0"
++	]
++
++	# Optional TQ and ALSA PCMs
++	Value {
++		TQ "Music"
++		CapturePCM "hw:0,0"
++	}
++
++}
++
++SectionDevice."Headset".0 {
++	Comment "PandaES 3.5mm Headset"
++	
++	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='Analog Left Capture Route' 0"
++                cset "name='Analog Right Capture Route' 0"
++                cset "name='Capture Preamplifier Volume' 2"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++                cset "name='Analog Left Capture Route' 3"
++                cset "name='Analog Right Capture Route' 3"
++                cset "name='Capture Preamplifier Volume' 0"
++	]
++}
+Index: alsa-lib-1.0.25/ucm/PandaES/voice
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/voice	2012-02-24 16:10:30.534149002 +0100
+@@ -0,0 +1,46 @@
++# Use case Configuration for TI PandaES HiFi Music
++# By Liam Girdwood <lrg@slimlogic.co.uk>
++
++SectionVerb {
++  	EnableSequence [
++                cdev "hw:PandaES"
++		cset "name='DL1 Mixer Voice' 1"
++		cset "name='Sidetone Mixer Playback' 1"
++                cset "name='DL1 PDM Switch' 1"
++		cset "name='DL1 Voice Playback Volume' 90,90"
++                cset "name='SDT DL Volume' 120"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++		cset "name='DL1 Mixer Voice' 0"
++		cset "name='Sidetone Mixer Playback' 0"
++                cset "name='DL1 PDM Switch' 0"
++		cset "name='DL1 Voice Playback Volume' 0,0"
++                cset "name='SDT DL Volume' 0"
++	]
++
++	# Optional TQ and ALSA PCMs
++	Value {
++		TQ "Voice"
++		PlaybackPCM "hw:0,2"
++	}
++}
++
++SectionDevice."Headset".0 {
++	Comment "PandaES 3.5mm Headset"
++	
++	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='Headset Left Playback' 1"
++                cset "name='Headset Right Playback' 1"
++                cset "name='Headset Playback Volume' 13"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++		cset "name='Headset Right Playback' 0"
++		cset "name='Headset Left Playback' 0"
++                cset "name='Headset Playback Volume' 0"
++	]
++}
+Index: alsa-lib-1.0.25/ucm/PandaES/voiceCall
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.25/ucm/PandaES/voiceCall	2012-02-24 16:10:30.544149002 +0100
+@@ -0,0 +1,67 @@
++# Use case Configuration for TI PandaES HiFi Music
++# By Liam Girdwood <lrg@slimlogic.co.uk>
++
++SectionVerb {
++  	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='AMIC_UL PDM Switch' 1"
++                cset "name='Sidetone Mixer Capture' 1"
++                cset "name='MUX_VX0' 9"
++                cset "name='MUX_VX1' 10"
++		cset "name='DL1 Mixer Voice' 1"
++		cset "name='Sidetone Mixer Playback' 1"
++                cset "name='DL1 PDM Switch' 1"
++		cset "name='DL1 Voice Playback Volume' 90,90"
++                cset "name='Capture Volume' 4"
++                cset "name='Capture Mixer Voice Capture' 90,90"
++                cset "name='SDT DL Volume' 120"
++	]
++
++
++	DisableSequence [
++                cdev "hw:PandaES"
++                cset "name='AMIC_UL PDM Switch' 0"
++                cset "name='Sidetone Mixer Capture' 0"
++                cset "name='MUX_VX0' 0"
++                cset "name='MUX_VX1' 0"
++		cset "name='DL1 Mixer Voice' 0"
++		cset "name='Sidetone Mixer Playback' 0"
++                cset "name='DL1 PDM Switch' 0"
++		cset "name='DL1 Voice Playback Volume' 0,0"
++                cset "name='Capture Volume' 0"
++		cset "name='DL1 Voice Playback Volume' 0,0"
++                cset "name='SDT DL Volume' 0"
++	]
++
++	# Optional TQ and ALSA PCMs
++	Value {
++		TQ "Voice"
++                CapturePCM "hw:0,2"
++		PlaybackPCM "hw:0,2"
++	}
++}
++
++SectionDevice."Headset".0 {
++	Comment "PandaES 3.5mm Headset"
++	
++	EnableSequence [
++                cdev "hw:PandaES"
++                cset "name='Analog Left Capture Route' 0"
++                cset "name='Analog Right Capture Route' 0"
++                cset "name='Capture Preamplifier Volume' 2"
++                cset "name='Headset Left Playback' 1"
++                cset "name='Headset Right Playback' 1"
++                cset "name='Headset Playback Volume' 13"
++	]
++
++	DisableSequence [
++                cdev "hw:PandaES"
++                cset "name='Analog Left Capture Route' 3"
++                cset "name='Analog Right Capture Route' 3"
++                cset "name='Capture Preamplifier Volume' 0"
++		cset "name='Headset Right Playback' 0"
++		cset "name='Headset Left Playback' 0"
++                cset "name='Headset Playback Volume' 0"
++	]
++}
++
