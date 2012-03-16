@@ -1,3 +1,9 @@
+alsa-lib (1.0.25-1ubuntu10) precise; urgency=low
+
+  * Undo accidental revert of PandaES changes from the previous upload.
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Fri, 16 Mar 2012 14:53:37 -0600
+
 alsa-lib (1.0.25-1ubuntu9) precise; urgency=low
 
   * 0001-USB-Audio-Blacklist-iec958-for-some-USB-devices.patch:
