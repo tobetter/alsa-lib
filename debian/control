@@ -23,7 +23,7 @@ Standards-Version: 3.9.2
 Homepage: http://www.alsa-project.org/
 XS-Debian-Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
 XS-Debian-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
-Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu.precise
+Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu.quantal
 
 Package: libasound2
 Architecture: linux-any
