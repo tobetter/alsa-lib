@@ -19,22 +19,22 @@ Signed-off-by: David Henningsson <david.henningsson@canonical.com>
  src/conf/cards/USB-Audio.conf |    5 +++++
  1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/src/conf/cards/USB-Audio.conf b/src/conf/cards/USB-Audio.conf
-index 0726c34..d7c121e 100644
---- a/src/conf/cards/USB-Audio.conf
-+++ b/src/conf/cards/USB-Audio.conf
-@@ -36,6 +36,11 @@ USB-Audio.pcm.surround40_type {
+Index: alsa-lib-1.0.25/src/conf/cards/USB-Audio.conf
+===================================================================
+--- alsa-lib-1.0.25.orig/src/conf/cards/USB-Audio.conf	2012-01-24 23:56:56.000000000 -0800
++++ alsa-lib-1.0.25/src/conf/cards/USB-Audio.conf	2012-05-11 14:17:34.291049494 -0700
+@@ -36,6 +36,14 @@
  # number for the iec958 device can be changed here.
  USB-Audio.pcm.iec958_device {
  	# "NoiseBlaster 3000" 42
 +
 +	# The below don't have digital in/out, so prevent them from being opened.
-+	"Logitech USB Headset" 999
-+	"Logitech Web Camera" 999
 +	"Blue Snowball" 999
++	"Logitech Speaker Lapdesk N700" 999
++	"Logitech USB Headset" 999
++	"Logitech Wireless Headset" 999
++	"Plantronics USB Headset" 999
++	"Sennheiser USB headset" 999
  }
  
  
--- 
-1.7.9
-
