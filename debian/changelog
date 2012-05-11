@@ -1,3 +1,10 @@
+alsa-lib (1.0.25-1ubuntu10.1) precise-proposed; urgency=low
+
+  * 0001-USB-Audio-Blacklist-iec958-for-some-USB-devices.patch:
+    Add more USB devices to the IEC958 blacklist (LP: #987163)
+
+ -- David Henningsson <david.henningsson@canonical.com>  Fri, 11 May 2012 15:21:59 -0700
+
 alsa-lib (1.0.25-1ubuntu10) precise; urgency=low
 
   * Undo accidental revert of PandaES changes from the previous upload.
