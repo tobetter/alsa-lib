@@ -100,8 +100,10 @@ endif
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2
+	dh_installdocs -plibasound2-python
 	dh_installexamples -s doc/asoundrc.txt
 	dh_installchangelogs -plibasound2 debian/changelog.ALSA
+	dh_installchangelogs -plibasound2-python
 	dh_strip -plibasound2 --dbg-package=libasound2-dbg
 	dh_strip -s --remaining-packages
 	dh_link -s
@@ -123,9 +125,9 @@ install-indep: build-indep-stamp
 	dh_fixperms -i
 
 binary-arch: build-arch-stamp install-arch
-	dh_makeshlibs -plibasound2 -V'libasound2 (>> 1.0.25)' --add-udeb=libasound2-udeb -- -c4
+	dh_makeshlibs -plibasound2 -V'libasound2 (>> 1.0.25)' --add-udeb=libasound2-udeb --exclude=usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib/smixer -- -c4
 ifneq (,$(build_biarch_stamp))
-	dh_makeshlibs -plib32asound2 -V'lib32asound2 (>> 1.0.25)'
+	dh_makeshlibs -plib32asound2 -V'lib32asound2 (>> 1.0.25)' --exclude=usr/lib32/alsa-lib/smixer
 endif
 
 	dh_installdeb -s

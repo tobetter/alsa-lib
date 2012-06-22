@@ -1,7 +1,8 @@
 Source: alsa-lib
 Section: libs
 Priority: optional
-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
 Uploaders: Jordi Mallach <jordi@debian.org>,
            Elimar Riesebieter <riesebie@lxtec.de>
 Build-Depends: autotools-dev,
@@ -15,21 +16,34 @@ Build-Depends: autotools-dev,
                python-dev
 Standards-Version: 3.9.3
 Homepage: http://www.alsa-project.org/
-Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
+XS-Debian-Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
+XS-Debian-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
+Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu.quantal
 
 Package: libasound2
 Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Suggests: libasound2-plugins (>= 1.0.18)
+Suggests: libasound2-plugins (>= 1.0.18), libasound2-python
 Breaks: bluez-alsa (<= 4.94-2),
         libasound2-plugin-equal (<= 0.6-1),
         libasound2-plugins (<< 1.0.24)
 Description: shared library for ALSA applications
  This package contains the ALSA library and its standard plugins, as well
  as the required configuration files.
+ .
+ ALSA is the Advanced Linux Sound Architecture.
+
+Package: libasound2-python
+Architecture: linux-any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Breaks: libasound2 (<< 1.0.24.1-0ubuntu8)
+Replaces: libasound2 (<< 1.0.24.1-0ubuntu8)
+Description: ALSA library python mixer
+ This package contains the python mixer plugin for the ALSA library.
  .
  ALSA is the Advanced Linux Sound Architecture.
 
