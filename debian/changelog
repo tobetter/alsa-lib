@@ -1,3 +1,11 @@
+alsa-lib (1.0.25-3ubuntu2) quantal; urgency=low
+
+  * debian/ucm/PandaES -> debian/ucm/PandaBoardES
+  * Change contents of PandaBoard ES files as above.
+  * Make similar changes for PandaBoard as well, Panda -> PandaBoard.
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Thu, 09 Aug 2012 19:17:34 +1000
+
 alsa-lib (1.0.25-3ubuntu1) quantal; urgency=low
 
   * Merge from debian unstable.  Remaining changes:
