@@ -1,3 +1,10 @@
+alsa-lib (1.0.25-3ubuntu3) quantal; urgency=low
+
+  * debian/ucm/tegraalc5632/tegraalc5632.conf: fix recording, set sane volume
+    defaults (LP: #1046412)
+
+ -- Oliver Grawert <ogra@ubuntu.com>  Wed, 12 Sep 2012 12:10:18 +0200
+
 alsa-lib (1.0.25-3ubuntu2) quantal; urgency=low
 
   * debian/ucm/PandaES -> debian/ucm/PandaBoardES
