@@ -41,6 +41,7 @@ configure-stamp: autoreconf-stamp $(configure_biarch_stamp)
 		    --with-plugindir=/usr/lib/$(DEB_HOST_MULTIARCH)/alsa-lib \
 		    --build $(DEB_BUILD_GNU_TYPE) \
 		    --host $(DEB_HOST_GNU_TYPE) \
+		    --disable-python \
 		    --disable-maintainer-mode
 	touch configure-stamp
 
@@ -100,10 +101,8 @@ endif
 	dh_installdirs -s
 	dh_install -s
 	dh_installdocs -plibasound2
-	dh_installdocs -plibasound2-python
 	dh_installexamples -s doc/asoundrc.txt
 	dh_installchangelogs -plibasound2 debian/changelog.ALSA
-	dh_installchangelogs -plibasound2-python
 	dh_strip -plibasound2 --dbg-package=libasound2-dbg
 	dh_strip -s --remaining-packages
 	dh_link -s
