@@ -12,38 +12,25 @@ Build-Depends: autotools-dev,
                dpkg-dev (>= 1.16.1),
                gcc-multilib [amd64],
                lib32gcc1 [amd64],
-               libc6-dev-i386 [amd64],
-               python-dev
+               libc6-dev-i386 [amd64]
 Standards-Version: 3.9.3
 Homepage: http://www.alsa-project.org/
 XS-Debian-Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
 XS-Debian-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
-Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu.quantal
+Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu
 
 Package: libasound2
 Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Suggests: libasound2-plugins (>= 1.0.18), libasound2-python
+Suggests: libasound2-plugins (>= 1.0.18)
 Breaks: bluez-alsa (<= 4.94-2),
         libasound2-plugin-equal (<= 0.6-1),
         libasound2-plugins (<< 1.0.24)
 Description: shared library for ALSA applications
  This package contains the ALSA library and its standard plugins, as well
  as the required configuration files.
- .
- ALSA is the Advanced Linux Sound Architecture.
-
-Package: libasound2-python
-Architecture: linux-any
-Multi-Arch: same
-Pre-Depends: ${misc:Pre-Depends}
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Breaks: libasound2 (<< 1.0.24.1-0ubuntu8)
-Replaces: libasound2 (<< 1.0.24.1-0ubuntu8)
-Description: ALSA library python mixer
- This package contains the python mixer plugin for the ALSA library.
  .
  ALSA is the Advanced Linux Sound Architecture.
 

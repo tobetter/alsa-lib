@@ -1,3 +1,16 @@
+alsa-lib (1.0.25-3ubuntu4) raring; urgency=low
+
+  * Drop the libasound2-python package; this isn't built in Debian, it
+    doesn't look like anything uses the module, it isn't ported to python3,
+    and the python-dev build-dependency prevents cross-building alsa-lib.
+  * debian/patches/fix-broken-cross-compiler-detection.patch: Drop a
+    broken non-standard attempt to find a cross-compiler.
+  * Update Vcs-Bzr field for new branch.  Instead of putting the release name
+    in the branch, just use 'ubuntu' so that this doesn't have to be updated
+    for each new series and SRU branches can be created only when needed.
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Thu, 18 Oct 2012 21:43:27 -0700
+
 alsa-lib (1.0.25-3ubuntu3) quantal; urgency=low
 
   * debian/ucm/tegraalc5632/tegraalc5632.conf: fix recording, set sane volume
