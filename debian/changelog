@@ -1,3 +1,9 @@
+alsa-lib (1.0.25-3ubuntu5) raring-proposed; urgency=low
+
+  * Add a compile/run autopkg test, thanks to Rafał Cieślak. (LP: #1073346)
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Wed, 31 Oct 2012 13:49:43 +0100
+
 alsa-lib (1.0.25-3ubuntu4) raring; urgency=low
 
   * Drop the libasound2-python package; this isn't built in Debian, it
