@@ -41,6 +41,7 @@ Multi-Arch: same
 Provides: libasound-dev
 Depends: libasound2 (= ${binary:Version}), libc6-dev | libc-dev, ${misc:Depends}
 Suggests: libasound2-doc
+XS-Testsuite: autopkgtest
 Description: shared library for ALSA applications -- development files
  This package contains files required for developing software
  that makes use of libasound2, the ALSA library.
@@ -69,6 +70,7 @@ Breaks: ia32-libs (<< 1.9),
         libasound2-plugins (<< 1.0.18),
         libc6-i386 (<= 2.9-18)
 Replaces: ia32-libs (<< 1.9)
+XS-Testsuite: autopkgtest
 Description: shared library for ALSA applications (32 bit)
  This package contains the ALSA library (32 bit) and its standard
  plugins.
