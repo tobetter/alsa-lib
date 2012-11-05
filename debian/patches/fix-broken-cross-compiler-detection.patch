@@ -1,0 +1,32 @@
+Description: Drop a broken non-standard attempt to find a cross-compiler
+ The upstream configure script tries to do some manual mangling of
+ host_cpu and host_os fields to guess at a cross-compiler.  It shouldn't.
+ AC_HOST_CANONICAL already gets this right, and this rule just makes a
+ mess of things, failing to detect cross-compilers in a Debian environment.
+Author: Steve Langasek <steve.langasek@ubuntu.com>
+
+Index: alsa-lib-1.0.25/configure.in
+===================================================================
+--- alsa-lib-1.0.25.orig/configure.in
++++ alsa-lib-1.0.25/configure.in
+@@ -26,20 +26,6 @@
+ 
+ dnl Checks for programs.
+ 
+-dnl try to gues cross-compiler if not set
+-if test "x$host" != "x$build" -a -z "`echo $CC | grep -e '-gcc'`";
+-then
+-  AC_MSG_CHECKING(for cross-compiler)
+-
+-  which ${program_prefix}gcc >/dev/null 2>&1 && CC=${program_prefix}gcc
+-  which ${host_cpu}-${host_os}-gcc >/dev/null 2>&1 \
+-  && CC=${host_cpu}-${host-os}-gcc
+-  which ${host_cpu}-${host_vendor}-${host_os}-gcc >/dev/null 2>&1 \
+-  && CC=${host_cpu}-${host_vendor}-${host_os}-gcc
+-
+-  AC_MSG_RESULT($CC)
+-fi
+-	    
+ CFLAGS="$CFLAGS -D_GNU_SOURCE"
+ 
+ 
