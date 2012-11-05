@@ -1,4 +1,9 @@
 add-maintainer-mode.patch
 multiarch-safe-dlopen-search-path.patch
 spelling_fixes.patch
+lp433573-Support-Echo3G.patch
+lp652035-use-extended-namehints.patch
+add-tegra-alc5632.patch
+0001-USB-Audio-Blacklist-iec958-for-some-USB-devices.patch
+fix-broken-cross-compiler-detection.patch
 htcl_remove_useless_assert.patch
