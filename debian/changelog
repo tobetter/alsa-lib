@@ -1,3 +1,13 @@
+alsa-lib (1.0.25-4ubuntu2) raring; urgency=low
+
+  [ Marcin Juszkiewicz ]
+  * Add Samsung Chromebook UCM configuration - LP: #1085392
+
+  [ Adam Conrad ]
+  * Re-introduce PandaES UCM profiles dropped in a previous merge.
+
+ -- Marcin Juszkiewicz <marcin.juszkiewicz@linaro.org>  Sat, 01 Dec 2012 13:22:52 +0100
+
 alsa-lib (1.0.25-4ubuntu1) raring-proposed; urgency=low
 
   * Merge from debian unstable.  Remaining changes:
