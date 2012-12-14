@@ -1,3 +1,9 @@
+alsa-lib (1.0.25-3ubuntu3.1) quantal; urgency=low
+
+  * Add Samsung Chromebook UCM configuration - LP: #1085392
+
+ -- Marcin Juszkiewicz <marcin.juszkiewicz@linaro.org>  Fri, 14 Dec 2012 19:14:09 +0100
+
 alsa-lib (1.0.25-3ubuntu3) quantal; urgency=low
 
   * debian/ucm/tegraalc5632/tegraalc5632.conf: fix recording, set sane volume
