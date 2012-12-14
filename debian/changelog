@@ -1,3 +1,9 @@
+alsa-lib (1.0.25-1ubuntu10.2) precise-proposed; urgency=low
+
+  * Add Samsung Chromebook UCM configuration - LP: #1085392
+
+ -- Marcin Juszkiewicz <marcin.juszkiewicz@linaro.org>  Fri, 14 Dec 2012 19:14:09 +0100
+
 alsa-lib (1.0.25-1ubuntu10.1) precise-proposed; urgency=low
 
   * 0001-USB-Audio-Blacklist-iec958-for-some-USB-devices.patch:
