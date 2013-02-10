@@ -7,3 +7,4 @@ add-tegra-alc5632.patch
 0001-USB-Audio-Blacklist-iec958-for-some-USB-devices.patch
 fix-broken-cross-compiler-detection.patch
 htcl_remove_useless_assert.patch
+sys_types_include.patch

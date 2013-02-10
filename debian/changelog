@@ -1,3 +1,9 @@
+alsa-lib (1.0.25-4ubuntu3) raring; urgency=low
+
+  * sys_types_include.patch: Explicitly include <sys/types.h> (LP: #1109298)
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Sat, 09 Feb 2013 20:07:54 -0700
+
 alsa-lib (1.0.25-4ubuntu2) raring; urgency=low
 
   [ Marcin Juszkiewicz ]
