@@ -31,6 +31,7 @@
  */
 
 #include "ucm_local.h"
+#include <ctype.h>
 #include <stdarg.h>
 #include <pthread.h>
 
@@ -158,9 +159,13 @@ static int open_ctl(snd_use_case_mgr_t *uc_mgr,
 	return 0;
 }
 
-static int execute_cset(snd_ctl_t *ctl, char *cset)
+extern int __snd_ctl_ascii_elem_id_parse(snd_ctl_elem_id_t *dst,
+					 const char *str,
+					 const char **ret_ptr);
+
+static int execute_cset(snd_ctl_t *ctl, const char *cset)
 {
-	char *pos;
+	const char *pos;
 	int err;
 	snd_ctl_elem_id_t *id;
 	snd_ctl_elem_value_t *value;
@@ -170,16 +175,16 @@ static int execute_cset(snd_ctl_t *ctl, char *cset)
 	snd_ctl_elem_value_malloc(&value);
 	snd_ctl_elem_info_malloc(&info);
 
-	pos = strrchr(cset, ' ');
-	if (pos == NULL) {
+	err = __snd_ctl_ascii_elem_id_parse(id, cset, &pos);
+	if (err < 0)
+		goto __fail;
+	while (*pos && isspace(*pos))
+		pos++;
+	if (!*pos) {
 		uc_error("undefined value for cset >%s<", cset);
 		err = -EINVAL;
 		goto __fail;
 	}
-	*pos = '\0';
-	err = snd_ctl_ascii_elem_id_parse(id, cset);
-	if (err < 0)
-		goto __fail;
 	snd_ctl_elem_value_set_id(value, id);
 	snd_ctl_elem_info_set_id(info, id);
 	err = snd_ctl_elem_read(ctl, value);
@@ -188,7 +193,7 @@ static int execute_cset(snd_ctl_t *ctl, char *cset)
 	err = snd_ctl_elem_info(ctl, info);
 	if (err < 0)
 		goto __fail;
-	err = snd_ctl_ascii_value_parse(ctl, value, info, pos + 1);
+	err = snd_ctl_ascii_value_parse(ctl, value, info, pos);
 	if (err < 0)
 		goto __fail;
 	err = snd_ctl_elem_write(ctl, value);
@@ -196,9 +201,6 @@ static int execute_cset(snd_ctl_t *ctl, char *cset)
 		goto __fail;
 	err = 0;
       __fail:
-	if (pos != NULL)
-		*pos = ' ';
-
 	if (id != NULL)
 		free(id);
 	if (value != NULL)
@@ -367,8 +369,10 @@ static int get_list0(struct list_head *list,
 	char *ptr, *str1;
 
 	cnt = alloc_str_list(list, 1, &res);
-	if (cnt <= 0)
+	if (cnt <= 0) {
+		*result = NULL;
 	        return cnt;
+	}
 	*result = (const char **)res;
 	list_for_each(pos, list) {
 		ptr = list_entry_offset(pos, char, offset);
@@ -414,8 +418,10 @@ static int get_list20(struct list_head *list,
 	char *ptr, *str1, *str2;
 
 	cnt = alloc_str_list(list, 2, &res);
-	if (cnt <= 0)
+	if (cnt <= 0) {
+		*result = NULL;
 	        return cnt;
+	}
         *result = (const char **)res;
 	list_for_each(pos, list) {
 		ptr = list_entry_offset(pos, char, offset);
@@ -565,6 +571,34 @@ static struct use_case_modifier *
 	return NULL;
 }
 
+long device_status(snd_use_case_mgr_t *uc_mgr,
+                   const char *device_name)
+{
+        struct use_case_device *dev;
+        struct list_head *pos;
+
+        list_for_each(pos, &uc_mgr->active_devices) {
+                dev = list_entry(pos, struct use_case_device, active_list);
+                if (strcmp(dev->name, device_name) == 0)
+                        return 1;
+        }
+        return 0;
+}
+
+long modifier_status(snd_use_case_mgr_t *uc_mgr,
+                     const char *modifier_name)
+{
+        struct use_case_modifier *mod;
+        struct list_head *pos;
+
+        list_for_each(pos, &uc_mgr->active_modifiers) {
+                mod = list_entry(pos, struct use_case_modifier, active_list);
+                if (strcmp(mod->name, modifier_name) == 0)
+                        return 1;
+        }
+        return 0;
+}
+
 /**
  * \brief Set verb
  * \param uc_mgr Use case manager
@@ -607,6 +641,9 @@ static int set_modifier(snd_use_case_mgr_t *uc_mgr,
 	struct list_head *seq;
 	int err;
 
+	if (modifier_status(uc_mgr, modifier->name) == enable)
+		return 0;
+
 	if (enable) {
 		seq = &modifier->enable_list;
 	} else {
@@ -637,6 +674,9 @@ static int set_device(snd_use_case_mgr_t *uc_mgr,
 {
 	struct list_head *seq;
 	int err;
+
+        if (device_status(uc_mgr, device->name) == enable)
+		return 0;
 
 	if (enable) {
 		seq = &device->enable_list;
@@ -1314,34 +1354,6 @@ int snd_use_case_get(snd_use_case_mgr_t *uc_mgr,
       __end:
 	pthread_mutex_unlock(&uc_mgr->mutex);
         return err;
-}
-
-long device_status(snd_use_case_mgr_t *uc_mgr,
-                   const char *device_name)
-{
-        struct use_case_device *dev;
-        struct list_head *pos;
-        
-        list_for_each(pos, &uc_mgr->active_devices) {
-                dev = list_entry(pos, struct use_case_device, active_list);
-                if (strcmp(dev->name, device_name) == 0)
-                        return 1;
-        }
-        return 0;
-}
-
-long modifier_status(snd_use_case_mgr_t *uc_mgr,
-                     const char *modifier_name)
-{
-        struct use_case_modifier *mod;
-        struct list_head *pos;
-        
-        list_for_each(pos, &uc_mgr->active_modifiers) {
-                mod = list_entry(pos, struct use_case_modifier, active_list);
-                if (strcmp(mod->name, modifier_name) == 0)
-                        return 1;
-        }
-        return 0;
 }
 
 
