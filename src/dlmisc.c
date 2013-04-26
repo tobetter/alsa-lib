@@ -293,6 +293,9 @@ int snd_dlobj_cache_put(void *func)
 	struct dlobj_cache *c;
 	unsigned int refcnt;
 
+	if (!func)
+		return -ENOENT;
+
 	snd_dlobj_lock();
 	list_for_each(p, &pcm_dlobj_list) {
 		c = list_entry(p, struct dlobj_cache, list);
@@ -313,17 +316,24 @@ void snd_dlobj_cache_cleanup(void)
 	struct list_head *p, *npos;
 	struct dlobj_cache *c;
 
+	/* clean up caches only when really no user is present */
 	snd_dlobj_lock();
+	list_for_each(p, &pcm_dlobj_list) {
+		c = list_entry(p, struct dlobj_cache, list);
+		if (c->refcnt)
+			goto unlock;
+	}
+
 	list_for_each_safe(p, npos, &pcm_dlobj_list) {
 		c = list_entry(p, struct dlobj_cache, list);
-		if (c->refcnt == 0) {
-			list_del(p);
-			snd_dlclose(c->dlobj);
-			free((void *)c->name); /* shut up gcc warning */
-			free((void *)c->lib); /* shut up gcc warning */
-			free(c);
-		}
+		list_del(p);
+		snd_dlclose(c->dlobj);
+		free((void *)c->name); /* shut up gcc warning */
+		free((void *)c->lib); /* shut up gcc warning */
+		free(c);
 	}
+
+ unlock:
 	snd_dlobj_unlock();
 }
 #endif
