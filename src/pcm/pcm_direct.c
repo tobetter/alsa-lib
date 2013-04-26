@@ -789,6 +789,24 @@ int snd_pcm_direct_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 	return 0;
 }
 
+snd_pcm_chmap_query_t **snd_pcm_direct_query_chmaps(snd_pcm_t *pcm)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+	return snd_pcm_query_chmaps(dmix->spcm);
+}
+
+snd_pcm_chmap_t *snd_pcm_direct_get_chmap(snd_pcm_t *pcm)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+	return snd_pcm_get_chmap(dmix->spcm);
+}
+
+int snd_pcm_direct_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+	return snd_pcm_set_chmap(dmix->spcm, map);
+}
+
 int snd_pcm_direct_resume(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
@@ -1611,13 +1629,20 @@ int snd_pcm_direct_parse_open_conf(snd_config_t *root, snd_config_t *conf,
 				continue;
 			}
 			if (isdigit(*group) == 0) {
-				struct group *grp = getgrnam(group);
-				if (grp == NULL) {
+				long clen = sysconf(_SC_GETGR_R_SIZE_MAX);
+				size_t len = (clen == -1) ? 1024 : (size_t)clen;
+				struct group grp, *pgrp;
+				char *buffer = (char *)malloc(len);
+				if (buffer == NULL)
+					return -ENOMEM;
+				int st = getgrnam_r(group, &grp, buffer, len, &pgrp);
+				if (st != 0) {
 					SNDERR("The field ipc_gid must be a valid group (create group %s)", group);
-					free(group);
+					free(buffer);
 					return -EINVAL;
 				}
-				rec->ipc_gid = grp->gr_gid;
+				rec->ipc_gid = pgrp->gr_gid;
+				free(buffer);
 			} else {
 				rec->ipc_gid = strtol(group, &endp, 10);
 			}
