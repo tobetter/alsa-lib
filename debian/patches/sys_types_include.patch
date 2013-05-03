@@ -1,10 +1,25 @@
-Description: Explicitly include <sys/types.h>
-Author: Adam Conrad <adconrad@ubuntu.com>
-Bug-Ubuntu: https://bugs.launchpad.net/bugs/1109298
-Forwarded: no
+commit 3e7dc283ed2d3ed2341f0657811c588f4dbcba6d
+Author: David Henningsson <david.henningsson@canonical.com>
+Date:   Tue Feb 12 10:06:11 2013 +0100
 
---- alsa-lib-1.0.25.orig/include/asoundlib.h
-+++ alsa-lib-1.0.25/include/asoundlib.h
+    Add sys/types.h to include list
+    
+    This is needed by snd_pcm_format_silence* functions which
+    return u_int*_t. It was discovered while trying to compile ALSA
+    programs with eglibc 2.17.
+    
+    Credits to Richard Shaw, Gary Buhrmaster, Matthieu Baerts and
+     Adam Conrad for this fix.
+    
+    BugLink: https://bugs.launchpad.net/bugs/1109298
+    BugLink: https://bugzilla.redhat.com/show_bug.cgi?id=885306
+    Signed-off-by: David Henningsson <david.henningsson@canonical.com>
+    Signed-off-by: Takashi Iwai <tiwai@suse.de>
+
+diff --git a/include/asoundlib-head.h b/include/asoundlib-head.h
+index 20c8a68..6edbab0 100644
+--- a/include/asoundlib-head.h
++++ b/include/asoundlib-head.h
 @@ -31,6 +31,7 @@
  #include <unistd.h>
  #include <stdio.h>
