@@ -1,3 +1,10 @@
+alsa-lib (1.0.25-4ubuntu3.1) raring-proposed; urgency=low
+
+  * Replace sys_types_include.patch with upstream version,
+    because that version works. (LP: #1174429)
+
+ -- David Henningsson <david.henningsson@canonical.com>  Fri, 03 May 2013 09:39:59 +0200
+
 alsa-lib (1.0.25-4ubuntu3) raring; urgency=low
 
   * sys_types_include.patch: Explicitly include <sys/types.h> (LP: #1109298)
