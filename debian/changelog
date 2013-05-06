@@ -1,3 +1,10 @@
+alsa-lib (1.0.25-4ubuntu4) saucy; urgency=low
+
+  * sys_types_include.patch: Use the upstrea version of this patch.
+    (LP: #1174429)
+
+ -- Luke Yelavich <themuso@ubuntu.com>  Mon, 06 May 2013 13:09:15 +1000
+
 alsa-lib (1.0.25-4ubuntu3) raring; urgency=low
 
   * sys_types_include.patch: Explicitly include <sys/types.h> (LP: #1109298)
