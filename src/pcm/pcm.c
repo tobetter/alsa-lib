@@ -437,7 +437,7 @@ to #SND_PCM_STATE_SETUP
 if successfully finishes, otherwise the state #SND_PCM_STATE_OPEN
 is entered.
 When it is brought to SETUP state, this function automatically
-calls #snd_pcm_prepare() function to bring to the PREPARE state
+calls #snd_pcm_prepare() function to bring to the PREPARED state
 as below.
 
 \par snd_pcm_prepare
@@ -1558,6 +1558,12 @@ static const char *const snd_pcm_format_names[] = {
 	FORMAT(S18_3BE),
 	FORMAT(U18_3LE),
 	FORMAT(U18_3BE),
+	FORMAT(G723_24),
+	FORMAT(G723_24_1B),
+	FORMAT(G723_40),
+	FORMAT(G723_40_1B),
+	FORMAT(DSD_U8),
+	FORMAT(DSD_U16_LE),
 };
 
 static const char *const snd_pcm_format_aliases[SND_PCM_FORMAT_LAST+1] = {
@@ -1611,6 +1617,12 @@ static const char *const snd_pcm_format_descriptions[] = {
 	FORMATD(S18_3BE, "Signed 18 bit Big Endian in 3bytes"),
 	FORMATD(U18_3LE, "Unsigned 18 bit Little Endian in 3bytes"),
 	FORMATD(U18_3BE, "Unsigned 18 bit Big Endian in 3bytes"),
+	FORMATD(G723_24, "G.723 (ADPCM) 24 kbit/s, 8 samples in 3 bytes"),
+	FORMATD(G723_24_1B, "G.723 (ADPCM) 24 kbit/s, 1 sample in 1 byte"),
+	FORMATD(G723_40, "G.723 (ADPCM) 40 kbit/s, 8 samples in 3 bytes"),
+	FORMATD(G723_40_1B, "G.723 (ADPCM) 40 kbit/s, 1 sample in 1 byte"),
+	FORMATD(DSD_U8,  "Direct Stream Digital, 1-byte (x8), oldest bit in MSB"),
+	FORMATD(DSD_U16_LE, "Direct Stream Digital, 2-byte (x16), little endian, oldest bits in MSB"),
 };
 
 static const char *const snd_pcm_type_names[] = {
@@ -1638,11 +1650,11 @@ static const char *const snd_pcm_type_names[] = {
 	PCMTYPE(LADSPA), 
 	PCMTYPE(DMIX), 
 	PCMTYPE(JACK),
-        PCMTYPE(DSNOOP),
-        PCMTYPE(IEC958),
+	PCMTYPE(DSNOOP),
+	PCMTYPE(IEC958),
 	PCMTYPE(SOFTVOL),
-        PCMTYPE(IOPLUG),
-        PCMTYPE(EXTPLUG),
+	PCMTYPE(IOPLUG),
+	PCMTYPE(EXTPLUG),
 	PCMTYPE(MMAP_EMUL),
 };
 
