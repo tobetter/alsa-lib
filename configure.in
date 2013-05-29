@@ -12,10 +12,12 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_HOST
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.27)
+AM_INIT_AUTOMAKE(alsa-lib, 1.0.27.1)
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL([INSTALL_M4], [test -n "${ACLOCAL}"])
+
+AM_MAINTAINER_MODE([enable])
 
 # Test for new silent rules and enable only if they are available
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -53,7 +55,7 @@ CC_NOUNDEFINED
 
 dnl Checks for header files.
 AC_HEADER_STDC
-AM_CONFIG_HEADER(include/config.h)
+AC_CONFIG_HEADERS(include/config.h)
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -647,6 +649,12 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/Makefile src/conf/alsa.conf.d/Makefile \
 	  src/conf/cards/Makefile \
 	  src/conf/pcm/Makefile \
+	  src/conf/ucm/Makefile \
+	  src/conf/ucm/DAISY-I2S/Makefile \
+	  src/conf/ucm/PandaBoard/Makefile \
+	  src/conf/ucm/PandaBoardES/Makefile \
+	  src/conf/ucm/SDP4430/Makefile \
+	  src/conf/ucm/tegraalc5632/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
 	  alsalisp/Makefile aserver/Makefile \
 	  test/Makefile test/lsb/Makefile \

@@ -778,6 +778,9 @@ AM_BACKSLASH
 AM_DEFAULT_VERBOSITY
 AM_DEFAULT_V
 AM_V
+MAINT
+MAINTAINER_MODE_FALSE
+MAINTAINER_MODE_TRUE
 INSTALL_M4_FALSE
 INSTALL_M4_TRUE
 am__untar
@@ -852,6 +855,7 @@ SHELL'
 ac_subst_files=''
 ac_user_opts='
 enable_option_checking
+enable_maintainer_mode
 enable_silent_rules
 enable_dependency_tracking
 enable_static
@@ -1516,6 +1520,9 @@ Optional Features:
   --disable-option-checking  ignore unrecognized --enable/--with options
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --disable-maintainer-mode
+                          disable make rules and dependencies not useful (and
+                          sometimes confusing) to the casual installer
   --enable-silent-rules   less verbose build output (undo: "make V=1")
   --disable-silent-rules  verbose build output (undo: "make V=0")
   --enable-dependency-tracking
@@ -2918,7 +2925,7 @@ fi
 # Define the identity of the package.
 
  PACKAGE=alsa-lib
- VERSION=1.0.27
+ VERSION=1.0.27.1
 
 
 cat >>confdefs.h <<_ACEOF
@@ -2972,6 +2979,30 @@ else
   INSTALL_M4_TRUE='#'
   INSTALL_M4_FALSE=
 fi
+
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable maintainer-specific portions of Makefiles" >&5
+$as_echo_n "checking whether to enable maintainer-specific portions of Makefiles... " >&6; }
+    # Check whether --enable-maintainer-mode was given.
+if test "${enable_maintainer_mode+set}" = set; then :
+  enableval=$enable_maintainer_mode; USE_MAINTAINER_MODE=$enableval
+else
+  USE_MAINTAINER_MODE=yes
+fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $USE_MAINTAINER_MODE" >&5
+$as_echo "$USE_MAINTAINER_MODE" >&6; }
+   if test $USE_MAINTAINER_MODE = yes; then
+  MAINTAINER_MODE_TRUE=
+  MAINTAINER_MODE_FALSE='#'
+else
+  MAINTAINER_MODE_TRUE='#'
+  MAINTAINER_MODE_FALSE=
+fi
+
+  MAINT=$MAINTAINER_MODE_TRUE
+
 
 
 # Test for new silent rules and enable only if they are available
@@ -13172,7 +13203,7 @@ if test ! -L "$srcdir"/include/alsa ; then
   ln -sf . "$srcdir"/include/alsa
 fi
 
-ac_config_files="$ac_config_files Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg include/Makefile include/sound/Makefile src/Versions src/Makefile src/control/Makefile src/mixer/Makefile src/pcm/Makefile src/pcm/scopes/Makefile src/rawmidi/Makefile src/timer/Makefile src/hwdep/Makefile src/seq/Makefile src/ucm/Makefile src/compat/Makefile src/alisp/Makefile src/conf/Makefile src/conf/alsa.conf.d/Makefile src/conf/cards/Makefile src/conf/pcm/Makefile modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile alsalisp/Makefile aserver/Makefile test/Makefile test/lsb/Makefile utils/Makefile utils/alsa-lib.spec utils/alsa.pc"
+ac_config_files="$ac_config_files Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg include/Makefile include/sound/Makefile src/Versions src/Makefile src/control/Makefile src/mixer/Makefile src/pcm/Makefile src/pcm/scopes/Makefile src/rawmidi/Makefile src/timer/Makefile src/hwdep/Makefile src/seq/Makefile src/ucm/Makefile src/compat/Makefile src/alisp/Makefile src/conf/Makefile src/conf/alsa.conf.d/Makefile src/conf/cards/Makefile src/conf/pcm/Makefile src/conf/ucm/Makefile src/conf/ucm/DAISY-I2S/Makefile src/conf/ucm/PandaBoard/Makefile src/conf/ucm/PandaBoardES/Makefile src/conf/ucm/SDP4430/Makefile src/conf/ucm/tegraalc5632/Makefile modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile alsalisp/Makefile aserver/Makefile test/Makefile test/lsb/Makefile utils/Makefile utils/alsa-lib.spec utils/alsa.pc"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -13301,6 +13332,10 @@ fi
 
 if test -z "${INSTALL_M4_TRUE}" && test -z "${INSTALL_M4_FALSE}"; then
   as_fn_error $? "conditional \"INSTALL_M4\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
+  as_fn_error $? "conditional \"MAINTAINER_MODE\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${AMDEP_TRUE}" && test -z "${AMDEP_FALSE}"; then
@@ -14382,6 +14417,12 @@ do
     "src/conf/alsa.conf.d/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/alsa.conf.d/Makefile" ;;
     "src/conf/cards/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/cards/Makefile" ;;
     "src/conf/pcm/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/pcm/Makefile" ;;
+    "src/conf/ucm/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/ucm/Makefile" ;;
+    "src/conf/ucm/DAISY-I2S/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/ucm/DAISY-I2S/Makefile" ;;
+    "src/conf/ucm/PandaBoard/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/ucm/PandaBoard/Makefile" ;;
+    "src/conf/ucm/PandaBoardES/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/ucm/PandaBoardES/Makefile" ;;
+    "src/conf/ucm/SDP4430/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/ucm/SDP4430/Makefile" ;;
+    "src/conf/ucm/tegraalc5632/Makefile") CONFIG_FILES="$CONFIG_FILES src/conf/ucm/tegraalc5632/Makefile" ;;
     "modules/Makefile") CONFIG_FILES="$CONFIG_FILES modules/Makefile" ;;
     "modules/mixer/Makefile") CONFIG_FILES="$CONFIG_FILES modules/mixer/Makefile" ;;
     "modules/mixer/simple/Makefile") CONFIG_FILES="$CONFIG_FILES modules/mixer/simple/Makefile" ;;
