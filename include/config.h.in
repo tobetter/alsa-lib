@@ -142,6 +142,9 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* Max number of cards */
+#undef SND_MAX_CARDS
+
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 

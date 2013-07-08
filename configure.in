@@ -12,7 +12,7 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_HOST
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.27.1)
+AM_INIT_AUTOMAKE(alsa-lib, 1.0.27.2)
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL([INSTALL_M4], [test -n "${ACLOCAL}"])
@@ -631,6 +631,20 @@ for t in $CTL_PLUGIN_LIST; do
     echo \&_snd_module_control_$t, >> "$srcdir"/src/control/ctl_symbols_list.c
   fi
 done
+
+dnl Max number of cards
+AC_MSG_CHECKING(for max number of cards)
+AC_ARG_WITH(max-cards,
+  AS_HELP_STRING([--with-max-cards], [Specify the max number of cards (default = 32)]),
+  [ max_cards="$withval" ], [ max_cards="32" ])
+AC_MSG_RESULT([$max_cards])
+
+if test "$max_cards" -lt 1; then
+   AC_ERROR([Invalid max cards $max_cards])
+elif test "$max_cards" -gt 256; then
+   AC_ERROR([Invalid max cards $max_cards])
+fi
+AC_DEFINE_UNQUOTED(SND_MAX_CARDS, $max_cards, [Max number of cards])
 
 dnl Make a symlink for inclusion of alsa/xxx.h
 if test ! -L "$srcdir"/include/alsa ; then
