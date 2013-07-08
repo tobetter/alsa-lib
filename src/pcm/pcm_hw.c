@@ -95,8 +95,6 @@ typedef struct {
 	volatile struct snd_pcm_mmap_status * mmap_status;
 	struct snd_pcm_mmap_control *mmap_control;
 	struct snd_pcm_sync_ptr *sync_ptr;
-	snd_pcm_uframes_t hw_ptr;
-	snd_pcm_uframes_t appl_ptr;
 	int period_event;
 	snd_timer_t *period_timer;
 	struct pollfd period_timer_pfd;
@@ -1189,7 +1187,7 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 		       snd_pcm_state_name(FAST_PCM_STATE(hw)));
 		return NULL;
 	}
-	map = malloc(pcm->channels + 1);
+	map = malloc(pcm->channels * sizeof(map->pos[0]) + sizeof(*map));
 	if (!map)
 		return NULL;
 	map->channels = pcm->channels;
