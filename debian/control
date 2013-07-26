@@ -1,7 +1,8 @@
 Source: alsa-lib
 Section: libs
 Priority: optional
-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
 Uploaders: Jordi Mallach <jordi@debian.org>,
            Elimar Riesebieter <riesebie@lxtec.de>
 Build-Depends: autotools-dev,
@@ -11,8 +12,9 @@ Build-Depends: autotools-dev,
 Build-Depends-Indep: doxygen
 Standards-Version: 3.9.4
 Homepage: http://www.alsa-project.org/
-Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
+XS-Debian-Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
+XS-Debian-Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
+Vcs-Bzr: http://bazaar.launchpad.net/~ubuntu-audio-dev/alsa-lib/ubuntu
 
 Package: libasound2
 Architecture: linux-any

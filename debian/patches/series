@@ -1,1 +1,3 @@
 tests_lm_ftbfs.patch
+lp652035-use-extended-namehints.patch
+add-tegra-alc5632.patch
