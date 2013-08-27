@@ -1,3 +1,9 @@
+alsa-lib (1.0.27.2-1ubuntu2) saucy; urgency=low
+
+  * Add UCM config files for Nexus 4 (Mako) and Galaxy Nexus (Maguro)
+
+ -- David Henningsson <david.henningsson@canonical.com>  Tue, 27 Aug 2013 09:46:37 +0200
+
 alsa-lib (1.0.27.2-1ubuntu1) saucy; urgency=low
 
   [ Luke Yelavich ]
