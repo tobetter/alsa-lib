@@ -164,7 +164,7 @@ index 0000000..d74054c
 +		cset "name='HS Left Playback' 1"
 +		cset "name='HS Right Playback' 1"
 +
-+		cset "name='Headset Playback Volume' 13"
++		cset "name='Headset Playback Volume' 14"
 +	]
 +
 +	DisableSequence [
@@ -224,7 +224,7 @@ index 0000000..d74054c
 +		cset "name='HF Left Playback' 1"
 +		cset "name='HF Right Playback' 1"
 +
-+		cset "name='Handsfree Playback Volume' 13"
++		cset "name='Handsfree Playback Volume' 28"
 +	]
 +
 +	DisableSequence [
