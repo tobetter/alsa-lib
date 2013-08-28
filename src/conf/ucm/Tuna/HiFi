@@ -1,6 +1,7 @@
 # Use case Configuration for TI Tuna HiFi audio playback and capture
 # By Liam Girdwood <lrg@ti.com>
 # Updated by Sebastien Jan <s-jan@ti.com>
+# Adapted to Ubuntu Touch by David Henningsson <david.henningsson@canonical.com>
 
 ######### Main Verb Config #################
 
@@ -69,42 +70,27 @@ SectionVerb {
 ###### Headset Devices Options ############
 
 SectionDevice."Headset" {
-	Comment "Tuna 3.5mm Headset capture"
+	Comment "Headset Microphone"
 
 	# Headset is mutually exclusive to some devices
 	ConflictingDevice [
-		#"HeadsetLP"
-		#"Headphones"
-		#"HeadphonesLP"
 		"Mainmic"
 		"Submic"
-		#"Line"
-		#"FMRadio"
 	]
 
 	EnableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
-#		# TWL6040 playback path
-#		cset "name='HS Left Playback' 1"
-#		cset "name='HS Right Playback' 1"
-#
 		# TWL6040 Capture Path
 		cset "name='Analog Left Capture Route' 0"
 		cset "name='Analog Right Capture Route' 0"
 		cset "name='Capture Preamplifier Volume' 2"
+
+		cset "name='Capture Volume' 4"
 	]
 
 	DisableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
-
-#		# TWL6040 playback path
-#		cset "name='HS Right Playback' 0"
-#		cset "name='HS Left Playback' 0"
 
 		# TWL6040 Capture path
 		cset "name='Analog Left Capture Route' 3"
@@ -112,104 +98,10 @@ SectionDevice."Headset" {
 		cset "name='Capture Preamplifier Volume' 0"
 	]
 
-#	TransitionSequence."Earpiece" [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Right Playback' 0"
-#		cset "name='HS Left Playback' 0"
-#
-#		# TWL6040 playback path
-#		cset "name='Earphone Enable Switch' 1"
-#
-#		# Disable HS TWL6040 Capture path
-#		cset "name='Analog Left Capture Route' 3"
-#		cset "name='Analog Right Capture Route' 3"
-#		cset "name='Capture Preamplifier Volume' 0"
-#	]
-#
 	Value {
-		# Default ALSA volume gain and mute kcontrols
-		CaptureVolume "name='Capture Volume' 4"
-#		PlaybackVolume "name='Headset Playback Volume' 13"
-#		PlaybackChannels "2"
 		CaptureChannels "2"
 	}
 }
-
-#SectionDevice."HeadsetLP" {
-#	Comment "Low Power Tuna 3.5mm Headset playback and capture"
-#
-#	# HeadsetLP is mutually exclusive to some devices
-#	ConflictingDevice [
-#		"Headphones"
-#		#"HeadphonesLP"
-#		"Headset"
-#		"Mainmic"
-#		"Submic"
-#		#"Line"
-#		#"FMRadio"
-#	]
-#
-#	EnableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Left Playback' 1"
-#		cset "name='HS Right Playback' 1"
-#
-#		# TWL6040 Capture Path
-#		cset "name='Analog Left Capture Route' 0"
-#		cset "name='Analog Right Capture Route' 0"
-#		cset "name='Capture Preamplifier Volume' 2"
-#	]
-#
-#	DisableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Right Playback' 0"
-#		cset "name='HS Left Playback' 0"
-#
-#		# TWL6040 Capture path
-#		cset "name='Analog Left Capture Route' 3"
-#		cset "name='Analog Right Capture Route' 3"
-#		cset "name='Capture Preamplifier Volume' 0"
-#	]
-#
-#	TransitionSequence."Earpiece" [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Right Playback' 0"
-#		cset "name='HS Left Playback' 0"
-#
-#		# TWL6040 playback path
-#		cset "name='Earphone Enable Switch' 1"
-#
-#		# Disable HS TWL6040 Capture path
-#		cset "name='Analog Left Capture Route' 3"
-#		cset "name='Analog Right Capture Route' 3"
-#		cset "name='Capture Preamplifier Volume' 0"
-#	]
-#
-#	Value {
-#		# Default ALSA volume gain and mute kcontrols
-#		CaptureVolume "name='Capture Volume' 4"
-#		PlaybackVolume "name='Headset Playback Volume' 13"
-#		PlaybackPCM "hw:Tuna,6"
-#		PlaybackChannels "2"
-#		CaptureChannels "2"
-#	}
-#}
 
 ###### Headphones Devices Options ############
 
@@ -218,101 +110,33 @@ SectionDevice."Headphones" {
 
 	# Headphones is mutually exclusive to some devices
 	ConflictingDevice [
-		#"Headset"
-		#"HeadsetLP"
-		#"HeadphonesLP"
+		"Speaker"
+		"Earpiece"
 	]
 
 	EnableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# TWL6040 playback path
 		cset "name='HS Left Playback' 1"
 		cset "name='HS Right Playback' 1"
+
+		cset "name='Headset Playback Volume' 13"
 	]
 
 	DisableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
+		cset "name='Headset Playback Volume' 0"
 		# TWL6040 playback path
 		cset "name='HS Right Playback' 0"
 		cset "name='HS Left Playback' 0"
-	]
-
-	TransitionSequence."Earpiece" [
-
-		# Set SDP device for following cset commands
-		cdev "hw:Tuna"
-
-		# TWL6040 playback path
-		cset "name='HS Right Playback' 0"
-		cset "name='HS Left Playback' 0"
-
-		# TWL6040 playback path
-		cset "name='Earphone Enable Switch' 1"
 	]
 
 	Value {
-		# Default ALSA volume gain and mute kcontrols
-		PlaybackVolume "name='Headset Playback Volume' 13"
 		PlaybackChannels "2"
 	}
 }
-
-#SectionDevice."HeadphonesLP" {
-#	Comment "Low Power Tuna 3.5mm Headphones playback"
-#
-#	# Headphones is mutually exclusive to some devices
-#	ConflictingDevice [
-#		"Headset"
-#		#"HeadsetLP"
-#		"Headphones"
-#	]
-#
-#	EnableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Left Playback' 1"
-#		cset "name='HS Right Playback' 1"
-#	]
-#
-#	DisableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Right Playback' 0"
-#		cset "name='HS Left Playback' 0"
-#	]
-#
-#	TransitionSequence."Earpiece" [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 playback path
-#		cset "name='HS Right Playback' 0"
-#		cset "name='HS Left Playback' 0"
-#
-#		# TWL6040 playback path
-#		cset "name='Earphone Enable Switch' 1"
-#	]
-#
-#	Value {
-#		# Default ALSA volume gain and mute kcontrols
-#		PlaybackVolume "name='Headset Playback Volume' 13"
-#		PlaybackPCM "hw:Tuna,6"
-#		PlaybackChannels "2"
-#	}
-#}
 
 ########### Earpiece Device Options ################
 
@@ -320,39 +144,24 @@ SectionDevice."Earpiece" {
 	Comment "Earpiece playback"
 
 	EnableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# TWL6040 playback path
 		cset "name='Earphone Enable Switch' 1"
+
+		cset "name='Earphone Enable Volume' 13"
 	]
 
 	DisableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
+
+		cset "name='Earphone Enable Volume' 0"
 
 		# TWL6040 playback path
 		cset "name='Earphone Enable Switch' 0"
-	]
-
-	TransitionSequence."Headset" [
-
-		# Set SDP device for following cset commands
-		cdev "hw:Tuna"
-
-		# TWL6040 playback path
-		cset "name='Earphone Enable Switch' 0"
-
-		# TWL6040 playback path
-		cset "name='HS Right Playback' 1"
-		cset "name='HS Left Playback' 1"
 	]
 
 	Value {
-		# Default ALSA volume gain and mute kcontrols
-		PlaybackVolume "name='Earphone Enable Volume' 13"
 		PlaybackChannels "2"
 	}
 }
@@ -360,11 +169,9 @@ SectionDevice."Earpiece" {
 ########### Speaker Device Options ################
 
 SectionDevice."Speaker" {
-	Comment "Tuna Speaker playback"
+	Comment "Main speaker playback"
 
 	EnableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# ABE playback path through DL2
@@ -373,12 +180,14 @@ SectionDevice."Speaker" {
 		# TWL6040 playback path
 		cset "name='HF Left Playback' 1"
 		cset "name='HF Right Playback' 1"
+
+		cset "name='Handsfree Playback Volume' 13"
 	]
 
 	DisableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
+
+		cset "name='Handsfree Playback Volume' 0"
 
 		# ABE playback path through DL2
 		cset "name='DL2 Mixer Multimedia' 0"
@@ -389,8 +198,6 @@ SectionDevice."Speaker" {
 	]
 
 	Value {
-		# Default ALSA volume gain and mute kcontrols
-		PlaybackVolume "name='Handsfree Playback Volume' 13"
 		PlaybackChannels "2"
 	}
 }
@@ -402,23 +209,17 @@ SectionDevice."Handset" {
 
 	ConflictingDevice [
 		"Headset"
-		#"HeadsetLP"
-		#"Line"
-		#"FMRadio"
 	]
 
 	EnableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# TWL6040 Capture Path
 		cset "name='Analog Left Capture Route' 0"
+		cset "name='Capture Volume' 4"
 	]
 
 	DisableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# TWL6040 Capture path
@@ -427,7 +228,6 @@ SectionDevice."Handset" {
 
 	Value {
 		# Default ALSA volume gain and mute kcontrols
-		CaptureVolume "name='Capture Volume' 4"
 		CaptureChannels "2"
 	}
 }
@@ -439,23 +239,18 @@ SectionDevice."Submic" {
 
 	ConflictingDevice [
 		"Headset"
-		#"HeadsetLP"
-		#"Line"
-		#"FMRadio"
 	]
 
 	EnableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# TWL6040 Capture Path
 		cset "name='Analog Right Capture Route' 1"
+
+		cset "name='Capture Volume' 4"
 	]
 
 	DisableSequence [
-
-		# Set SDP device for following cset commands
 		cdev "hw:Tuna"
 
 		# TWL6040 Capture path
@@ -463,212 +258,9 @@ SectionDevice."Submic" {
 	]
 
 	Value {
-		# Default ALSA volume gain and mute kcontrols
-		CaptureVolume "name='Capture Volume' 4"
 		CaptureChannels "2"
 	}
 }
-
-############ Line In Device #########################
-
-#SectionDevice."Line" {
-#	Comment "Line In Capture"
-#
-#	ConflictingDevice [
-#		"Headset"
-#		#"HeadsetLP"
-#		"Submic"
-#		"Mainmic"
-#		#"FMRadio"
-#	]
-#
-#	EnableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 Capture Path
-#		cset "name='Analog Right Capture Route' 2"
-#		cset "name='Analog Left Capture Route' 2"
-#
-#		# TWL6040 Line Capture to 0dB
-#		cset "name='Aux FM Volume' 3"
-#	]
-#
-#	DisableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# TWL6040 Capture path
-#		cset "name='Analog Right Capture Route' 3"
-#		cset "name='Analog Left Capture Route' 3"
-#
-#		# TWL6040 Mute Line Capture
-#		cset "name='Aux FM Volume' 0"
-#	]
-#
-#	Value {
-#		# Default ALSA volume gain and mute kcontrols
-#		CaptureVolume "name='Capture Volume' 4"
-#		CaptureChannels "2"
-#	}
-#}
-
-############ FM Analog Radio Device #########################
-
-#SectionDevice."FMRadio" {
-#	Comment "FM Radio Analog Playback and Capture"
-#
-#	ConflictingDevice [
-#		"Headset"
-#		"HeadsetLP"
-#		"Submic"
-#		"Mainmic"
-#		"Line"
-#	]
-#
-#	EnableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# enable ABE path for FM playback via DL1
-#		cset "name='DL1 Mixer Capture' 1"
-#		cset "name='DL1 Capture Playback Volume' 120"
-#
-#		# TWL6040 Capture Path
-#		cset "name='Analog Right Capture Route' 2"
-#		cset "name='Analog Left Capture Route' 2"
-#
-#		# TWL6040 Line Capture to 0dB
-#		cset "name='Aux FM Volume' 3"
-#	]
-#
-#	DisableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# disable ABE path for FM playback via DL1
-#		cset "name='DL1 Mixer Capture' 0"
-#		cset "name='DL1 Capture Playback Volume' 0"
-#
-#		# TWL6040 Capture path
-#		cset "name='Analog Right Capture Route' 3"
-#		cset "name='Analog Left Capture Route' 3"
-#
-#		# TWL6040 Mute Line Capture
-#		cset "name='Aux FM Volume' 0"
-#	]
-#
-#	Value {
-#		# Default ALSA volume gain and mute kcontrols
-#		CaptureVolume "name='Capture Volume' 4"
-#		CaptureChannels "2"
-#	}
-#}
-
-############ Digital Mic Device #########################
-
-#SectionDevice."Dmic" {
-#	Comment "Digital Microphones"
-#
-#	EnableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# ABE DMIC Capture path
-#		cset "name='MUX_UL00' 1"
-#		cset "name='MUX_UL01' 2"
-#		cset "name='MUX_UL02' 3"
-#		cset "name='MUX_UL03' 4"
-#		cset "name='MUX_UL04' 5"
-#		cset "name='MUX_UL05' 6"
-#	]
-#
-#	DisableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# ABE DMIC Capture path
-#		cset "name='MUX_UL00' 0"
-#		cset "name='MUX_UL01' 0"
-#		cset "name='MUX_UL02' 0"
-#		cset "name='MUX_UL03' 0"
-#		cset "name='MUX_UL04' 0"
-#		cset "name='MUX_UL05' 0"
-#	]
-#
-#	Value {
-#		# Default ALSA volume gain and mute kcontrols
-#		CaptureVolume "name='DMIC1 UL Capture Volume' 30, 30"
-#		CaptureVolume "name='DMIC2 UL Capture Volume' 30, 30"
-#		CaptureVolume "name='DMIC3 UL Capture Volume' 30, 30"
-#		CapturePCM "hw:Tuna,0"
-#	}
-#}
-
-############ Bluetooth Device #########################
-
-#SectionDevice."Bluetooth" {
-#	Comment "Bluetooth Playback and Capture"
-#
-#	EnableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# enable 0dB ABE path for BT capture via ROUTE_UL
-#		cset "name='MUX_UL10' 7"
-#		cset "name='MUX_UL11' 8"
-#		cset "name='BT UL Volume' 120"
-#
-#		# enable ABE DL1 BT path
-#		cset "name='DL1 BT_VX Switch' 1"
-#	]
-#
-#	DisableSequence [
-#
-#		# Set SDP device for following cset commands
-#		cdev "hw:Tuna"
-#
-#		# Mute ABE path for BT capture via ROUTE_UL
-#		cset "name='MUX_UL10' 0"
-#		cset "name='MUX_UL11' 0"
-#		cset "name='BT UL Volume' 0"
-#
-#		# enable ABE DL1 BT path
-#		cset "name='DL1 BT_VX Switch' 0"
-#	]
-#
-#	Value {
-#		# Default ALSA volume gain and mute kcontrols
-#		TQ "Voice"
-#		PlaybackPriority "150"
-#		CapturePriority "150"
-#		PlaybackChannels "2"
-#		CaptureChannels "2"
-#	}
-#}
-
-############ HDMI Device #########################
-
-#SectionDevice."HDMI" {
-#	Comment "HDMI Connected Device"
-#
-#	EnableSequence [
-#	]
-#
-#	DisableSequence [
-#	]
-#
-#	Value {
-#		PlaybackPCM "hw:OMAP4HDMI,0"
-#	}
-#}
 
 ##############  Play Tone Modifier ####################
 #
@@ -682,8 +274,6 @@ SectionModifier."PlayTone" {
 
 	# For the following devices we need to set the DL2 path
 	SupportedDevice [
-		"Headset"
-		"HeadsetLP"
 		"Headphones"
 		"Earpiece"
 	]

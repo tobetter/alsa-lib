@@ -8,8 +8,8 @@ SectionVerb {
 	]
 
 	DisableSequence [
-                cdev "hw:apq8064tablasnd"
-                cset "name='MultiMedia1 Mixer SLIM_4_TX' 0"
+		cdev "hw:apq8064tablasnd"
+		cset "name='MultiMedia1 Mixer SLIM_4_TX' 0"
 		cset "name='SLIMBUS_0_RX Audio Mixer MultiMedia1' 0"
 	]
 
@@ -21,7 +21,7 @@ SectionVerb {
 
 SectionDevice."Earpiece" {
 	#Name "Earpiece"
-	Comment "Handset Rx device"
+	Comment "Earpiece speaker"
 
 	# FIXME
 	ConflictingDevice [
@@ -34,9 +34,6 @@ SectionDevice."Earpiece" {
 
 	DisableSequence [
 	]
-
-	#ACDBID	7:1
-	#EffectsMixerCTL "SRS TruMedia"
 
 	Value {
 		PlaybackChannels "2"
@@ -45,7 +42,7 @@ SectionDevice."Earpiece" {
 
 SectionDevice."Speaker" {
 	#Name "Speaker"
-	Comment "Speaker Rx device"
+	Comment "Main speaker"
 
 	# FIXME
 	ConflictingDevice [
@@ -59,9 +56,6 @@ SectionDevice."Speaker" {
 	DisableSequence [
 	]
 
-	#ACDBID	14:1
-	#EffectsMixerCTL "SRS TruMedia"
-
 	Value {
 		PlaybackChannels "2"
 	}
@@ -69,7 +63,7 @@ SectionDevice."Speaker" {
 
 SectionDevice."Headphones" {
 	#Name "Headphones"
-	Comment "Headset Rx device"
+	Comment "Headphones"
 
 	# FIXME
 	ConflictingDevice [
@@ -82,9 +76,6 @@ SectionDevice."Headphones" {
 
 	DisableSequence [
 	]
-
-	#ACDBID	10:1
-	#EffectsMixerCTL "SRS TruMedia"
 
 	Value {
 		PlaybackChannels "2"
@@ -95,7 +86,6 @@ SectionDevice."Headset" {
 	#Name "Headset"
 	Comment "Headset Microphone"
 
-	# FIXME
 	ConflictingDevice [
 		"Handset"
 	]
@@ -105,9 +95,6 @@ SectionDevice."Headset" {
 
 	DisableSequence [
 	]
-
-	#ACDBID	8:2
-	#EffectsMixerCTL "SRS TruMedia"
 
 	Value {
 		CaptureChannels "1"
@@ -127,9 +114,6 @@ SectionDevice."Handset" {
 
 	DisableSequence [
 	]
-
-	#ACDBID	4:2
-	#EffectsMixerCTL "SRS TruMedia"
 
 	Value {
 		CaptureChannels "1"

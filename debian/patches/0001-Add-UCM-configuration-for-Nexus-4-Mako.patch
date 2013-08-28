@@ -1,18 +1,18 @@
-From b1d218e57b4edfed605ba9c425b0cad1a4c7c784 Mon Sep 17 00:00:00 2001
+From 2391a2633cc40d5826e74fe8f146b1861bd80c5c Mon Sep 17 00:00:00 2001
 From: David Henningsson <david.henningsson@canonical.com>
 Date: Tue, 27 Aug 2013 07:04:37 +0200
-Subject: [PATCH] Add UCM configuration for Nexus 4 (Mako)
+Subject: [PATCH 1/2] Add UCM configuration for Nexus 4 (Mako)
 
 The VoiceCall profile is mostly empty, because in my implementation,
 this is handled by talking to the audio HAL.
 ---
  configure.in                                       |    1 +
  src/conf/ucm/Makefile.am                           |    2 +-
- src/conf/ucm/apq8064-tabla-snd-card/HiFi           |  273 ++++++++++++++++++++
+ src/conf/ucm/apq8064-tabla-snd-card/HiFi           |  259 ++++++++++++++++++++
  src/conf/ucm/apq8064-tabla-snd-card/Makefile.am    |    4 +
- src/conf/ucm/apq8064-tabla-snd-card/VoiceCall      |  137 ++++++++++
+ src/conf/ucm/apq8064-tabla-snd-card/VoiceCall      |  121 +++++++++
  .../apq8064-tabla-snd-card.conf                    |    8 +
- 6 files changed, 424 insertions(+), 1 deletion(-)
+ 6 files changed, 394 insertions(+), 1 deletion(-)
  create mode 100644 src/conf/ucm/apq8064-tabla-snd-card/HiFi
  create mode 100644 src/conf/ucm/apq8064-tabla-snd-card/Makefile.am
  create mode 100644 src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
@@ -39,10 +39,10 @@ index e089dde..adb3c87 100644
 +SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 apq8064-tabla-snd-card
 diff --git a/src/conf/ucm/apq8064-tabla-snd-card/HiFi b/src/conf/ucm/apq8064-tabla-snd-card/HiFi
 new file mode 100644
-index 0000000..6c590e3
+index 0000000..a5db5a9
 --- /dev/null
 +++ b/src/conf/ucm/apq8064-tabla-snd-card/HiFi
-@@ -0,0 +1,273 @@
+@@ -0,0 +1,259 @@
 +SectionVerb {
 +	EnableSequence [
 +		cdev "hw:apq8064tablasnd"
@@ -68,11 +68,12 @@ index 0000000..6c590e3
 +
 +SectionDevice."Earpiece" {
 +	#Name "Earpiece"
-+	Comment "Handset Rx device"
++	Comment "Earpiece speaker"
 +
 +	# FIXME
 +	ConflictingDevice [
 +		"Headphones"
++		"Speaker"
 +	]
 +
 +	EnableSequence [
@@ -110,9 +111,6 @@ index 0000000..6c590e3
 +		cset "name='SLIMBUS_0_RX Audio Mixer MultiMedia1' 1"
 +	]
 +
-+	#ACDBID	7:1
-+	#EffectsMixerCTL "SRS TruMedia"
-+
 +	Value {
 +		PlaybackChannels "2"
 +	}
@@ -120,11 +118,12 @@ index 0000000..6c590e3
 +
 +SectionDevice."Speaker" {
 +	#Name "Speaker"
-+	Comment "Speaker Rx device"
++	Comment "Main speaker"
 +
 +	# FIXME
 +	ConflictingDevice [
 +		"Earpiece"
++		"Headphones"
 +	]
 +
 +	EnableSequence [
@@ -165,9 +164,6 @@ index 0000000..6c590e3
 +		cset "name='SLIMBUS_0_RX Audio Mixer MultiMedia1' 1"
 +	]
 +
-+	#ACDBID	14:1
-+	#EffectsMixerCTL "SRS TruMedia"
-+
 +	Value {
 +		PlaybackChannels "2"
 +	}
@@ -175,11 +171,12 @@ index 0000000..6c590e3
 +
 +SectionDevice."Headphones" {
 +	#Name "Headphones"
-+	Comment "Headset Rx device"
++	Comment "Headphones"
 +
 +	# FIXME
 +	ConflictingDevice [
 +		"Earpiece"
++		"Speaker"
 +	]
 +
 +	EnableSequence [
@@ -230,9 +227,6 @@ index 0000000..6c590e3
 +		cset "name='SLIMBUS_0_RX Audio Mixer MultiMedia1' 1"
 +	]
 +
-+	#ACDBID	10:1
-+	#EffectsMixerCTL "SRS TruMedia"
-+
 +	Value {
 +		PlaybackChannels "2"
 +	}
@@ -242,7 +236,6 @@ index 0000000..6c590e3
 +	#Name "Headset"
 +	Comment "Headset Microphone"
 +
-+	# FIXME
 +	ConflictingDevice [
 +		"Handset"
 +	]
@@ -268,9 +261,6 @@ index 0000000..6c590e3
 +		cset "name='ADC2 Volume' 0"
 +	]
 +
-+	#ACDBID	8:2
-+	#EffectsMixerCTL "SRS TruMedia"
-+
 +	Value {
 +		CaptureChannels "1"
 +	}
@@ -280,7 +270,6 @@ index 0000000..6c590e3
 +	#Name "Handset"
 +	Comment "Handset Microphone"
 +
-+	# FIXME
 +	ConflictingDevice [
 +		"Headset"
 +	]
@@ -309,9 +298,6 @@ index 0000000..6c590e3
 +		cset "name='MICBIAS1 CAPLESS Switch' 1"
 +	]
 +
-+	#ACDBID	4:2
-+	#EffectsMixerCTL "SRS TruMedia"
-+
 +	Value {
 +		CaptureChannels "1"
 +	}
@@ -328,10 +314,10 @@ index 0000000..71309db
 +EXTRA_DIST = $(ucm_DATA)
 diff --git a/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall b/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 new file mode 100644
-index 0000000..b96e4a1
+index 0000000..dc2007d
 --- /dev/null
 +++ b/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,121 @@
 +# There is no mixer setup here - it is handled by PulseAudio's audio HAL module.
 +
 +SectionVerb {
@@ -342,8 +328,8 @@ index 0000000..b96e4a1
 +	]
 +
 +	DisableSequence [
-+                cdev "hw:apq8064tablasnd"
-+                cset "name='MultiMedia1 Mixer SLIM_4_TX' 0"
++		cdev "hw:apq8064tablasnd"
++		cset "name='MultiMedia1 Mixer SLIM_4_TX' 0"
 +		cset "name='SLIMBUS_0_RX Audio Mixer MultiMedia1' 0"
 +	]
 +
@@ -355,7 +341,7 @@ index 0000000..b96e4a1
 +
 +SectionDevice."Earpiece" {
 +	#Name "Earpiece"
-+	Comment "Handset Rx device"
++	Comment "Earpiece speaker"
 +
 +	# FIXME
 +	ConflictingDevice [
@@ -368,9 +354,6 @@ index 0000000..b96e4a1
 +
 +	DisableSequence [
 +	]
-+
-+	#ACDBID	7:1
-+	#EffectsMixerCTL "SRS TruMedia"
 +
 +	Value {
 +		PlaybackChannels "2"
@@ -379,7 +362,7 @@ index 0000000..b96e4a1
 +
 +SectionDevice."Speaker" {
 +	#Name "Speaker"
-+	Comment "Speaker Rx device"
++	Comment "Main speaker"
 +
 +	# FIXME
 +	ConflictingDevice [
@@ -393,9 +376,6 @@ index 0000000..b96e4a1
 +	DisableSequence [
 +	]
 +
-+	#ACDBID	14:1
-+	#EffectsMixerCTL "SRS TruMedia"
-+
 +	Value {
 +		PlaybackChannels "2"
 +	}
@@ -403,7 +383,7 @@ index 0000000..b96e4a1
 +
 +SectionDevice."Headphones" {
 +	#Name "Headphones"
-+	Comment "Headset Rx device"
++	Comment "Headphones"
 +
 +	# FIXME
 +	ConflictingDevice [
@@ -416,9 +396,6 @@ index 0000000..b96e4a1
 +
 +	DisableSequence [
 +	]
-+
-+	#ACDBID	10:1
-+	#EffectsMixerCTL "SRS TruMedia"
 +
 +	Value {
 +		PlaybackChannels "2"
@@ -429,7 +406,6 @@ index 0000000..b96e4a1
 +	#Name "Headset"
 +	Comment "Headset Microphone"
 +
-+	# FIXME
 +	ConflictingDevice [
 +		"Handset"
 +	]
@@ -439,9 +415,6 @@ index 0000000..b96e4a1
 +
 +	DisableSequence [
 +	]
-+
-+	#ACDBID	8:2
-+	#EffectsMixerCTL "SRS TruMedia"
 +
 +	Value {
 +		CaptureChannels "1"
@@ -461,9 +434,6 @@ index 0000000..b96e4a1
 +
 +	DisableSequence [
 +	]
-+
-+	#ACDBID	4:2
-+	#EffectsMixerCTL "SRS TruMedia"
 +
 +	Value {
 +		CaptureChannels "1"
