@@ -121,7 +121,7 @@ SectionDevice."Headphones" {
 		cset "name='HS Left Playback' 1"
 		cset "name='HS Right Playback' 1"
 
-		cset "name='Headset Playback Volume' 13"
+		cset "name='Headset Playback Volume' 14"
 	]
 
 	DisableSequence [
@@ -181,7 +181,7 @@ SectionDevice."Speaker" {
 		cset "name='HF Left Playback' 1"
 		cset "name='HF Right Playback' 1"
 
-		cset "name='Handsfree Playback Volume' 13"
+		cset "name='Handsfree Playback Volume' 28"
 	]
 
 	DisableSequence [

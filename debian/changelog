@@ -1,3 +1,9 @@
+alsa-lib (1.0.27.2-1ubuntu4) saucy; urgency=low
+
+  * Updating default volume in the UCM config for Galaxy Nexus
+
+ -- Ricardo Salveti de Araujo <ricardo.salveti@canonical.com>  Wed, 28 Aug 2013 19:50:17 -0300
+
 alsa-lib (1.0.27.2-1ubuntu3) saucy; urgency=low
 
   * Add UCM config file for Nexus 7
