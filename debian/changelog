@@ -1,3 +1,11 @@
+alsa-lib (1.0.27.2-1ubuntu5) saucy; urgency=low
+
+  * Raise maximum speaker volume on N4 (LP: #1217986)
+  * Fixup Nexus 7 UCM config file
+  * Added Nexus 10 UCM config file
+
+ -- David Henningsson <david.henningsson@canonical.com>  Tue, 03 Sep 2013 13:43:00 +0200
+
 alsa-lib (1.0.27.2-1ubuntu4) saucy; urgency=low
 
   * Updating default volume in the UCM config for Galaxy Nexus
