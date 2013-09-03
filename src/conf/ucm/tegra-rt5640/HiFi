@@ -78,7 +78,7 @@ SectionDevice."Handset" {
 		cset "name='ADC Switch' on"
 		cset "name='ADC Capture Switch' on"
 		cset "name='ADC Capture Volume' 100"
-		cset "name='ADC Boost Gain' 2"
+		cset "name='ADC Boost Gain' 1"
 		cset "name='DMIC Switch' DMIC1"
 		cset "name='Int Mic Switch' on"
 	]

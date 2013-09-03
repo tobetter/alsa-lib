@@ -92,7 +92,7 @@ SectionDevice."Speaker" {
 		cset "name='RX3 MIX1 INP1' RX1"
 		cset "name='RX3 MIX1 INP2' RX6"
 		cset "name='RX4 DSM MUX' DSM_INV"
-		cset "name='RX3 Digital Volume' 68"
+		cset "name='RX3 Digital Volume' 80"
 		cset "name='LINEOUT1 Volume' 100"
 		cset "name='LINEOUT3 Volume' 100"
 		cset "name='SLIM TX3 MUX' RMIX3"
@@ -121,6 +121,7 @@ SectionDevice."Speaker" {
 
 	Value {
 		PlaybackChannels "2"
+		PlaybackPriority "150"
 	}
 }
 
