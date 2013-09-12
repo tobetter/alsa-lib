@@ -16,8 +16,6 @@ SectionVerb {
 		cset "name='Speaker Mixer Volume' 0"
 
 		cset "name='Headphone Switch' 0"
-		cset "name='Left Headphone Mux' 0"
-		cset "name='Right Headphone Mux' 0"
 		cset "name='Left Output Mixer DAC Switch' 0"
 		cset "name='Right Output Mixer DAC Switch' 0"
 
@@ -135,6 +133,8 @@ SectionDevice."Headphones" {
 		cset "name='Headphone Switch' 1"
 		cset "name='AIF1DAC1 EQ Switch' 0"
 		cset "name='Headphone Volume' 55,55"
+		cset "name='Left Headphone Mux' 'DAC'"
+		cset "name='Right Headphone Mux' 'DAC'"
 	]
 
 	DisableSequence [
