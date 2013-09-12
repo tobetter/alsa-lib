@@ -1,3 +1,11 @@
+alsa-lib (1.0.27.2-1ubuntu6) saucy; urgency=low
+
+  * Fixup Nexus 10 UCM config file:
+    - Headphones now work (thanks YC Cheng)
+    - Added dummy handling of the SPDIF card
+
+ -- David Henningsson <david.henningsson@canonical.com>  Thu, 12 Sep 2013 12:07:48 -0400
+
 alsa-lib (1.0.27.2-1ubuntu5) saucy; urgency=low
 
   * Raise maximum speaker volume on N4 (LP: #1217986)

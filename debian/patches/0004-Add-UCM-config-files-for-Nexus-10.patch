@@ -1,42 +1,49 @@
-From bdce59e8958aaac5d27d65f98d53edf52164c8d5 Mon Sep 17 00:00:00 2001
+From c148a16236422ad36320029cb72b920e3fc589f0 Mon Sep 17 00:00:00 2001
 From: David Henningsson <david.henningsson@canonical.com>
 Date: Tue, 3 Sep 2013 13:35:35 +0200
 Subject: [PATCH 4/4] Add UCM config files for Nexus 10
 
 Signed-off-by: David Henningsson <david.henningsson@canonical.com>
 ---
- configure.in                          |    1 +
- src/conf/ucm/Makefile.am              |    2 +-
- src/conf/ucm/Manta-I2S/HiFi           |  211 +++++++++++++++++++++++++++++++++
- src/conf/ucm/Manta-I2S/Makefile.am    |    4 +
- src/conf/ucm/Manta-I2S/Manta-I2S.conf |    7 ++
- 5 files changed, 224 insertions(+), 1 deletion(-)
+ configure.in                              |   2 +
+ src/conf/ucm/Makefile.am                  |   2 +-
+ src/conf/ucm/Manta-I2S/HiFi               | 211 ++++++++++++++++++++++++++++++
+ src/conf/ucm/Manta-I2S/Makefile.am        |   4 +
+ src/conf/ucm/Manta-I2S/Manta-I2S.conf     |   7 +
+ src/conf/ucm/Manta-SPDIF/Dummy            |   3 +
+ src/conf/ucm/Manta-SPDIF/Makefile.am      |   4 +
+ src/conf/ucm/Manta-SPDIF/Manta-SPDIF.conf |   6 +
+ 8 files changed, 238 insertions(+), 1 deletion(-)
  create mode 100644 src/conf/ucm/Manta-I2S/HiFi
  create mode 100644 src/conf/ucm/Manta-I2S/Makefile.am
  create mode 100644 src/conf/ucm/Manta-I2S/Manta-I2S.conf
+ create mode 100644 src/conf/ucm/Manta-SPDIF/Dummy
+ create mode 100644 src/conf/ucm/Manta-SPDIF/Makefile.am
+ create mode 100644 src/conf/ucm/Manta-SPDIF/Manta-SPDIF.conf
 
 diff --git a/configure.in b/configure.in
-index 92e5db5..4c969cb 100644
+index 92e5db5..daf3b91 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -672,6 +672,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
+@@ -672,6 +672,8 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
  	  src/conf/ucm/apq8064-tabla-snd-card/Makefile \
  	  src/conf/ucm/Tuna/Makefile \
  	  src/conf/ucm/tegra-rt5640/Makefile \
 +	  src/conf/ucm/Manta-I2S/Makefile \
++	  src/conf/ucm/Manta-SPDIF/Makefile \
  	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
  	  alsalisp/Makefile aserver/Makefile \
  	  test/Makefile test/lsb/Makefile \
 diff --git a/src/conf/ucm/Makefile.am b/src/conf/ucm/Makefile.am
-index e8cc02d..0bda05b 100644
+index e8cc02d..d284864 100644
 --- a/src/conf/ucm/Makefile.am
 +++ b/src/conf/ucm/Makefile.am
 @@ -1 +1 @@
 -SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 apq8064-tabla-snd-card Tuna tegra-rt5640
-+SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S
++SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF
 diff --git a/src/conf/ucm/Manta-I2S/HiFi b/src/conf/ucm/Manta-I2S/HiFi
 new file mode 100644
-index 0000000..ab059cd
+index 0000000..9e0f00c
 --- /dev/null
 +++ b/src/conf/ucm/Manta-I2S/HiFi
 @@ -0,0 +1,211 @@
@@ -58,8 +65,6 @@ index 0000000..ab059cd
 +		cset "name='Speaker Mixer Volume' 0"
 +
 +		cset "name='Headphone Switch' 0"
-+		cset "name='Left Headphone Mux' 0"
-+		cset "name='Right Headphone Mux' 0"
 +		cset "name='Left Output Mixer DAC Switch' 0"
 +		cset "name='Right Output Mixer DAC Switch' 0"
 +
@@ -177,6 +182,8 @@ index 0000000..ab059cd
 +		cset "name='Headphone Switch' 1"
 +		cset "name='AIF1DAC1 EQ Switch' 0"
 +		cset "name='Headphone Volume' 55,55"
++		cset "name='Left Headphone Mux' 'DAC'"
++		cset "name='Right Headphone Mux' 'DAC'"
 +	]
 +
 +	DisableSequence [
@@ -274,6 +281,37 @@ index 0000000..83b61ec
 +	Comment "Play HiFi quality Music."
 +}
 +
+diff --git a/src/conf/ucm/Manta-SPDIF/Dummy b/src/conf/ucm/Manta-SPDIF/Dummy
+new file mode 100644
+index 0000000..a2ad2a7
+--- /dev/null
++++ b/src/conf/ucm/Manta-SPDIF/Dummy
+@@ -0,0 +1,3 @@
++SectionVerb {
++}
++SectionDevice.Dummy { }
+diff --git a/src/conf/ucm/Manta-SPDIF/Makefile.am b/src/conf/ucm/Manta-SPDIF/Makefile.am
+new file mode 100644
+index 0000000..0e2c0dc
+--- /dev/null
++++ b/src/conf/ucm/Manta-SPDIF/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/Manta-SPDIF
++ucm_DATA = Manta-SPDIF.conf Dummy
++EXTRA_DIST = $(ucm_DATA)
+diff --git a/src/conf/ucm/Manta-SPDIF/Manta-SPDIF.conf b/src/conf/ucm/Manta-SPDIF/Manta-SPDIF.conf
+new file mode 100644
+index 0000000..1db14c9
+--- /dev/null
++++ b/src/conf/ucm/Manta-SPDIF/Manta-SPDIF.conf
+@@ -0,0 +1,6 @@
++# This empty file makes PulseAudio avoid the card.
++
++SectionUseCase."Dummy" {
++	File Dummy
++	Comment "Dummy"
++}
 -- 
-1.7.9.5
+1.8.3.2
 
