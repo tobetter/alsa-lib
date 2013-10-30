@@ -1,3 +1,9 @@
+alsa-lib (1.0.27.2-1ubuntu7) trusty; urgency=low
+
+  * debian/changelog: Re-add XS-Testsuite header (LP:#1246392)
+
+ -- Jean-Baptiste Lallement <jean-baptiste.lallement@canonical.com>  Wed, 30 Oct 2013 17:04:54 +0100
+
 alsa-lib (1.0.27.2-1ubuntu6) saucy; urgency=low
 
   * Fixup Nexus 10 UCM config file:
