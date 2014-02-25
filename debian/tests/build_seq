@@ -14,10 +14,7 @@ int main(int argc, char **argv)
 {
 	//Simple test that opens MIDI seq. That will work regardless of hardware factors.
 	snd_seq_t *seq_handle;
-	if (snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0) < 0){
-		//unable to open it?
-		return 1;
-	}
+	snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
 	return 0;
 }
 EOF
