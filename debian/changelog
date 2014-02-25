@@ -1,3 +1,11 @@
+alsa-lib (1.0.27.2-3ubuntu4) trusty; urgency=medium
+
+  * debian/tests/build_seq: Drop check of snd_seq_open() return value; it's
+    not relevant for a compile/link test, and it fails in containers and other
+    environments which don't actually have /dev/snd/.
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 25 Feb 2014 17:52:27 +0100
+
 alsa-lib (1.0.27.2-3ubuntu3) trusty; urgency=medium
 
   * debian/patches/0005-Add-UCM-config-files-for-Nexus-5.patch:
