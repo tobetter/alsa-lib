@@ -22,5 +22,5 @@ EOF
 gcc -o asound_build_test asound_build_test.c -lasound
 echo "build: OK"
 [ -x asound_build_test ]
-./asound_build_test
+./asound_build_test 2>&1
 echo "run: OK"
