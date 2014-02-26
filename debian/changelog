@@ -1,3 +1,10 @@
+alsa-lib (1.0.27.2-3ubuntu5) trusty; urgency=medium
+
+  * debian/tests/build_seq: If there is no /dev/snd there will be an error
+    message on stderr. Re-route to stdout to avoid autopkgtest failure.
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 26 Feb 2014 11:40:49 +0100
+
 alsa-lib (1.0.27.2-3ubuntu4) trusty; urgency=medium
 
   * debian/tests/build_seq: Drop check of snd_seq_open() return value; it's
