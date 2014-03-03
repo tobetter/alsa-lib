@@ -18,11 +18,11 @@ this is handled by talking to the audio HAL.
  create mode 100644 src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
  create mode 100644 src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf
 
-diff --git a/configure.in b/configure.in
-index 00fff2b..25fdc81 100644
---- a/configure.in
-+++ b/configure.in
-@@ -669,6 +669,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
+Index: alsa-lib-1.0.27.2/configure.in
+===================================================================
+--- alsa-lib-1.0.27.2.orig/configure.in	2013-07-08 09:31:36.000000000 -0300
++++ alsa-lib-1.0.27.2/configure.in	2014-03-03 19:22:00.000000000 -0300
+@@ -669,6 +669,7 @@
  	  src/conf/ucm/PandaBoardES/Makefile \
  	  src/conf/ucm/SDP4430/Makefile \
  	  src/conf/ucm/tegraalc5632/Makefile \
@@ -30,18 +30,17 @@ index 00fff2b..25fdc81 100644
  	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
  	  alsalisp/Makefile aserver/Makefile \
  	  test/Makefile test/lsb/Makefile \
-diff --git a/src/conf/ucm/Makefile.am b/src/conf/ucm/Makefile.am
-index e089dde..adb3c87 100644
---- a/src/conf/ucm/Makefile.am
-+++ b/src/conf/ucm/Makefile.am
+Index: alsa-lib-1.0.27.2/src/conf/ucm/Makefile.am
+===================================================================
+--- alsa-lib-1.0.27.2.orig/src/conf/ucm/Makefile.am	2013-07-08 09:31:36.000000000 -0300
++++ alsa-lib-1.0.27.2/src/conf/ucm/Makefile.am	2014-03-03 19:22:00.000000000 -0300
 @@ -1 +1 @@
 -SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632
 +SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 apq8064-tabla-snd-card
-diff --git a/src/conf/ucm/apq8064-tabla-snd-card/HiFi b/src/conf/ucm/apq8064-tabla-snd-card/HiFi
-new file mode 100644
-index 0000000..0c066bf
---- /dev/null
-+++ b/src/conf/ucm/apq8064-tabla-snd-card/HiFi
+Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi	2014-03-03 19:21:45.000000000 -0300
 @@ -0,0 +1,260 @@
 +SectionVerb {
 +	EnableSequence [
@@ -303,22 +302,20 @@ index 0000000..0c066bf
 +		CaptureChannels "1"
 +	}
 +}
-diff --git a/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am b/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am
-new file mode 100644
-index 0000000..71309db
---- /dev/null
-+++ b/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am
+Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am	2014-03-03 19:21:45.000000000 -0300
 @@ -0,0 +1,4 @@
 +alsaconfigdir = @ALSA_CONFIG_DIR@
 +ucmdir = $(alsaconfigdir)/ucm/apq8064-tabla-snd-card
 +ucm_DATA = apq8064-tabla-snd-card.conf HiFi VoiceCall
 +EXTRA_DIST = $(ucm_DATA)
-diff --git a/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall b/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
-new file mode 100644
-index 0000000..dc2007d
---- /dev/null
-+++ b/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
-@@ -0,0 +1,121 @@
+Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall	2014-03-03 19:22:15.139509063 -0300
+@@ -0,0 +1,152 @@
 +# There is no mixer setup here - it is handled by PulseAudio's audio HAL module.
 +
 +SectionVerb {
@@ -351,9 +348,23 @@ index 0000000..dc2007d
 +	]
 +
 +	EnableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='SLIM_0_RX Channels' One"
++		cset "name='RX1 MIX1 INP1' RX1"
++		cset "name='RX1 MIX1 INP2' RX1"
++		cset "name='RX1 Digital Volume' 84"
++		cset "name='EAR PA Gain' POS_6_DB"
++		cset "name='DAC1 Switch' 1"
++		cset "name='SLIM TX3 MUX' RMIX1"
 +	]
 +
 +	DisableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='RX1 MIX1 INP1' ZERO"
++		cset "name='RX1 MIX1 INP2' ZERO"
++		cset "name='RX1 Digital Volume' 68"
++		cset "name='DAC1 Switch' 0"
++		cset "name='SLIM TX3 MUX' ZERO"
 +	]
 +
 +	Value {
@@ -372,9 +383,26 @@ index 0000000..dc2007d
 +	]
 +
 +	EnableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='SLIM_0_RX Channels' One"
++		cset "name='RX3 MIX1 INP1' RX1"
++		cset "name='RX3 MIX1 INP2' RX6"
++		cset "name='RX4 DSM MUX' DSM_INV"
++		cset "name='RX3 Digital Volume' 80"
++		cset "name='LINEOUT1 Volume' 100"
++		cset "name='LINEOUT3 Volume' 100"
++		cset "name='SLIM TX3 MUX' RMIX3"
 +	]
 +
 +	DisableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='RX3 MIX1 INP1' ZERO"
++		cset "name='RX3 MIX1 INP2' ZERO"
++		cset "name='RX4 DSM MUX' CIC_OUT"
++		cset "name='RX3 Digital Volume' 68"
++		cset "name='LINEOUT1 Volume' 0"
++		cset "name='LINEOUT3 Volume' 0"
++		cset "name='SLIM TX3 MUX' ZERO"
 +	]
 +
 +	Value {
@@ -440,11 +468,10 @@ index 0000000..dc2007d
 +		CaptureChannels "1"
 +	}
 +}
-diff --git a/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf b/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf
-new file mode 100644
-index 0000000..a4a7c1c
---- /dev/null
-+++ b/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf
+Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf	2014-03-03 19:21:45.000000000 -0300
 @@ -0,0 +1,8 @@
 +SectionUseCase."HiFi" {
 +	File "HiFi"
@@ -454,6 +481,3 @@ index 0000000..a4a7c1c
 +	File "VoiceCall"
 +	Comment "Make a phone call"
 +}
--- 
-1.7.9.5
-
