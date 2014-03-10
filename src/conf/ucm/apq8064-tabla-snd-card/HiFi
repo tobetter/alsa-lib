@@ -15,7 +15,7 @@ SectionVerb {
 
 	Value {
 		TQ "HiFi"
-		
+
 		CapturePCM "hw:apq8064tablasnd,0"
 		PlaybackPCM "hw:apq8064tablasnd,0"
 	}

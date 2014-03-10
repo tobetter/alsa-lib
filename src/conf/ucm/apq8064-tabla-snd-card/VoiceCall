@@ -31,22 +31,13 @@ SectionDevice."Earpiece" {
 
 	EnableSequence [
 		cdev "hw:apq8064tablasnd"
-		cset "name='SLIM_0_RX Channels' One"
-		cset "name='RX1 MIX1 INP1' RX1"
-		cset "name='RX1 MIX1 INP2' RX1"
 		cset "name='RX1 Digital Volume' 84"
 		cset "name='EAR PA Gain' POS_6_DB"
-		cset "name='DAC1 Switch' 1"
-		cset "name='SLIM TX3 MUX' RMIX1"
 	]
 
 	DisableSequence [
 		cdev "hw:apq8064tablasnd"
-		cset "name='RX1 MIX1 INP1' ZERO"
-		cset "name='RX1 MIX1 INP2' ZERO"
 		cset "name='RX1 Digital Volume' 68"
-		cset "name='DAC1 Switch' 0"
-		cset "name='SLIM TX3 MUX' ZERO"
 	]
 
 	Value {
@@ -66,25 +57,16 @@ SectionDevice."Speaker" {
 
 	EnableSequence [
 		cdev "hw:apq8064tablasnd"
-		cset "name='SLIM_0_RX Channels' One"
-		cset "name='RX3 MIX1 INP1' RX1"
-		cset "name='RX3 MIX1 INP2' RX6"
-		cset "name='RX4 DSM MUX' DSM_INV"
 		cset "name='RX3 Digital Volume' 80"
 		cset "name='LINEOUT1 Volume' 100"
 		cset "name='LINEOUT3 Volume' 100"
-		cset "name='SLIM TX3 MUX' RMIX3"
 	]
 
 	DisableSequence [
 		cdev "hw:apq8064tablasnd"
-		cset "name='RX3 MIX1 INP1' ZERO"
-		cset "name='RX3 MIX1 INP2' ZERO"
-		cset "name='RX4 DSM MUX' CIC_OUT"
 		cset "name='RX3 Digital Volume' 68"
 		cset "name='LINEOUT1 Volume' 0"
 		cset "name='LINEOUT3 Volume' 0"
-		cset "name='SLIM TX3 MUX' ZERO"
 	]
 
 	Value {
@@ -103,9 +85,19 @@ SectionDevice."Headphones" {
 	]
 
 	EnableSequence [
+		cdev "hw:apq8064tablasnd"
+		cset "name='RX1 Digital Volume' 68"
+		cset "name='RX2 Digital Volume' 68"
+		cset "name='HPHL Volume' 50"
+		cset "name='HPHR Volume' 50"
 	]
 
 	DisableSequence [
+		cdev "hw:apq8064tablasnd"
+		cset "name='RX1 Digital Volume' 68"
+		cset "name='RX2 Digital Volume' 68"
+		cset "name='HPHL Volume' 0"
+		cset "name='HPHR Volume' 0"
 	]
 
 	Value {
@@ -122,9 +114,13 @@ SectionDevice."Headset" {
 	]
 
 	EnableSequence [
+		cdev "hw:apq8064tablasnd"
+		cset "name='ADC2 Volume' 66"
 	]
 
 	DisableSequence [
+		cdev "hw:apq8064tablasnd"
+		cset "name='ADC2 Volume' 0"
 	]
 
 	Value {
@@ -141,9 +137,15 @@ SectionDevice."Handset" {
 	]
 
 	EnableSequence [
+		cdev "hw:apq8064tablasnd"
+		cset "name='DEC7 Volume' 80"
+		cset "name='ADC1 Volume' 100"
 	]
 
 	DisableSequence [
+		cdev "hw:apq8064tablasnd"
+		cset "name='DEC7 Volume' 0"
+		cset "name='ADC1 Volume' 0"
 	]
 
 	Value {
