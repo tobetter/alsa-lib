@@ -21,7 +21,7 @@ this is handled by talking to the audio HAL.
 Index: alsa-lib-1.0.27.2/configure.in
 ===================================================================
 --- alsa-lib-1.0.27.2.orig/configure.in	2013-07-08 09:31:36.000000000 -0300
-+++ alsa-lib-1.0.27.2/configure.in	2014-03-03 19:22:00.000000000 -0300
++++ alsa-lib-1.0.27.2/configure.in	2014-03-10 02:07:28.000000000 -0300
 @@ -669,6 +669,7 @@
  	  src/conf/ucm/PandaBoardES/Makefile \
  	  src/conf/ucm/SDP4430/Makefile \
@@ -33,14 +33,14 @@ Index: alsa-lib-1.0.27.2/configure.in
 Index: alsa-lib-1.0.27.2/src/conf/ucm/Makefile.am
 ===================================================================
 --- alsa-lib-1.0.27.2.orig/src/conf/ucm/Makefile.am	2013-07-08 09:31:36.000000000 -0300
-+++ alsa-lib-1.0.27.2/src/conf/ucm/Makefile.am	2014-03-03 19:22:00.000000000 -0300
++++ alsa-lib-1.0.27.2/src/conf/ucm/Makefile.am	2014-03-10 02:07:28.000000000 -0300
 @@ -1 +1 @@
 -SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632
 +SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 apq8064-tabla-snd-card
 Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi	2014-03-03 19:21:45.000000000 -0300
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi	2014-03-10 02:08:14.306081574 -0300
 @@ -0,0 +1,260 @@
 +SectionVerb {
 +	EnableSequence [
@@ -59,7 +59,7 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi
 +
 +	Value {
 +		TQ "HiFi"
-+		
++
 +		CapturePCM "hw:apq8064tablasnd,0"
 +		PlaybackPCM "hw:apq8064tablasnd,0"
 +	}
@@ -305,7 +305,7 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/HiFi
 Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am	2014-03-03 19:21:45.000000000 -0300
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am	2014-03-10 02:06:53.000000000 -0300
 @@ -0,0 +1,4 @@
 +alsaconfigdir = @ALSA_CONFIG_DIR@
 +ucmdir = $(alsaconfigdir)/ucm/apq8064-tabla-snd-card
@@ -314,8 +314,8 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/Makefile.am
 Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall	2014-03-03 19:22:15.139509063 -0300
-@@ -0,0 +1,152 @@
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall	2014-03-10 02:07:45.906081319 -0300
+@@ -0,0 +1,154 @@
 +# There is no mixer setup here - it is handled by PulseAudio's audio HAL module.
 +
 +SectionVerb {
@@ -349,22 +349,13 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 +
 +	EnableSequence [
 +		cdev "hw:apq8064tablasnd"
-+		cset "name='SLIM_0_RX Channels' One"
-+		cset "name='RX1 MIX1 INP1' RX1"
-+		cset "name='RX1 MIX1 INP2' RX1"
 +		cset "name='RX1 Digital Volume' 84"
 +		cset "name='EAR PA Gain' POS_6_DB"
-+		cset "name='DAC1 Switch' 1"
-+		cset "name='SLIM TX3 MUX' RMIX1"
 +	]
 +
 +	DisableSequence [
 +		cdev "hw:apq8064tablasnd"
-+		cset "name='RX1 MIX1 INP1' ZERO"
-+		cset "name='RX1 MIX1 INP2' ZERO"
 +		cset "name='RX1 Digital Volume' 68"
-+		cset "name='DAC1 Switch' 0"
-+		cset "name='SLIM TX3 MUX' ZERO"
 +	]
 +
 +	Value {
@@ -384,25 +375,16 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 +
 +	EnableSequence [
 +		cdev "hw:apq8064tablasnd"
-+		cset "name='SLIM_0_RX Channels' One"
-+		cset "name='RX3 MIX1 INP1' RX1"
-+		cset "name='RX3 MIX1 INP2' RX6"
-+		cset "name='RX4 DSM MUX' DSM_INV"
 +		cset "name='RX3 Digital Volume' 80"
 +		cset "name='LINEOUT1 Volume' 100"
 +		cset "name='LINEOUT3 Volume' 100"
-+		cset "name='SLIM TX3 MUX' RMIX3"
 +	]
 +
 +	DisableSequence [
 +		cdev "hw:apq8064tablasnd"
-+		cset "name='RX3 MIX1 INP1' ZERO"
-+		cset "name='RX3 MIX1 INP2' ZERO"
-+		cset "name='RX4 DSM MUX' CIC_OUT"
 +		cset "name='RX3 Digital Volume' 68"
 +		cset "name='LINEOUT1 Volume' 0"
 +		cset "name='LINEOUT3 Volume' 0"
-+		cset "name='SLIM TX3 MUX' ZERO"
 +	]
 +
 +	Value {
@@ -421,9 +403,19 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 +	]
 +
 +	EnableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='RX1 Digital Volume' 68"
++		cset "name='RX2 Digital Volume' 68"
++		cset "name='HPHL Volume' 50"
++		cset "name='HPHR Volume' 50"
 +	]
 +
 +	DisableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='RX1 Digital Volume' 68"
++		cset "name='RX2 Digital Volume' 68"
++		cset "name='HPHL Volume' 0"
++		cset "name='HPHR Volume' 0"
 +	]
 +
 +	Value {
@@ -440,9 +432,13 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 +	]
 +
 +	EnableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='ADC2 Volume' 66"
 +	]
 +
 +	DisableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='ADC2 Volume' 0"
 +	]
 +
 +	Value {
@@ -459,9 +455,15 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 +	]
 +
 +	EnableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='DEC7 Volume' 80"
++		cset "name='ADC1 Volume' 100"
 +	]
 +
 +	DisableSequence [
++		cdev "hw:apq8064tablasnd"
++		cset "name='DEC7 Volume' 0"
++		cset "name='ADC1 Volume' 0"
 +	]
 +
 +	Value {
@@ -471,7 +473,7 @@ Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/VoiceCall
 Index: alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf	2014-03-03 19:21:45.000000000 -0300
++++ alsa-lib-1.0.27.2/src/conf/ucm/apq8064-tabla-snd-card/apq8064-tabla-snd-card.conf	2014-03-10 02:06:53.000000000 -0300
 @@ -0,0 +1,8 @@
 +SectionUseCase."HiFi" {
 +	File "HiFi"
