@@ -54,7 +54,7 @@ subdir = src/conf/pcm
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -239,7 +239,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 cfg_files = default.conf front.conf rear.conf center_lfe.conf side.conf\
-	    surround40.conf surround41.conf \
+	    surround21.conf surround40.conf surround41.conf \
 	    surround50.conf surround51.conf \
 	    surround71.conf iec958.conf hdmi.conf modem.conf \
 	    dmix.conf dsnoop.conf \

@@ -55,7 +55,7 @@ subdir = src/conf/cards
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -249,12 +249,12 @@ cfg_files = aliases.conf AACI.conf ATIIXP.conf ATIIXP-SPDMA.conf \
 	EMU10K1.conf EMU10K1X.conf ENS1370.conf ENS1371.conf \
 	ES1968.conf FM801.conf FWSpeakers.conf FireWave.conf GUS.conf \
 	HDA-Intel.conf ICE1712.conf ICE1724.conf ICH.conf ICH4.conf \
-	ICH-MODEM.conf Maestro3.conf NFORCE.conf PC-Speaker.conf \
-	PMac.conf PMacToonie.conf PS3.conf RME9636.conf RME9652.conf \
-	SI7018.conf SB-XFi.conf TRID4DWAVENX.conf USB-Audio.conf \
-	YMF744.conf VIA686A.conf VIA8233.conf VIA8233A.conf \
-	VIA8237.conf VX222.conf VXPocket.conf VXPocket440.conf \
-	$(am__append_1)
+	ICH-MODEM.conf Loopback.conf Maestro3.conf NFORCE.conf \
+	PC-Speaker.conf PMac.conf PMacToonie.conf PS3.conf \
+	RME9636.conf RME9652.conf SI7018.conf SB-XFi.conf \
+	TRID4DWAVENX.conf USB-Audio.conf YMF744.conf VIA686A.conf \
+	VIA8233.conf VIA8233A.conf VIA8237.conf VX222.conf \
+	VXPocket.conf VXPocket440.conf $(am__append_1)
 alsa_DATA = $(cfg_files)
 @BUILD_ALISP_TRUE@SI7018dir = $(alsaconfigdir)/cards/SI7018
 @BUILD_ALISP_FALSE@SI7018_files = 

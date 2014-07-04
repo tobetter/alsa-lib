@@ -22,19 +22,37 @@
 #ifndef __LOCAL_H
 #define __LOCAL_H
 
+#include "config.h"
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <assert.h>
+#ifdef HAVE_ENDIAN_H
 #include <endian.h>
+#elif defined(HAVE_SYS_ENDIAN_H)
+#include <sys/endian.h>
+#ifndef __BYTE_ORDER
+#define __BYTE_ORDER BYTE_ORDER
+#endif
+#ifndef __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN LITTLE_ENDIAN
+#endif
+#ifndef __BIG_ENDIAN
+#define __BIG_ENDIAN BIG_ENDIAN
+#endif
+#else
+#error Header defining endianness not defined
+#endif
 #include <stdarg.h>
 #include <sys/poll.h>
+#include <sys/types.h>
 #include <errno.h>
+#include <linux/types.h>
 #include <linux/ioctl.h>
 
-#include "config.h"
 #ifdef SUPPORT_RESMGR
 #include <resmgr.h>
 #endif
@@ -114,9 +132,12 @@
 #define snd_ctl_tlv		sndrv_ctl_tlv
 
 /* kill and replace kernel-specific types */
+#ifndef __user
 #define __user
+#endif
+#ifndef __force
 #define __force
-#define __kernel_off_t		off_t
+#endif
 
 #include <sound/asound.h>
 
