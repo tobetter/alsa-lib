@@ -1,7 +1,8 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(src/control/control.c)
+AC_INIT(alsa-lib, 1.0.28)
 
+AC_CONFIG_SRCDIR([src/control/control.c])
 AC_CONFIG_MACRO_DIR([m4])
 
 dnl *************************************************
@@ -12,7 +13,7 @@ dnl add API = c+1:0:a+1
 dnl remove API = c+1:0:0
 dnl *************************************************
 AC_CANONICAL_HOST
-AM_INIT_AUTOMAKE(alsa-lib, 1.0.27.2)
+AM_INIT_AUTOMAKE
 eval LIBTOOL_VERSION_INFO="2:0:0"
 dnl *************************************************
 AM_CONDITIONAL([INSTALL_M4], [test -n "${ACLOCAL}"])
@@ -64,8 +65,6 @@ AC_HEADER_TIME
 
 dnl Checks for library functions.
 AC_PROG_GCC_TRADITIONAL
-AC_CHECK_FUNC([hsearch_r], [HAVE_HSEARCH_R=yes])
-AM_CONDITIONAL([ALSA_HSEARCH_R], [test "x$HAVE_HSEARCH_R" != xyes])
 AC_CHECK_FUNCS([uselocale])
 
 SAVE_LIBRARY_VERSION
@@ -311,42 +310,8 @@ fi
 
 AC_SUBST(ALSA_DEPLIBS)
 
-dnl Check for architecture
-AC_MSG_CHECKING(for architecture)
-case "$host" in
-i?86*)
-  AC_MSG_RESULT(x86)
-  ;;
-x86_64*)
-  AC_MSG_RESULT(x86)
-  ;;
-alpha*)
-  AC_MSG_RESULT(alpha)
-  ;;
-powerpc*|ppc*)
-  AC_MSG_RESULT(ppc)
-  CPPFLAGS="$CPPFLAGS -D__ppc__"
-  ;;
-ia64*)
-  AC_MSG_RESULT(ia64)
-  CPPFLAGS="$CPPFLAGS -D__ia64__"
-  ;;
-mips*)
-  AC_MSG_RESULT(mips)
-  CPPFLAGS="$CPPFLAGS -D__mips__"
-  ;;
-arm*)
-  AC_MSG_RESULT(arm)
-  CPPFLAGS="$CPPFLAGS -D__arm__"
-  ;;
-*)
-  AC_MSG_RESULT($host_cpu)
-  echo "No atomic operations supported.." 
-  ;;
-esac
-
-dnl Check for wordexp.h
-AC_CHECK_HEADERS([wordexp.h])
+dnl Check for headers
+AC_CHECK_HEADERS([wordexp.h endian.h sys/endian.h])
 
 dnl Check for resmgr support...
 AC_MSG_CHECKING(for resmgr support)
@@ -490,6 +455,21 @@ else
 pcm_plugins=""
 fi
 
+dnl check atomics for pcm_meter
+
+AC_MSG_CHECKING([whether GCC supports builtin atomic intrinsics])
+if test -z "$gcc_have_atomics"; then
+  gcc_have_atomics=no
+  AC_TRY_LINK([],
+    [int i;
+     __atomic_load_n(&i, __ATOMIC_SEQ_CST);
+     __atomic_add_fetch(&i, 0, __ATOMIC_SEQ_CST);
+    ],
+    [gcc_have_atomics=yes],
+    [gcc_have_atomics=no])
+fi
+AC_MSG_RESULT($gcc_have_atomics)
+
 PCM_PLUGIN_LIST="copy linear route mulaw alaw adpcm rate plug multi shm file null empty share meter hooks lfloat ladspa dmix dshare dsnoop asym iec958 softvol extplug ioplug mmap_emul"
 
 build_pcm_plugin="no"
@@ -531,6 +511,10 @@ fi
 if test "$softfloat" = "yes"; then
   build_pcm_lfloat="no"
   build_pcm_ladspa="no"
+fi
+
+if test "$gcc_have_atomics" != "yes"; then
+  build_pcm_meter="no"
 fi
 
 AM_CONDITIONAL([BUILD_PCM_PLUGIN], [test x$build_pcm_plugin = xyes])
@@ -659,7 +643,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/pcm/Makefile src/pcm/scopes/Makefile \
 	  src/rawmidi/Makefile src/timer/Makefile \
           src/hwdep/Makefile src/seq/Makefile src/ucm/Makefile \
-          src/compat/Makefile src/alisp/Makefile \
+          src/alisp/Makefile \
 	  src/conf/Makefile src/conf/alsa.conf.d/Makefile \
 	  src/conf/cards/Makefile \
 	  src/conf/pcm/Makefile \
@@ -682,6 +666,35 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 dnl Create asoundlib.h dynamically according to configure options
 echo "Creating asoundlib.h..."
 cp "$srcdir"/include/asoundlib-head.h include/asoundlib.h
+test "$ac_cv_header_endian_h" = "yes" && echo "#include <endian.h>" >> include/asoundlib.h
+if test "$ac_cv_header_sys_endian_h" = "yes"; then
+cat >> include/asoundlib.h <<EOF
+#include <sys/endian.h>
+#ifndef __BYTE_ORDER
+#define __BYTE_ORDER BYTE_ORDER
+#endif
+#ifndef __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN LITTLE_ENDIAN
+#endif
+#ifndef __BIG_ENDIAN
+#define __BIG_ENDIAN BIG_ENDIAN
+#endif
+EOF
+fi
+cat >> include/asoundlib.h <<EOF
+
+#ifndef __GNUC__
+#define __inline__ inline
+#endif
+
+#include <alsa/asoundef.h>
+#include <alsa/version.h>
+#include <alsa/global.h>
+#include <alsa/input.h>
+#include <alsa/output.h>
+#include <alsa/error.h>
+#include <alsa/conf.h>
+EOF
 test "$build_pcm" = "yes" && echo "#include <alsa/pcm.h>" >> include/asoundlib.h
 test "$build_rawmidi" = "yes" && echo "#include <alsa/rawmidi.h>" >> include/asoundlib.h
 test "$build_pcm" = "yes" && echo "#include <alsa/timer.h>" >> include/asoundlib.h

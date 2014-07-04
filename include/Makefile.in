@@ -68,7 +68,7 @@ DIST_COMMON = $(am__alsainclude_HEADERS_DIST) $(noinst_HEADERS) \
 	$(srcdir)/config.h.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -311,7 +311,7 @@ noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
 	asoundlib-head.h asoundlib-tail.h
 
 DISTCLEANFILES = stamp-vh version.h alsa asoundlib.h
-INCLUDES = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -703,7 +703,7 @@ alsa:
 version.h: stamp-vh alsa
 	@:
 
-stamp-vh: $(top_builddir)/configure.in
+stamp-vh: $(top_builddir)/configure.ac
 	@echo "/*" > ver.tmp
 	@echo " *  version.h" >> ver.tmp
 	@echo " */" >> ver.tmp

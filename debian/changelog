@@ -1,3 +1,18 @@
+alsa-lib (1.0.28-1) unstable; urgency=medium
+
+  [ Luke Yelavich ]
+  * New upstream release
+  * Dropped patches, applied upstream:
+    - tests_lm_ftbfs.patch
+    - Fix-access-of-freed-memory-in-namehints.patch
+  * Refreshed patches:
+    - 0001-Add-UCM-configuration-for-Nexus-4-Mako.patch
+    - 0002-Add-UCM-config-file-for-Galaxy-Nexus-maguro.patch
+    - 0003-Add-UCM-files-for-Nexus-7.patch
+    - 0004-Add-UCM-config-files-for-Nexus-10.patch
+
+ -- Jordi Mallach <jordi@debian.org>  Sat, 05 Jul 2014 00:04:47 +0100
+
 alsa-lib (1.0.27.2-4) unstable; urgency=medium
 
   * Merge all pending delta from Ubuntu:

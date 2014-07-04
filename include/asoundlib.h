@@ -35,10 +35,10 @@
 #include <string.h>
 #include <fcntl.h>
 #include <assert.h>
-#include <endian.h>
 #include <sys/poll.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <endian.h>
 
 #ifndef __GNUC__
 #define __inline__ inline
