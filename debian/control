@@ -1,7 +1,8 @@
 Source: alsa-lib
 Section: libs
 Priority: optional
-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian ALSA Maintainers <pkg-alsa-devel@lists.alioth.debian.org>
 Uploaders: Jordi Mallach <jordi@debian.org>,
            Elimar Riesebieter <riesebie@lxtec.de>
 Build-Depends: autotools-dev,
@@ -9,7 +10,7 @@ Build-Depends: autotools-dev,
                dh-autoreconf,
                dpkg-dev (>= 1.16.1)
 Build-Depends-Indep: doxygen
-Standards-Version: 3.9.5
+Standards-Version: 3.9.6
 Homepage: http://www.alsa-project.org/
 Vcs-Svn: svn://anonscm.debian.org/pkg-alsa/trunk/alsa-lib
 Vcs-Browser: http://anonscm.debian.org/viewvc/pkg-alsa/trunk/alsa-lib/
