@@ -224,8 +224,9 @@ int snd_use_case_get_list(snd_use_case_mgr_t *uc_mgr,
  * \param value Value pointer
  * \return Zero if success, otherwise a negative error code
  *
- * Note: String is dynamically allocated, use free() to
- * deallocate this string.
+ * Note: The returned string is dynamically allocated, use free() to
+ * deallocate this string. (Yes, the value parameter shouldn't be marked as
+ * "const", but it's too late to fix it, sorry about that.)
  *
  * Known identifiers:
  *   NULL 		- return current card
@@ -258,7 +259,17 @@ int snd_use_case_get_list(snd_use_case_mgr_t *uc_mgr,
  * Recommended names for values:
  *   TQ			- Tone Quality
  *   PlaybackPCM	- full PCM playback device name
+ *   PlaybackPCMIsDummy	- Valid values: "yes" and "no". If set to "yes", the
+ *			  PCM named by the PlaybackPCM value is a dummy device,
+ *			  meaning that opening it enables an audio path in the
+ *			  hardware, but writing to the PCM device has no
+ *			  effect.
  *   CapturePCM		- full PCM capture device name
+ *   CapturePCMIsDummy	- Valid values: "yes" and "no". If set to "yes", the
+ *			  PCM named by the CapturePCM value is a dummy device,
+ *			  meaning that opening it enables an audio path in the
+ *			  hardware, but reading from the PCM device has no
+ *			  effect.
  *   PlaybackRate	- playback device sample rate
  *   PlaybackChannels	- playback device channel count
  *   PlaybackCTL	- playback control device name

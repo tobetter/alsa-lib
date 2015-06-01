@@ -897,6 +897,7 @@ int snd_pcm_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 	if (err < 0)
 		return err;
 	pcm->tstamp_mode = params->tstamp_mode;
+	pcm->tstamp_type = params->tstamp_type;
 	pcm->period_step = params->period_step;
 	pcm->avail_min = params->avail_min;
 	pcm->period_event = sw_get_period_event(params);
@@ -1483,6 +1484,7 @@ int snd_pcm_poll_descriptors_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsign
 #define XRUN(v) [SND_PCM_XRUN_##v] = #v
 #define SILENCE(v) [SND_PCM_SILENCE_##v] = #v
 #define TSTAMP(v) [SND_PCM_TSTAMP_##v] = #v
+#define TSTAMP_TYPE(v) [SND_PCM_TSTAMP_TYPE_##v] = #v
 #define ACCESS(v) [SND_PCM_ACCESS_##v] = #v
 #define START(v) [SND_PCM_START_##v] = #v
 #define HW_PARAM(v) [SND_PCM_HW_PARAM_##v] = #v
@@ -1564,6 +1566,9 @@ static const char *const snd_pcm_format_names[] = {
 	FORMAT(G723_40_1B),
 	FORMAT(DSD_U8),
 	FORMAT(DSD_U16_LE),
+	FORMAT(DSD_U32_LE),
+	FORMAT(DSD_U16_BE),
+	FORMAT(DSD_U32_BE),
 };
 
 static const char *const snd_pcm_format_aliases[SND_PCM_FORMAT_LAST+1] = {
@@ -1623,6 +1628,9 @@ static const char *const snd_pcm_format_descriptions[] = {
 	FORMATD(G723_40_1B, "G.723 (ADPCM) 40 kbit/s, 1 sample in 1 byte"),
 	FORMATD(DSD_U8,  "Direct Stream Digital, 1-byte (x8), oldest bit in MSB"),
 	FORMATD(DSD_U16_LE, "Direct Stream Digital, 2-byte (x16), little endian, oldest bits in MSB"),
+	FORMATD(DSD_U32_LE, "Direct Stream Digital, 4-byte (x32), little endian, oldest bits in MSB"),
+	FORMATD(DSD_U16_BE, "Direct Stream Digital, 2-byte (x16), big endian, oldest bits in MSB"),
+	FORMATD(DSD_U32_BE, "Direct Stream Digital, 4-byte (x32), big endian, oldest bits in MSB"),
 };
 
 static const char *const snd_pcm_type_names[] = {
@@ -1679,6 +1687,12 @@ static const char *const snd_pcm_xrun_mode_names[] = {
 static const char *const snd_pcm_tstamp_mode_names[] = {
 	TSTAMP(NONE),
 	TSTAMP(ENABLE),
+};
+
+static const char *const snd_pcm_tstamp_type_names[] = {
+	TSTAMP_TYPE(GETTIMEOFDAY),
+	TSTAMP_TYPE(MONOTONIC),
+	TSTAMP_TYPE(MONOTONIC_RAW),
 };
 #endif
 
@@ -1826,6 +1840,18 @@ const char *snd_pcm_tstamp_mode_name(snd_pcm_tstamp_t mode)
 }
 
 /**
+ * \brief get name of PCM tstamp type setting
+ * \param mode PCM tstamp type
+ * \return ascii name of PCM tstamp type setting
+ */
+const char *snd_pcm_tstamp_type_name(snd_pcm_tstamp_type_t type)
+{
+	if (type > SND_PCM_TSTAMP_TYPE_LAST)
+		return NULL;
+	return snd_pcm_tstamp_type_names[type];
+}
+
+/**
  * \brief get name of PCM state
  * \param state PCM state
  * \return ascii name of PCM state
@@ -1899,6 +1925,7 @@ int snd_pcm_dump_sw_setup(snd_pcm_t *pcm, snd_output_t *out)
 		return -EIO;
 	}
 	snd_output_printf(out, "  tstamp_mode  : %s\n", snd_pcm_tstamp_mode_name(pcm->tstamp_mode));
+	snd_output_printf(out, "  tstamp_type  : %s\n", snd_pcm_tstamp_type_name(pcm->tstamp_type));
 	snd_output_printf(out, "  period_step  : %d\n", pcm->period_step);
 	snd_output_printf(out, "  avail_min    : %ld\n", pcm->avail_min);
 	snd_output_printf(out, "  period_event : %i\n", pcm->period_event);
@@ -2123,6 +2150,7 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 	if (err >= 0) {
 		if (snd_config_get_type(type_conf) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for PCM type %s definition", str);
+			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, type_conf) {
@@ -5590,7 +5618,9 @@ int snd_pcm_sw_params_current(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	params->proto = SNDRV_PCM_VERSION;
 	params->tstamp_mode = pcm->tstamp_mode;
+	params->tstamp_type = pcm->tstamp_type;
 	params->period_step = pcm->period_step;
 	params->sleep_min = 0;
 	params->avail_min = pcm->avail_min;
@@ -5613,6 +5643,7 @@ int snd_pcm_sw_params_current(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 int snd_pcm_sw_params_dump(snd_pcm_sw_params_t *params, snd_output_t *out)
 {
 	snd_output_printf(out, "tstamp_mode: %s\n", snd_pcm_tstamp_mode_name(params->tstamp_mode));
+	snd_output_printf(out, "tstamp_type: %s\n", snd_pcm_tstamp_type_name(params->tstamp_type));
 	snd_output_printf(out, "period_step: %u\n", params->period_step);
 	snd_output_printf(out, "avail_min: %lu\n", params->avail_min);
 	snd_output_printf(out, "start_threshold: %ld\n", params->start_threshold);
@@ -5807,6 +5838,37 @@ int snd_pcm_sw_params_get_tstamp_mode(const snd_pcm_sw_params_t *params, snd_pcm
 {
 	assert(params && val);
 	*val = params->tstamp_mode;
+	return 0;
+}
+
+/**
+ * \brief Set timestamp type inside a software configuration container
+ * \param pcm PCM handle
+ * \param params Software configuration container
+ * \param val Timestamp type
+ * \return 0 otherwise a negative error code
+ */
+int snd_pcm_sw_params_set_tstamp_type(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_tstamp_type_t val)
+{
+	assert(pcm && params);
+	if (CHECK_SANITY(val > SND_PCM_TSTAMP_TYPE_LAST)) {
+		SNDMSG("invalid tstamp_type value %d", val);
+		return -EINVAL;
+	}
+	params->tstamp_type = val;
+	return 0;
+}
+
+/**
+ * \brief Get timestamp type from a software configuration container
+ * \param params Software configuration container
+ * \param val Returned timestamp type
+ * \return 0 otherwise a negative error code
+ */
+int snd_pcm_sw_params_get_tstamp_type(const snd_pcm_sw_params_t *params, snd_pcm_tstamp_type_t *val)
+{
+	assert(params && val);
+	*val = params->tstamp_type;
 	return 0;
 }
 
@@ -7559,7 +7621,7 @@ int snd_pcm_chmap_print(const snd_pcm_chmap_t *map, size_t maxlen, char *buf)
 				return -ENOMEM;
 		}
 		if (map->pos[i] & SND_CHMAP_DRIVER_SPEC)
-			len += snprintf(buf + len, maxlen, "%d", p);
+			len += snprintf(buf + len, maxlen - len, "%d", p);
 		else {
 			const char *name = chmap_names[p];
 			if (name)
