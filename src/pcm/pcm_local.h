@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <sys/uio.h>
+#include <time.h>
 #include <sys/time.h>
 
 #define _snd_mask sndrv_mask
@@ -191,7 +192,6 @@ struct _snd_pcm {
 	int poll_fd;
 	unsigned short poll_events;
 	int setup: 1,
-	    monotonic: 1,
 	    compat: 1;
 	snd_pcm_access_t access;	/* access mode */
 	snd_pcm_format_t format;	/* SND_PCM_FORMAT_* */
@@ -202,6 +202,7 @@ struct _snd_pcm {
 	unsigned int period_time;	/* period duration */
 	snd_interval_t periods;
 	snd_pcm_tstamp_t tstamp_mode;	/* timestamp mode */
+	snd_pcm_tstamp_type_t tstamp_type;	/* timestamp type */
 	unsigned int period_step;
 	snd_pcm_uframes_t avail_min;	/* min avail frames for wakeup */
 	int period_event;
@@ -460,13 +461,25 @@ static inline snd_pcm_sframes_t snd_pcm_mmap_capture_hw_avail(snd_pcm_t *pcm)
 
 static inline snd_pcm_sframes_t snd_pcm_mmap_hw_avail(snd_pcm_t *pcm)
 {
-	snd_pcm_sframes_t avail;
-	avail = *pcm->hw.ptr - *pcm->appl.ptr;
-	if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
-		avail += pcm->buffer_size;
-	if (avail < 0)
-		avail += pcm->boundary;
-	return pcm->buffer_size - avail;
+	return pcm->buffer_size - snd_pcm_mmap_avail(pcm);
+}
+
+static inline snd_pcm_sframes_t snd_pcm_mmap_playback_hw_rewindable(snd_pcm_t *pcm)
+{
+	snd_pcm_sframes_t ret = snd_pcm_mmap_playback_hw_avail(pcm);
+	return (ret >= 0) ? ret : 0;
+}
+
+static inline snd_pcm_sframes_t snd_pcm_mmap_capture_hw_rewindable(snd_pcm_t *pcm)
+{
+	snd_pcm_sframes_t ret = snd_pcm_mmap_capture_hw_avail(pcm);
+	return (ret >= 0) ? ret : 0;
+}
+
+static inline snd_pcm_uframes_t snd_pcm_mmap_hw_rewindable(snd_pcm_t *pcm)
+{
+	snd_pcm_sframes_t ret = snd_pcm_mmap_hw_avail(pcm);
+	return (ret >= 0) ? ret : 0;
 }
 
 static inline const snd_pcm_channel_area_t *snd_pcm_mmap_areas(snd_pcm_t *pcm)
@@ -959,26 +972,40 @@ typedef union snd_tmp_double {
 } snd_tmp_double_t;
 
 /* get the current timestamp */
-static inline void gettimestamp(snd_htimestamp_t *tstamp, int monotonic)
+#ifdef HAVE_CLOCK_GETTIME
+static inline void gettimestamp(snd_htimestamp_t *tstamp,
+				snd_pcm_tstamp_type_t tstamp_type)
 {
-#if defined(HAVE_CLOCK_GETTIME)
-#if defined(CLOCK_MONOTONIC)
-	if (monotonic) {
-		clock_gettime(CLOCK_MONOTONIC, tstamp);
-	} else {
-#endif
-		clock_gettime(CLOCK_REALTIME, tstamp);
-#else
-		struct timeval tv;
+	clockid_t id;
 
-		gettimeofday(&tv, 0);
-		tstamp->tv_sec = tv.tv_sec;
-		tstamp->tv_nsec = tv.tv_usec * 1000L;
+	switch (tstamp_type) {
+#ifdef CLOCK_MONOTONIC_RAW
+	case SND_PCM_TSTAMP_TYPE_MONOTONIC_RAW:
+		id = CLOCK_MONOTONIC_RAW;
+		break;
 #endif
-#if defined(HAVE_CLOCK_GETTIME)
+#ifdef CLOCK_MONOTONIC
+	case SND_PCM_TSTAMP_TYPE_MONOTONIC:
+		id = CLOCK_MONOTONIC;
+		break;
+#endif
+	default:
+		id = CLOCK_REALTIME;
+		break;
 	}
-#endif
+	clock_gettime(id, tstamp);
 }
+#else /* HAVE_CLOCK_GETTIME */
+static inline void gettimestamp(snd_htimestamp_t *tstamp,
+				snd_pcm_tstamp_type_t tstamp_type)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, 0);
+	tstamp->tv_sec = tv.tv_sec;
+	tstamp->tv_nsec = tv.tv_usec * 1000L;
+}
+#endif /* HAVE_CLOCK_GETTIME */
 
 snd_pcm_chmap_query_t **
 _snd_pcm_make_single_query_chmaps(const snd_pcm_chmap_t *src);

@@ -574,6 +574,8 @@ static inline void snd_pcm_rate_sync_hwptr(snd_pcm_t *pcm)
 	rate->hw_ptr =
 		(slave_hw_ptr / rate->gen.slave->period_size) * pcm->period_size +
 		rate->ops.input_frames(rate->obj, slave_hw_ptr % rate->gen.slave->period_size);
+
+	rate->hw_ptr %= pcm->boundary;
 }
 
 static int snd_pcm_rate_hwsync(snd_pcm_t *pcm)
@@ -591,10 +593,7 @@ static int snd_pcm_rate_hwsync(snd_pcm_t *pcm)
 static int snd_pcm_rate_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
 {
 	snd_pcm_rate_hwsync(pcm);
-	if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
-		*delayp = snd_pcm_mmap_playback_hw_avail(pcm);
-	else
-		*delayp = snd_pcm_mmap_capture_hw_avail(pcm);
+	*delayp = snd_pcm_mmap_hw_avail(pcm);
 	return 0;
 }
 
@@ -1059,7 +1058,7 @@ static snd_pcm_state_t snd_pcm_rate_state(snd_pcm_t *pcm)
 static int snd_pcm_rate_start(snd_pcm_t *pcm)
 {
 	snd_pcm_rate_t *rate = pcm->private_data;
-	snd_pcm_uframes_t avail;
+	snd_pcm_sframes_t avail;
 		
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE)
 		return snd_pcm_start(rate->gen.slave);
@@ -1067,9 +1066,12 @@ static int snd_pcm_rate_start(snd_pcm_t *pcm)
 	if (snd_pcm_state(rate->gen.slave) != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
 
-	gettimestamp(&rate->trigger_tstamp, pcm->monotonic);
+	gettimestamp(&rate->trigger_tstamp, pcm->tstamp_type);
 
 	avail = snd_pcm_mmap_playback_hw_avail(rate->gen.slave);
+	if (avail < 0) /* can't happen on healthy drivers */
+		return -EBADFD;
+
 	if (avail == 0) {
 		/* postpone the trigger since we have no data committed yet */
 		rate->start_pending = 1;
@@ -1370,7 +1372,7 @@ int snd_pcm_rate_open(snd_pcm_t **pcmp, const char *name,
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
 	pcm->mmap_rw = 1;
-	pcm->monotonic = slave->monotonic;
+	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_set_hw_ptr(pcm, &rate->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &rate->appl_ptr, -1, 0);
 	*pcmp = pcm;

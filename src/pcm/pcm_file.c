@@ -454,7 +454,7 @@ static int snd_pcm_file_drain(snd_pcm_t *pcm)
 static snd_pcm_sframes_t snd_pcm_file_rewindable(snd_pcm_t *pcm)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_sframes_t res = snd_pcm_rewindable(pcm);
+	snd_pcm_sframes_t res = snd_pcm_rewindable(file->gen.slave);
 	snd_pcm_sframes_t n = snd_pcm_bytes_to_frames(pcm, file->wbuf_used_bytes);
 	if (res > n)
 		res = n;
@@ -482,7 +482,7 @@ static snd_pcm_sframes_t snd_pcm_file_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t f
 static snd_pcm_sframes_t snd_pcm_file_forwardable(snd_pcm_t *pcm)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_sframes_t res = snd_pcm_forwardable(pcm);
+	snd_pcm_sframes_t res = snd_pcm_forwardable(file->gen.slave);
 	snd_pcm_sframes_t n = snd_pcm_bytes_to_frames(pcm, file->wbuf_size_bytes - file->wbuf_used_bytes);
 	if (res > n)
 		res = n;
@@ -758,6 +758,7 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 		ifd = open(ifname, O_RDONLY);	/* TODO: mind blocking mode */
 		if (ifd < 0) {
 			SYSERR("open %s for reading failed", ifname);
+			free(file->fname);
 			free(file);
 			return -errno;
 		}
@@ -772,6 +773,7 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_FILE, name, slave->stream, slave->mode);
 	if (err < 0) {
 		free(file->fname);
+		free(file->ifname);
 		free(file);
 		return err;
 	}
@@ -781,10 +783,10 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
 	pcm->mmap_shadow = 1;
+	pcm->tstamp_type = SND_PCM_TSTAMP_TYPE_GETTIMEOFDAY;
 #if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC)
-	pcm->monotonic = clock_gettime(CLOCK_MONOTONIC, &timespec) == 0;
-#else
-	pcm->monotonic = 0;
+	if (clock_gettime(CLOCK_MONOTONIC, &timespec) == 0)
+		pcm->tstamp_type = SND_PCM_TSTAMP_TYPE_MONOTONIC;
 #endif
 	pcm->stream = stream;
 	snd_pcm_link_hw_ptr(pcm, slave);

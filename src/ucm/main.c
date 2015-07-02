@@ -34,14 +34,15 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 /*
  * misc
  */
 
-static int get_value1(const char **value, struct list_head *value_list,
+static int get_value1(char **value, struct list_head *value_list,
                       const char *identifier);
-static int get_value3(const char **value,
+static int get_value3(char **value,
 		      const char *identifier,
 		      struct list_head *value_list1,
 		      struct list_head *value_list2,
@@ -160,11 +161,65 @@ static int open_ctl(snd_use_case_mgr_t *uc_mgr,
 	return 0;
 }
 
+static int binary_file_parse(snd_ctl_elem_value_t *dst,
+			      snd_ctl_elem_info_t *info,
+			      const char *filepath)
+{
+	int err = 0;
+	int fd;
+	struct stat st;
+	size_t sz;
+	ssize_t sz_read;
+	char *res;
+	snd_ctl_elem_type_t type;
+	unsigned int idx, count;
+
+	type = snd_ctl_elem_info_get_type(info);
+	if (type != SND_CTL_ELEM_TYPE_BYTES) {
+		uc_error("only support byte type!");
+		err = -EINVAL;
+		return err;
+	}
+	fd = open(filepath, O_RDONLY);
+	if (fd < 0) {
+		err = -errno;
+		return err;
+	}
+	if (stat(filepath, &st) == -1) {
+		err = -errno;
+		goto __fail;
+	}
+	sz = st.st_size;
+	count = snd_ctl_elem_info_get_count(info);
+	if (sz != count || sz > sizeof(dst->value.bytes)) {
+		uc_error("invalid parameter size %d!", sz);
+		err = -EINVAL;
+		goto __fail;
+	}
+	res = malloc(sz);
+	if (res == NULL) {
+		err = -ENOMEM;
+		goto __fail;
+	}
+	sz_read = read(fd, res, sz);
+	if (sz_read < 0 || (size_t)sz_read != sz) {
+		err = -errno;
+		goto __fail_read;
+	}
+	for (idx = 0; idx < sz; idx++)
+		snd_ctl_elem_value_set_byte(dst, idx, *(res + idx));
+      __fail_read:
+	free(res);
+      __fail:
+	close(fd);
+	return err;
+}
+
 extern int __snd_ctl_ascii_elem_id_parse(snd_ctl_elem_id_t *dst,
 					 const char *str,
 					 const char **ret_ptr);
 
-static int execute_cset(snd_ctl_t *ctl, const char *cset)
+static int execute_cset(snd_ctl_t *ctl, const char *cset, unsigned int type)
 {
 	const char *pos;
 	int err;
@@ -194,7 +249,10 @@ static int execute_cset(snd_ctl_t *ctl, const char *cset)
 	err = snd_ctl_elem_info(ctl, info);
 	if (err < 0)
 		goto __fail;
-	err = snd_ctl_ascii_value_parse(ctl, value, info, pos);
+	if (type == SEQUENCE_ELEMENT_TYPE_CSET_BIN_FILE)
+		err = binary_file_parse(value, info, pos);
+	else
+		err = snd_ctl_ascii_value_parse(ctl, value, info, pos);
 	if (err < 0)
 		goto __fail;
 	err = snd_ctl_elem_write(ctl, value);
@@ -239,33 +297,46 @@ static int execute_sequence(snd_use_case_mgr_t *uc_mgr,
 				goto __fail_nomem;
 			break;
 		case SEQUENCE_ELEMENT_TYPE_CSET:
+		case SEQUENCE_ELEMENT_TYPE_CSET_BIN_FILE:
 			if (cdev == NULL) {
-				const char *cdev1 = NULL, *cdev2 = NULL;
-				err = get_value3(&cdev1, "PlaybackCTL",
+				char *playback_ctl = NULL;
+				char *capture_ctl = NULL;
+
+				err = get_value3(&playback_ctl, "PlaybackCTL",
 						 value_list1,
 						 value_list2,
 						 value_list3);
-				if (err < 0 && err != ENOENT) {
+				if (err < 0 && err != -ENOENT) {
 					uc_error("cdev is not defined!");
 					return err;
 				}
-				err = get_value3(&cdev1, "CaptureCTL",
+				err = get_value3(&capture_ctl, "CaptureCTL",
 						 value_list1,
 						 value_list2,
 						 value_list3);
-				if (err < 0 && err != ENOENT) {
-					free((char *)cdev1);
+				if (err < 0 && err != -ENOENT) {
+					free(playback_ctl);
 					uc_error("cdev is not defined!");
 					return err;
 				}
-				if (cdev1 == NULL || cdev2 == NULL ||
-                                    strcmp(cdev1, cdev2) == 0) {
-					cdev = (char *)cdev1;
-					free((char *)cdev2);
-				} else {
-					free((char *)cdev1);
-					free((char *)cdev2);
+				if (playback_ctl == NULL &&
+				    capture_ctl == NULL) {
+					uc_error("cdev is not defined!");
+					return -EINVAL;
 				}
+				if (playback_ctl != NULL &&
+				    capture_ctl != NULL &&
+				    strcmp(playback_ctl, capture_ctl) != 0) {
+					free(playback_ctl);
+					free(capture_ctl);
+					uc_error("cdev is not defined!");
+					return -EINVAL;
+				}
+				if (playback_ctl != NULL) {
+					cdev = playback_ctl;
+					free(capture_ctl);
+				} else
+					cdev = capture_ctl;
 			}
 			if (ctl == NULL) {
 				err = open_ctl(uc_mgr, &ctl, cdev);
@@ -274,7 +345,7 @@ static int execute_sequence(snd_use_case_mgr_t *uc_mgr,
 					goto __fail;
 				}
 			}
-			err = execute_cset(ctl, s->data.cset);
+			err = execute_cset(ctl, s->data.cset, s->type);
 			if (err < 0) {
 				uc_error("unable to execute cset '%s'\n", s->data.cset);
 				goto __fail;
@@ -1166,7 +1237,7 @@ int snd_use_case_get_list(snd_use_case_mgr_t *uc_mgr,
 	return err;
 }
 
-static int get_value1(const char **value, struct list_head *value_list,
+static int get_value1(char **value, struct list_head *value_list,
                       const char *identifier)
 {
         struct ucm_value *val;
@@ -1187,7 +1258,7 @@ static int get_value1(const char **value, struct list_head *value_list,
         return -ENOENT;
 }
 
-static int get_value3(const char **value,
+static int get_value3(char **value,
 		      const char *identifier,
 		      struct list_head *value_list1,
 		      struct list_head *value_list2,
@@ -1217,7 +1288,7 @@ static int get_value3(const char **value,
  */
 static int get_value(snd_use_case_mgr_t *uc_mgr,
 			const char *identifier,
-			const char **value,
+			char **value,
 			const char *mod_dev_name,
 			const char *verb_name,
 			int exact)
@@ -1348,7 +1419,8 @@ int snd_use_case_get(snd_use_case_mgr_t *uc_mgr,
 			verb = NULL;
 		}
 
-		err = get_value(uc_mgr, ident, value, mod_dev, verb, exact);
+		err = get_value(uc_mgr, ident, (char **)value, mod_dev, verb,
+		                exact);
 		if (ident != identifier)
 			free((void *)ident);
 		if (mod_dev)
@@ -1443,7 +1515,7 @@ static int set_verb_user(snd_use_case_mgr_t *uc_mgr,
                          const char *verb_name)
 {
         struct use_case_verb *verb;
-        int err;
+        int err = 0;
 
         if (uc_mgr->active_verb &&
             strcmp(uc_mgr->active_verb->name, verb_name) == 0)
@@ -1625,7 +1697,7 @@ int snd_use_case_set(snd_use_case_mgr_t *uc_mgr,
                      const char *value)
 {
 	char *str, *str1;
-	int err;
+	int err = 0;
 
 	pthread_mutex_lock(&uc_mgr->mutex);
 	if (strcmp(identifier, "_verb") == 0)
