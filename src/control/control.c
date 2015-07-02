@@ -213,7 +213,7 @@ int snd_ctl_poll_descriptors_revents(snd_ctl_t *ctl, struct pollfd *pfds, unsign
 /**
  * \brief Ask to be informed about events (poll, #snd_async_add_ctl_handler, #snd_ctl_read)
  * \param ctl CTL handle
- * \param subscribe 0 = unsubscribe, 1 = subscribe
+ * \param subscribe 0 = unsubscribe, 1 = subscribe, -1 = check subscribe or not
  * \return 0 on success otherwise a negative error code
  */
 int snd_ctl_subscribe_events(snd_ctl_t *ctl, int subscribe)
@@ -864,6 +864,7 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 	if (err >= 0) {
 		if (snd_config_get_type(type_conf) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for CTL type %s definition", str);
+			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, type_conf) {

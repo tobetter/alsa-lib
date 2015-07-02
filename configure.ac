@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(alsa-lib, 1.0.28)
+AC_INIT(alsa-lib, 1.0.29)
 
 AC_CONFIG_SRCDIR([src/control/control.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -653,11 +653,14 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/PandaBoardES/Makefile \
 	  src/conf/ucm/SDP4430/Makefile \
 	  src/conf/ucm/tegraalc5632/Makefile \
+	  src/conf/ucm/PAZ00/Makefile \
+	  src/conf/ucm/GoogleNyan/Makefile \
 	  src/conf/ucm/apq8064-tabla-snd-card/Makefile \
 	  src/conf/ucm/Tuna/Makefile \
 	  src/conf/ucm/tegra-rt5640/Makefile \
 	  src/conf/ucm/Manta-I2S/Makefile \
 	  src/conf/ucm/Manta-SPDIF/Makefile \
+	  src/conf/ucm/msm8974-taiko-mtp-snd-card/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
 	  alsalisp/Makefile aserver/Makefile \
 	  test/Makefile test/lsb/Makefile \

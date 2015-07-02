@@ -86,10 +86,7 @@ static snd_pcm_sframes_t snd_pcm_null_avail_update(snd_pcm_t *pcm)
         if (null->state == SND_PCM_STATE_PREPARED) {
                 /* it is required to return the correct avail count for */
                 /* the prepared stream, otherwise the start is not called */
-                if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
-                        return snd_pcm_mmap_playback_avail(pcm);
-                else
-                        return snd_pcm_mmap_capture_avail(pcm);
+                return snd_pcm_mmap_avail(pcm);
         }
 	return pcm->buffer_size;
 }
@@ -100,7 +97,7 @@ static int snd_pcm_null_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 	memset(status, 0, sizeof(*status));
 	status->state = null->state;
 	status->trigger_tstamp = null->trigger_tstamp;
-	gettimestamp(&status->tstamp, pcm->monotonic);
+	gettimestamp(&status->tstamp, pcm->tstamp_type);
 	status->avail = snd_pcm_null_avail_update(pcm);
 	status->avail_max = pcm->buffer_size;
 	return 0;

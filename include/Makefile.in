@@ -53,7 +53,7 @@ host_triplet = @host@
 @BUILD_CTL_PLUGIN_EXT_TRUE@am__append_1 = control_external.h
 @BUILD_PCM_TRUE@am__append_2 = pcm.h pcm_old.h timer.h
 @BUILD_PCM_PLUGIN_TRUE@@BUILD_PCM_TRUE@am__append_3 = pcm_plugin.h
-@BUILD_PCM_PLUGIN_RATE_TRUE@@BUILD_PCM_TRUE@am__append_4 = pcm_rate.h 
+@BUILD_PCM_PLUGIN_RATE_TRUE@@BUILD_PCM_TRUE@am__append_4 = pcm_rate.h
 @BUILD_PCM_PLUGIN_EXTPLUG_TRUE@@BUILD_PCM_TRUE@am__append_5 = pcm_external.h pcm_extplug.h
 @BUILD_PCM_PLUGIN_EXTPLUG_FALSE@@BUILD_PCM_PLUGIN_IOPLUG_TRUE@@BUILD_PCM_TRUE@am__append_6 = pcm_external.h
 @BUILD_PCM_PLUGIN_IOPLUG_TRUE@@BUILD_PCM_TRUE@am__append_7 = pcm_ioplug.h
@@ -61,7 +61,8 @@ host_triplet = @host@
 @BUILD_HWDEP_TRUE@am__append_9 = hwdep.h
 @BUILD_MIXER_TRUE@am__append_10 = mixer.h mixer_abst.h
 @BUILD_SEQ_TRUE@am__append_11 = seq_event.h seq.h seqmid.h seq_midi_event.h
-@BUILD_ALISP_TRUE@am__append_12 = alisp.h
+@BUILD_UCM_TRUE@am__append_12 = use-case.h
+@BUILD_ALISP_TRUE@am__append_13 = alisp.h
 subdir = include
 DIST_COMMON = $(am__alsainclude_HEADERS_DIST) $(noinst_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
@@ -103,10 +104,10 @@ am__can_run_installinfo = \
   esac
 am__alsainclude_HEADERS_DIST = asoundlib.h asoundef.h version.h \
 	global.h input.h output.h error.h conf.h control.h iatomic.h \
-	use-case.h control_external.h pcm.h pcm_old.h timer.h \
-	pcm_plugin.h pcm_rate.h pcm_external.h pcm_extplug.h \
-	pcm_ioplug.h rawmidi.h hwdep.h mixer.h mixer_abst.h \
-	seq_event.h seq.h seqmid.h seq_midi_event.h alisp.h
+	control_external.h pcm.h pcm_old.h timer.h pcm_plugin.h \
+	pcm_rate.h pcm_external.h pcm_extplug.h pcm_ioplug.h rawmidi.h \
+	hwdep.h mixer.h mixer_abst.h seq_event.h seq.h seqmid.h \
+	seq_midi_event.h use-case.h alisp.h
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -302,11 +303,12 @@ SUBDIRS = sound
 sysincludedir = ${includedir}/sys
 alsaincludedir = ${includedir}/alsa
 alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
-	input.h output.h error.h conf.h control.h iatomic.h use-case.h \
+	input.h output.h error.h conf.h control.h iatomic.h \
 	$(am__append_1) $(am__append_2) $(am__append_3) \
 	$(am__append_4) $(am__append_5) $(am__append_6) \
 	$(am__append_7) $(am__append_8) $(am__append_9) \
-	$(am__append_10) $(am__append_11) $(am__append_12)
+	$(am__append_10) $(am__append_11) $(am__append_12) \
+	$(am__append_13)
 noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
 	asoundlib-head.h asoundlib-tail.h
 
