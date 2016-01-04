@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(alsa-lib, 1.0.29)
+AC_INIT(alsa-lib, 1.1.0)
 
 AC_CONFIG_SRCDIR([src/control/control.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -27,25 +27,9 @@ AC_PREFIX_DEFAULT(/usr)
 
 dnl Checks for programs.
 
-dnl try to gues cross-compiler if not set
-if test "x$host" != "x$build" -a -z "`echo $CC | grep -e '-gcc'`";
-then
-  AC_MSG_CHECKING(for cross-compiler)
-
-  which ${program_prefix}gcc >/dev/null 2>&1 && CC=${program_prefix}gcc
-  which ${host_cpu}-${host_os}-gcc >/dev/null 2>&1 \
-  && CC=${host_cpu}-${host_os}-gcc
-  which ${host_cpu}-${host_vendor}-${host_os}-gcc >/dev/null 2>&1 \
-  && CC=${host_cpu}-${host_vendor}-${host_os}-gcc
-
-  AC_MSG_RESULT($CC)
-fi
-	    
-CFLAGS="$CFLAGS -D_GNU_SOURCE"
-
-
 AC_PROG_CC
 AC_PROG_CPP
+AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_INSTALL
 AC_PROG_LN_S 
 AC_DISABLE_STATIC
@@ -311,7 +295,7 @@ fi
 AC_SUBST(ALSA_DEPLIBS)
 
 dnl Check for headers
-AC_CHECK_HEADERS([wordexp.h endian.h sys/endian.h])
+AC_CHECK_HEADERS([wordexp.h endian.h sys/endian.h sys/shm.h])
 
 dnl Check for resmgr support...
 AC_MSG_CHECKING(for resmgr support)
@@ -380,6 +364,9 @@ AC_ARG_ENABLE(seq,
 AC_ARG_ENABLE(ucm,
   AS_HELP_STRING([--disable-ucm], [disable the use-case-manager component]),
   [build_ucm="$enableval"], [build_ucm="yes"])
+AC_ARG_ENABLE(topology,
+  AS_HELP_STRING([--disable-topology], [disable the DSP topology component]),
+  [build_topology="$enableval"], [build_topology="yes"])
 AC_ARG_ENABLE(alisp,
   AS_HELP_STRING([--disable-alisp], [disable the alisp component]),
   [build_alisp="$enableval"], [build_alisp="yes"])
@@ -422,6 +409,7 @@ AM_CONDITIONAL([BUILD_RAWMIDI], [test x$build_rawmidi = xyes])
 AM_CONDITIONAL([BUILD_HWDEP], [test x$build_hwdep = xyes])
 AM_CONDITIONAL([BUILD_SEQ], [test x$build_seq = xyes])
 AM_CONDITIONAL([BUILD_UCM], [test x$build_ucm = xyes])
+AM_CONDITIONAL([BUILD_TOPOLOGY], [test x$build_topology = xyes])
 AM_CONDITIONAL([BUILD_ALISP], [test x$build_alisp = xyes])
 AM_CONDITIONAL([BUILD_PYTHON], [test x$build_python = xyes])
 
@@ -442,6 +430,9 @@ if test "$build_seq" = "yes"; then
 fi
 if test "$build_ucm" = "yes"; then
   AC_DEFINE([BUILD_UCM], "1", [Build UCM component])
+fi
+if test "$build_topology" = "yes"; then
+  AC_DEFINE([BUILD_TOPOLOGY], "1", [Build DSP Topology component])
 fi
 
 dnl PCM Plugins
@@ -515,6 +506,13 @@ fi
 
 if test "$gcc_have_atomics" != "yes"; then
   build_pcm_meter="no"
+fi
+
+if test "$ac_cv_header_sys_shm_h" != "yes"; then
+  build_pcm_dmix="no"
+  build_pcm_dshare="no"
+  build_pcm_dsnoop="no"
+  build_pcm_shm="no"
 fi
 
 AM_CONDITIONAL([BUILD_PCM_PLUGIN], [test x$build_pcm_plugin = xyes])
@@ -603,6 +601,10 @@ for p in $ctl_plugins; do
   done
 done
 
+if test "$ac_cv_header_sys_shm_h" != "yes"; then
+  build_ctl_shm="no"
+fi
+
 AM_CONDITIONAL([BUILD_CTL_PLUGIN], [test x$build_ctl_plugin = xyes])
 AM_CONDITIONAL([BUILD_CTL_PLUGIN_SHM], [test x$build_ctl_shm = xyes])
 AM_CONDITIONAL([BUILD_CTL_PLUGIN_EXT], [test x$build_ctl_ext = xyes])
@@ -643,7 +645,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/pcm/Makefile src/pcm/scopes/Makefile \
 	  src/rawmidi/Makefile src/timer/Makefile \
           src/hwdep/Makefile src/seq/Makefile src/ucm/Makefile \
-          src/alisp/Makefile \
+          src/alisp/Makefile src/topology/Makefile \
 	  src/conf/Makefile src/conf/alsa.conf.d/Makefile \
 	  src/conf/cards/Makefile \
 	  src/conf/pcm/Makefile \
@@ -655,6 +657,9 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/tegraalc5632/Makefile \
 	  src/conf/ucm/PAZ00/Makefile \
 	  src/conf/ucm/GoogleNyan/Makefile \
+	  src/conf/ucm/broadwell-rt286/Makefile \
+	  src/conf/topology/Makefile \
+	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
 	  alsalisp/Makefile aserver/Makefile \
 	  test/Makefile test/lsb/Makefile \

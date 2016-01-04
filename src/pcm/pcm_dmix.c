@@ -450,9 +450,10 @@ static snd_pcm_state_t snd_pcm_dmix_state(snd_pcm_t *pcm)
 	snd_pcm_state_t state;
 	state = snd_pcm_state(dmix->spcm);
 	switch (state) {
+	case SND_PCM_STATE_XRUN:
 	case SND_PCM_STATE_SUSPENDED:
-		return state;
 	case SND_PCM_STATE_DISCONNECTED:
+		dmix->state = state;
 		return state;
 	default:
 		break;
@@ -475,12 +476,13 @@ static int snd_pcm_dmix_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 		break;
 	}
 	memset(status, 0, sizeof(*status));
+	snd_pcm_status(dmix->spcm, status);
 	status->state = snd_pcm_dmix_state(pcm);
 	status->trigger_tstamp = dmix->trigger_tstamp;
-	gettimestamp(&status->tstamp, pcm->tstamp_type);
 	status->avail = snd_pcm_mmap_playback_avail(pcm);
 	status->avail_max = status->avail > dmix->avail_max ? status->avail : dmix->avail_max;
 	dmix->avail_max = 0;
+	status->delay = snd_pcm_mmap_playback_delay(pcm);
 	return 0;
 }
 
@@ -530,17 +532,6 @@ static int snd_pcm_dmix_hwsync(snd_pcm_t *pcm)
 	default:
 		return -EBADFD;
 	}
-}
-
-static int snd_pcm_dmix_prepare(snd_pcm_t *pcm)
-{
-	snd_pcm_direct_t *dmix = pcm->private_data;
-
-	snd_pcm_direct_check_interleave(dmix, pcm);
-	dmix->state = SND_PCM_STATE_PREPARED;
-	dmix->appl_ptr = dmix->last_appl_ptr = 0;
-	dmix->hw_ptr = 0;
-	return snd_pcm_direct_set_timer_params(dmix);
 }
 
 static void reset_slave_ptr(snd_pcm_t *pcm, snd_pcm_direct_t *dmix)
@@ -616,6 +607,13 @@ static int snd_pcm_dmix_drain(snd_pcm_t *pcm)
 	snd_pcm_uframes_t stop_threshold;
 	int err;
 
+	switch (snd_pcm_state(dmix->spcm)) {
+	case SND_PCM_STATE_SUSPENDED:
+		return -ESTRPIPE;
+	default:
+		break;
+	}
+
 	if (dmix->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
 	if (pcm->mode & SND_PCM_NONBLOCK)
@@ -648,6 +646,13 @@ static int snd_pcm_dmix_drain(snd_pcm_t *pcm)
 			snd_pcm_dmix_sync_area(pcm);
 			snd_pcm_wait_nocheck(pcm, -1);
 			snd_pcm_direct_clear_timer_queue(dmix); /* force poll to wait */
+
+			switch (snd_pcm_state(dmix->spcm)) {
+			case SND_PCM_STATE_SUSPENDED:
+				return -ESTRPIPE;
+			default:
+				break;
+			}
 		}
 	} while (dmix->state == SND_PCM_STATE_DRAINING);
 	pcm->stop_threshold = stop_threshold;
@@ -905,7 +910,7 @@ static const snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
 	.state = snd_pcm_dmix_state,
 	.hwsync = snd_pcm_dmix_hwsync,
 	.delay = snd_pcm_dmix_delay,
-	.prepare = snd_pcm_dmix_prepare,
+	.prepare = snd_pcm_direct_prepare,
 	.reset = snd_pcm_dmix_reset,
 	.start = snd_pcm_dmix_start,
 	.drop = snd_pcm_dmix_drop,

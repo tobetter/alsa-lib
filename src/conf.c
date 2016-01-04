@@ -414,12 +414,12 @@ beginning:</P>
 */
 
 
+#include "local.h"
 #include <stdarg.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <locale.h>
-#include "local.h"
 #ifdef HAVE_LIBPTHREAD
 #include <pthread.h>
 #endif
@@ -2227,6 +2227,38 @@ int snd_config_imake_string(snd_config_t **config, const char *id, const char *v
 	*config = tmp;
 	return 0;
 }
+
+int snd_config_imake_safe_string(snd_config_t **config, const char *id, const char *value)
+{
+	int err;
+	snd_config_t *tmp;
+	char *c;
+
+	err = snd_config_make(&tmp, id, SND_CONFIG_TYPE_STRING);
+	if (err < 0)
+		return err;
+	if (value) {
+		tmp->u.string = strdup(value);
+		if (!tmp->u.string) {
+			snd_config_delete(tmp);
+			return -ENOMEM;
+		}
+
+		for (c = tmp->u.string; *c; c++) {
+			if (*c == ' ' || *c == '-' || *c == '_' ||
+				(*c >= '0' && *c <= '9') ||
+				(*c >= 'a' && *c <= 'z') ||
+				(*c >= 'A' && *c <= 'Z'))
+					continue;
+			*c = '_';
+		}
+	} else {
+		tmp->u.string = NULL;
+	}
+	*config = tmp;
+	return 0;
+}
+
 
 /**
  * \brief Creates a pointer configuration node with the given initial value.
@@ -4844,3 +4876,39 @@ static void _snd_config_end(void)
 	files_info_count = 0;
 }
 #endif
+
+size_t page_size(void)
+{
+	long s = sysconf(_SC_PAGE_SIZE);
+	assert(s > 0);
+	return s;
+}
+
+size_t page_align(size_t size)
+{
+	size_t r;
+	long psz = page_size();
+	r = size % psz;
+	if (r)
+		return size + psz - r;
+	return size;
+}
+
+size_t page_ptr(size_t object_offset, size_t object_size, size_t *offset, size_t *mmap_offset)
+{
+	size_t r;
+	long psz = page_size();
+	assert(offset);
+	assert(mmap_offset);
+	*mmap_offset = object_offset;
+	object_offset %= psz;
+	*mmap_offset -= object_offset;
+	object_size += object_offset;
+	r = object_size % psz;
+	if (r)
+		r = object_size + psz - r;
+	else
+		r = object_size;
+	*offset = object_offset;
+	return r;
+}

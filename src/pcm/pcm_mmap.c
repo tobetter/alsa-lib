@@ -17,50 +17,17 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
-  
+
+#include "config.h"
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>
 #include <sys/poll.h>
 #include <sys/mman.h>
+#ifdef HAVE_SYS_SHM_H
 #include <sys/shm.h>
+#endif
 #include "pcm_local.h"
-
-size_t page_size(void)
-{
-	long s = sysconf(_SC_PAGE_SIZE);
-	assert(s > 0);
-	return s;
-}
-
-size_t page_align(size_t size)
-{
-	size_t r;
-	long psz = page_size();
-	r = size % psz;
-	if (r)
-		return size + psz - r;
-	return size;
-}
-
-size_t page_ptr(size_t object_offset, size_t object_size, size_t *offset, size_t *mmap_offset)
-{
-	size_t r;
-	long psz = page_size();
-	assert(offset);
-	assert(mmap_offset);
-	*mmap_offset = object_offset;
-	object_offset %= psz;
-	*mmap_offset -= object_offset;
-	object_size += object_offset;
-	r = object_size % psz;
-	if (r)
-		r = object_size + psz - r;
-	else
-		r = object_size;
-	*offset = object_offset;
-	return r;
-}
 
 void snd_pcm_mmap_appl_backward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
@@ -377,6 +344,7 @@ int snd_pcm_mmap(snd_pcm_t *pcm)
 			i->addr = ptr;
 			break;
 		case SND_PCM_AREA_SHM:
+#ifdef HAVE_SYS_SHM_H
 			if (i->u.shm.shmid < 0) {
 				int id;
 				/* FIXME: safer permission? */
@@ -421,6 +389,10 @@ int snd_pcm_mmap(snd_pcm_t *pcm)
 			}
 			i->addr = ptr;
 			break;
+#else
+			SYSERR("shm support not available");
+			return -ENOSYS;
+#endif
 		case SND_PCM_AREA_LOCAL:
 			ptr = malloc(size);
 			if (ptr == NULL) {
@@ -502,6 +474,7 @@ int snd_pcm_munmap(snd_pcm_t *pcm)
 			errno = 0;
 			break;
 		case SND_PCM_AREA_SHM:
+#ifdef HAVE_SYS_SHM_H
 			if (i->u.shm.area) {
 				snd_shm_area_destroy(i->u.shm.area);
 				i->u.shm.area = NULL;
@@ -518,6 +491,10 @@ int snd_pcm_munmap(snd_pcm_t *pcm)
 				}
 			}
 			break;
+#else
+			SYSERR("shm support not available");
+			return -ENOSYS;
+#endif
 		case SND_PCM_AREA_LOCAL:
 			free(i->addr);
 			break;
