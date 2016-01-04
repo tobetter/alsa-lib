@@ -62,8 +62,10 @@ host_triplet = @host@
 @BUILD_SEQ_TRUE@am__append_10 = seq/libseq.la
 @BUILD_UCM_TRUE@am__append_11 = ucm
 @BUILD_UCM_TRUE@am__append_12 = ucm/libucm.la
-@BUILD_ALISP_TRUE@am__append_13 = alisp
-@BUILD_ALISP_TRUE@am__append_14 = alisp/libalisp.la
+@BUILD_TOPOLOGY_TRUE@am__append_13 = topology
+@BUILD_TOPOLOGY_TRUE@am__append_14 = topology/libtopology.la
+@BUILD_ALISP_TRUE@am__append_15 = alisp
+@BUILD_ALISP_TRUE@am__append_16 = alisp/libalisp.la
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(srcdir)/Versions.in $(top_srcdir)/depcomp
@@ -107,7 +109,8 @@ am__installdirs = "$(DESTDIR)$(libdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libasound_la_DEPENDENCIES = control/libcontrol.la $(am__append_2) \
 	$(am__append_4) $(am__append_6) $(am__append_8) \
-	$(am__append_10) $(am__append_12) $(am__append_14)
+	$(am__append_10) $(am__append_12) $(am__append_14) \
+	$(am__append_16)
 am_libasound_la_OBJECTS = conf.lo confmisc.lo input.lo output.lo \
 	async.lo error.lo dlmisc.lo socket.lo shmarea.lo userfile.lo \
 	names.lo
@@ -174,8 +177,8 @@ AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
 	distdir
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = control mixer pcm timer rawmidi hwdep seq ucm alisp \
-	conf
+DIST_SUBDIRS = control mixer pcm timer rawmidi hwdep seq ucm topology \
+	alisp conf
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -340,11 +343,11 @@ lib_LTLIBRARIES = libasound.la
 libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c names.c
 SUBDIRS = control $(am__append_1) $(am__append_3) $(am__append_5) \
 	$(am__append_7) $(am__append_9) $(am__append_11) \
-	$(am__append_13) conf
+	$(am__append_13) $(am__append_15) conf
 libasound_la_LIBADD = control/libcontrol.la $(am__append_2) \
 	$(am__append_4) $(am__append_6) $(am__append_8) \
 	$(am__append_10) $(am__append_12) $(am__append_14) \
-	@ALSA_DEPLIBS@ $(am__empty)
+	$(am__append_16) @ALSA_DEPLIBS@
 libasound_la_LDFLAGS = -version-info $(COMPATNUM) $(VSYMS) $(SYMFUNCS) $(LDFLAGS_NOUNDEFINED)
 AM_CPPFLAGS = -I$(top_srcdir)/include
 all: all-recursive
@@ -806,6 +809,9 @@ seq/libseq.la:
 
 ucm/libucm.la:
 	$(MAKE) -C ucm libucm.la
+
+topology/libtopology.la:
+	$(MAKE) -C topology libtopology.la
 
 instr/libinstr.la:
 	$(MAKE) -C instr libinstr.la
