@@ -52,10 +52,11 @@ static int hint_list_add(struct hint_list *list,
 {
 	char *x;
 
-	if (list->count == list->allocated) {
+	if (list->count + 1 >= list->allocated) {
 		char **n = realloc(list->list, (list->allocated + 10) * sizeof(char *));
 		if (n == NULL)
 			return -ENOMEM;
+		memset(n + list->allocated, 0, 10 * sizeof(*n));
 		list->allocated += 10;
 		list->list = n;
 	}
@@ -271,7 +272,6 @@ static int try_config(snd_config_t *config,
 	if (snd_config_search(cfg1, "type", &cfg) >= 0 &&
 	    snd_config_get_string(cfg, &str) >= 0 &&
 	    strcmp(str, "hw") == 0) {
-	    	dev = 0;
 		list->device_input = -1;
 		list->device_output = -1;
 		if (snd_config_search(cfg1, "device", &cfg) >= 0) {
@@ -562,6 +562,8 @@ int snd_device_name_hint(int card, const char *iface, void ***hints)
 	list.list = NULL;
 	list.count = list.allocated = 0;
 	list.siface = iface;
+	list.show_all = 0;
+	list.cardname = NULL;
 	if (strcmp(iface, "card") == 0)
 		list.iface = SND_CTL_ELEM_IFACE_CARD;
 	else if (strcmp(iface, "pcm") == 0)
@@ -581,8 +583,6 @@ int snd_device_name_hint(int card, const char *iface, void ***hints)
 		goto __error;
 	}
 
-	list.show_all = 0;
-	list.cardname = NULL;
 	if (snd_config_search(local_config, "defaults.namehint.showall", &conf) >= 0)
 		list.show_all = snd_config_get_bool(conf) > 0;
 	if (card >= 0) {
@@ -620,18 +620,16 @@ int snd_device_name_hint(int card, const char *iface, void ***hints)
 	}
 	err = 0;
       __error:
-      	if (err < 0) {
+	/* add an empty entry if nothing has been added yet; the caller
+	 * expects non-NULL return
+	 */
+	if (!err && !list.list)
+		err = hint_list_add(&list, NULL, NULL);
+	if (err < 0)
       		snd_device_name_free_hint((void **)list.list);
-      		if (list.cardname)
-	      		free(list.cardname);
-      	} else {
-      		err = hint_list_add(&list, NULL, NULL);
-      		if (err < 0)
-      			goto __error;
+	else
       		*hints = (void **)list.list;
-      		if (list.cardname)
-	      		free(list.cardname);
-	}
+	free(list.cardname);
 	if (local_config_rw)
 		snd_config_delete(local_config_rw);
 	if (local_config)

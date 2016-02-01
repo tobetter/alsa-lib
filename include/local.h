@@ -348,4 +348,13 @@ int snd_config_search_alias_hooks(snd_config_t *config,
                                   const char *base, const char *key,
 				  snd_config_t **result);
 
+int _snd_conf_generic_id(const char *id);
+
+/* convenience macros */
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+
+#define container_of(ptr, type, member) ({                      \
+	 const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+	(type *)( (char *)__mptr - offsetof(type,member) );})
+
 #endif

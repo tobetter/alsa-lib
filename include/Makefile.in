@@ -62,7 +62,8 @@ host_triplet = @host@
 @BUILD_MIXER_TRUE@am__append_10 = mixer.h mixer_abst.h
 @BUILD_SEQ_TRUE@am__append_11 = seq_event.h seq.h seqmid.h seq_midi_event.h
 @BUILD_UCM_TRUE@am__append_12 = use-case.h
-@BUILD_ALISP_TRUE@am__append_13 = alisp.h
+@BUILD_TOPOLOGY_TRUE@am__append_13 = topology.h
+@BUILD_ALISP_TRUE@am__append_14 = alisp.h
 subdir = include
 DIST_COMMON = $(am__alsainclude_HEADERS_DIST) $(noinst_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
@@ -107,7 +108,7 @@ am__alsainclude_HEADERS_DIST = asoundlib.h asoundef.h version.h \
 	control_external.h pcm.h pcm_old.h timer.h pcm_plugin.h \
 	pcm_rate.h pcm_external.h pcm_extplug.h pcm_ioplug.h rawmidi.h \
 	hwdep.h mixer.h mixer_abst.h seq_event.h seq.h seqmid.h \
-	seq_midi_event.h use-case.h alisp.h
+	seq_midi_event.h use-case.h topology.h alisp.h
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -308,7 +309,7 @@ alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
 	$(am__append_4) $(am__append_5) $(am__append_6) \
 	$(am__append_7) $(am__append_8) $(am__append_9) \
 	$(am__append_10) $(am__append_11) $(am__append_12) \
-	$(am__append_13)
+	$(am__append_13) $(am__append_14)
 noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
 	asoundlib-head.h asoundlib-tail.h
 
