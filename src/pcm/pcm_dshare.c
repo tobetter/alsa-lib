@@ -224,23 +224,27 @@ static int snd_pcm_dshare_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 		break;
 	}
 	memset(status, 0, sizeof(*status));
+	snd_pcm_status(dshare->spcm, status);
 	status->state = snd_pcm_state(dshare->spcm);
 	status->trigger_tstamp = dshare->trigger_tstamp;
-	gettimestamp(&status->tstamp, pcm->tstamp_type);
 	status->avail = snd_pcm_mmap_playback_avail(pcm);
 	status->avail_max = status->avail > dshare->avail_max ? status->avail : dshare->avail_max;
 	dshare->avail_max = 0;
+	status->delay = snd_pcm_mmap_playback_delay(pcm);
 	return 0;
 }
 
 static snd_pcm_state_t snd_pcm_dshare_state(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
-	switch (snd_pcm_state(dshare->spcm)) {
+	snd_pcm_state_t state;
+	state = snd_pcm_state(dshare->spcm);
+	switch (state) {
+	case SND_PCM_STATE_XRUN:
 	case SND_PCM_STATE_SUSPENDED:
-		return SND_PCM_STATE_SUSPENDED;
 	case SND_PCM_STATE_DISCONNECTED:
-		return SND_PCM_STATE_DISCONNECTED;
+		dshare->state = state;
+		return state;
 	default:
 		break;
 	}
@@ -293,17 +297,6 @@ static int snd_pcm_dshare_hwsync(snd_pcm_t *pcm)
 	default:
 		return -EBADFD;
 	}
-}
-
-static int snd_pcm_dshare_prepare(snd_pcm_t *pcm)
-{
-	snd_pcm_direct_t *dshare = pcm->private_data;
-
-	snd_pcm_direct_check_interleave(dshare, pcm);
-	dshare->state = SND_PCM_STATE_PREPARED;
-	dshare->appl_ptr = dshare->last_appl_ptr = 0;
-	dshare->hw_ptr = 0;
-	return snd_pcm_direct_set_timer_params(dshare);
 }
 
 static int snd_pcm_dshare_reset(snd_pcm_t *pcm)
@@ -367,6 +360,13 @@ static int snd_pcm_dshare_drain(snd_pcm_t *pcm)
 	snd_pcm_uframes_t stop_threshold;
 	int err;
 
+	switch (snd_pcm_state(dshare->spcm)) {
+	case SND_PCM_STATE_SUSPENDED:
+		return -ESTRPIPE;
+	default:
+		break;
+	}
+
 	if (dshare->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
 	if (pcm->mode & SND_PCM_NONBLOCK)
@@ -399,6 +399,13 @@ static int snd_pcm_dshare_drain(snd_pcm_t *pcm)
 			snd_pcm_dshare_sync_area(pcm);
 			snd_pcm_wait_nocheck(pcm, -1);
 			snd_pcm_direct_clear_timer_queue(dshare); /* force poll to wait */
+
+			switch (snd_pcm_state(dshare->spcm)) {
+			case SND_PCM_STATE_SUSPENDED:
+				return -ESTRPIPE;
+			default:
+				break;
+			}
 		}
 	} while (dshare->state == SND_PCM_STATE_DRAINING);
 	pcm->stop_threshold = stop_threshold;
@@ -580,7 +587,7 @@ static const snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
 	.state = snd_pcm_dshare_state,
 	.hwsync = snd_pcm_dshare_hwsync,
 	.delay = snd_pcm_dshare_delay,
-	.prepare = snd_pcm_dshare_prepare,
+	.prepare = snd_pcm_direct_prepare,
 	.reset = snd_pcm_dshare_reset,
 	.start = snd_pcm_dshare_start,
 	.drop = snd_pcm_dshare_drop,
