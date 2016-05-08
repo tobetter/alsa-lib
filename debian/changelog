@@ -1,3 +1,25 @@
+alsa-lib (1.1.1-1) unstable; urgency=medium
+
+  [ Elimar Riesebieter ]
+  * New upstream release
+  * Fix a FTBFS when built with dpkg-builldpackage -A. Thanks Santiago Vila
+    for the patch.(closes: 805992)
+  * Changed Breaks and Replaces of libasound-data to
+    libasound2 (<<${binary:Version}). (closes: 813446).
+  * Fix an error when built with dpkg-builldpackage -A. Add graphviz to
+    Build-Depends-Indep: Thanks Santiago Vila for the hint. (closes: 818664)
+  * Bump Standards-Version to 3.9.8.
+  * Added 2 new symbols in debian/libasound2.symbols. Bump shlibs in
+    dh_makeshlibs call.
+  * Enabled hardening=+all
+  * Remove unused *.md5 files from documentation.
+  * Removed unwanted duplicates from documentation
+  * Added --dbgsym-migration and remove libasound2-dbg respectively.
+  * Removed invalid paragraph about upstreams bugtracker from copyright.
+  * Introduced git log as upstreams changelog.
+
+ -- Elimar Riesebieter <riesebie@lxtec.de>  Sun, 08 May 2016 14:06:31 +0200
+
 alsa-lib (1.1.0-1) unstable; urgency=medium
 
   [ Luke Yelavich ]

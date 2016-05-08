@@ -311,7 +311,7 @@ alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
 	$(am__append_10) $(am__append_11) $(am__append_12) \
 	$(am__append_13) $(am__append_14)
 noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
-	asoundlib-head.h asoundlib-tail.h
+	asoundlib-head.h asoundlib-tail.h bswap.h type_compat.h
 
 DISTCLEANFILES = stamp-vh version.h alsa asoundlib.h
 AM_CPPFLAGS = -I$(top_srcdir)/include

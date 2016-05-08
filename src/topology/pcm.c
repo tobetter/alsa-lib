@@ -58,7 +58,6 @@ static int tplg_build_pcm_caps(snd_tplg_t *tplg, struct tplg_elem *elem)
 	struct tplg_elem *ref_elem = NULL;
 	struct snd_soc_tplg_pcm *pcm;
 	struct snd_soc_tplg_stream_caps *caps;
-	struct snd_soc_tplg_stream *stream;
 	unsigned int i;
 
 	pcm = elem->pcm;
@@ -273,7 +272,7 @@ int tplg_parse_stream_caps(snd_tplg_t *tplg, snd_config_t *cfg,
 	struct tplg_elem *elem = private;
 	struct snd_soc_tplg_pcm *pcm;
 	const char *id, *value;
-	int err, stream;
+	int stream;
 
 	pcm = elem->pcm;
 
@@ -384,7 +383,6 @@ int tplg_parse_be(snd_tplg_t *tplg,
 	snd_config_iterator_t i, next;
 	snd_config_t *n;
 	const char *id, *val = NULL;
-	int err;
 
 	elem = tplg_elem_new_common(tplg, cfg, NULL, SND_TPLG_TYPE_BE);
 	if (!elem)
@@ -438,7 +436,6 @@ int tplg_parse_cc(snd_tplg_t *tplg,
 	snd_config_iterator_t i, next;
 	snd_config_t *n;
 	const char *id, *val = NULL;
-	int err;
 
 	elem = tplg_elem_new_common(tplg, cfg, NULL, SND_TPLG_TYPE_CC);
 	if (!elem)
@@ -553,7 +550,7 @@ int tplg_add_pcm_object(snd_tplg_t *tplg, snd_tplg_obj_template_t *t)
 	}
 
 	pcm->num_streams = pcm_tpl->num_streams;
-	for (i = 0; i < pcm->num_streams; i++)
+	for (i = 0; i < pcm_tpl->num_streams; i++)
 		tplg_add_stream_object(&pcm->stream[i], &pcm_tpl->stream[i]);
 
 	return 0;
@@ -586,7 +583,7 @@ int tplg_add_link_object(snd_tplg_t *tplg, snd_tplg_obj_template_t *t)
 	lk->id = link->id;
 	lk->num_streams = link->num_streams;
 
-	for (i = 0; i < lk->num_streams; i++)
+	for (i = 0; i < link->num_streams; i++)
 		tplg_add_stream_object(&lk->stream[i], &link->stream[i]);
 
 	return 0;
