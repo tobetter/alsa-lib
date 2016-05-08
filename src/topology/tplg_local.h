@@ -12,7 +12,7 @@
 
 #include <limits.h>
 #include <stdint.h>
-#include <linux/types.h>
+#include <stdbool.h>
 
 #include "local.h"
 #include "list.h"
@@ -205,6 +205,8 @@ int tplg_parse_channel(snd_tplg_t *tplg ATTRIBUTE_UNUSED,
 	snd_config_t *cfg, void *private);
 
 int tplg_parse_ops(snd_tplg_t *tplg ATTRIBUTE_UNUSED,
+	snd_config_t *cfg, void *private);
+int tplg_parse_ext_ops(snd_tplg_t *tplg ATTRIBUTE_UNUSED,
 	snd_config_t *cfg, void *private);
 
 struct tplg_elem *lookup_pcm_dai_stream(struct list_head *base,

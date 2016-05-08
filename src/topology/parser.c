@@ -16,6 +16,7 @@
            Liam Girdwood <liam.r.girdwood@linux.intel.com>
 */
 
+#include <sys/stat.h>
 #include "list.h"
 #include "tplg_local.h"
 
@@ -259,7 +260,7 @@ int snd_tplg_build_file(snd_tplg_t *tplg, const char *infile,
 	int err = 0;
 
 	tplg->out_fd =
-		open(outfile, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+		open(outfile, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (tplg->out_fd < 0) {
 		SNDERR("error: failed to open %s err %d\n",
 			outfile, -errno);
@@ -327,7 +328,7 @@ int snd_tplg_build(snd_tplg_t *tplg, const char *outfile)
 	int err;
 
 	tplg->out_fd =
-		open(outfile, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+		open(outfile, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (tplg->out_fd < 0) {
 		SNDERR("error: failed to open %s err %d\n",
 			outfile, -errno);
@@ -370,9 +371,24 @@ void snd_tplg_verbose(snd_tplg_t *tplg, int verbose)
 	tplg->verbose = verbose;
 }
 
+static bool is_little_endian(void)
+{
+#ifdef __BYTE_ORDER
+	#if __BYTE_ORDER == __LITTLE_ENDIAN
+		return true;
+	#endif
+#endif
+	return false;
+}
+
 snd_tplg_t *snd_tplg_new(void)
 {
 	snd_tplg_t *tplg;
+
+	if (!is_little_endian()) {
+		SNDERR("error: cannot support big-endian machines\n");
+		return NULL;
+	}
 
 	tplg = calloc(1, sizeof(snd_tplg_t));
 	if (!tplg)
