@@ -677,6 +677,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/chtrt5645/Makefile \
 	  src/conf/ucm/apq8064-tabla-snd-card/Makefile \
 	  src/conf/ucm/Tuna/Makefile \
+	  src/conf/ucm/tegra-rt5640/Makefile \
 	  src/conf/topology/Makefile \
 	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
