@@ -119,7 +119,7 @@ static int tplg_parse_config(snd_tplg_t *tplg, snd_config_t *cfg)
 
 		if (strcmp(id, "SectionPCMCapabilities") == 0) {
 			err = tplg_parse_compound(tplg, n,
-				tplg_parse_pcm_caps, NULL);
+				tplg_parse_stream_caps, NULL);
 			if (err < 0)
 				return err;
 			continue;
@@ -167,6 +167,31 @@ static int tplg_parse_config(snd_tplg_t *tplg, snd_config_t *cfg)
 
 		if (strcmp(id, "SectionData") == 0) {
 			err = tplg_parse_compound(tplg, n, tplg_parse_data,
+				NULL);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "SectionVendorTokens") == 0) {
+			err = tplg_parse_compound(tplg, n, tplg_parse_tokens,
+				NULL);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "SectionVendorTuples") == 0) {
+			err = tplg_parse_compound(tplg, n, tplg_parse_tuples,
+				NULL);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "SectionManifest") == 0) {
+			err = tplg_parse_compound(tplg, n,
+						  tplg_parse_manifest_data,
 				NULL);
 			if (err < 0)
 				return err;
@@ -225,6 +250,14 @@ err:
 static int tplg_build_integ(snd_tplg_t *tplg)
 {
 	int err;
+
+	err = tplg_build_data(tplg);
+	if (err <  0)
+		return err;
+
+	err = tplg_build_manifest_data(tplg);
+	if (err <  0)
+		return err;
 
 	err = tplg_build_controls(tplg);
 	if (err <  0)
@@ -354,8 +387,16 @@ out:
 
 int snd_tplg_set_manifest_data(snd_tplg_t *tplg, const void *data, int len)
 {
+	if (len <= 0)
+		return 0;
+
 	tplg->manifest.priv.size = len;
-	tplg->manifest_pdata = data;
+
+	tplg->manifest_pdata = malloc(len);
+	if (!tplg->manifest_pdata)
+		return -ENOMEM;
+
+	memcpy(tplg->manifest_pdata, data, len);
 	return 0;
 }
 
@@ -394,6 +435,8 @@ snd_tplg_t *snd_tplg_new(void)
 	if (!tplg)
 		return NULL;
 
+	tplg->manifest.size = sizeof(struct snd_soc_tplg_manifest);
+
 	INIT_LIST_HEAD(&tplg->tlv_list);
 	INIT_LIST_HEAD(&tplg->widget_list);
 	INIT_LIST_HEAD(&tplg->pcm_list);
@@ -401,18 +444,24 @@ snd_tplg_t *snd_tplg_new(void)
 	INIT_LIST_HEAD(&tplg->cc_list);
 	INIT_LIST_HEAD(&tplg->route_list);
 	INIT_LIST_HEAD(&tplg->pdata_list);
+	INIT_LIST_HEAD(&tplg->manifest_list);
 	INIT_LIST_HEAD(&tplg->text_list);
 	INIT_LIST_HEAD(&tplg->pcm_config_list);
 	INIT_LIST_HEAD(&tplg->pcm_caps_list);
 	INIT_LIST_HEAD(&tplg->mixer_list);
 	INIT_LIST_HEAD(&tplg->enum_list);
 	INIT_LIST_HEAD(&tplg->bytes_ext_list);
+	INIT_LIST_HEAD(&tplg->token_list);
+	INIT_LIST_HEAD(&tplg->tuple_list);
 
 	return tplg;
 }
 
 void snd_tplg_free(snd_tplg_t *tplg)
 {
+	if (tplg->manifest_pdata)
+		free(tplg->manifest_pdata);
+
 	tplg_elem_free_list(&tplg->tlv_list);
 	tplg_elem_free_list(&tplg->widget_list);
 	tplg_elem_free_list(&tplg->pcm_list);
@@ -420,12 +469,15 @@ void snd_tplg_free(snd_tplg_t *tplg)
 	tplg_elem_free_list(&tplg->cc_list);
 	tplg_elem_free_list(&tplg->route_list);
 	tplg_elem_free_list(&tplg->pdata_list);
+	tplg_elem_free_list(&tplg->manifest_list);
 	tplg_elem_free_list(&tplg->text_list);
 	tplg_elem_free_list(&tplg->pcm_config_list);
 	tplg_elem_free_list(&tplg->pcm_caps_list);
 	tplg_elem_free_list(&tplg->mixer_list);
 	tplg_elem_free_list(&tplg->enum_list);
 	tplg_elem_free_list(&tplg->bytes_ext_list);
+	tplg_elem_free_list(&tplg->token_list);
+	tplg_elem_free_list(&tplg->tuple_list);
 
 	free(tplg);
 }

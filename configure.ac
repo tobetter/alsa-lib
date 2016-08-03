@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(alsa-lib, 1.1.1)
+AC_INIT(alsa-lib, 1.1.2)
 
 AC_CONFIG_SRCDIR([src/control/control.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -632,6 +632,21 @@ elif test "$max_cards" -gt 256; then
 fi
 AC_DEFINE_UNQUOTED(SND_MAX_CARDS, $max_cards, [Max number of cards])
 
+dnl Check for thread-safe API functions
+if test "$HAVE_LIBPTHREAD" = "yes"; then
+AC_MSG_CHECKING(for thread-safe API functions)
+AC_ARG_ENABLE(thread-safety,
+  AS_HELP_STRING([--disable-thread-safety],
+    [disable thread-safe API functions]),
+  threadsafe="$enableval", threadsafe="yes")
+if test "$threadsafe" = "yes"; then
+  AC_MSG_RESULT(yes)
+  AC_DEFINE([THREAD_SAFE_API], "1", [Disable thread-safe API functions])
+else
+  AC_MSG_RESULT(no)
+fi
+fi
+
 dnl Make a symlink for inclusion of alsa/xxx.h
 if test ! -L "$srcdir"/include/alsa ; then
   echo "Making a symlink include/alsa"
@@ -658,6 +673,8 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/PAZ00/Makefile \
 	  src/conf/ucm/GoogleNyan/Makefile \
 	  src/conf/ucm/broadwell-rt286/Makefile \
+	  src/conf/ucm/VEYRON-I2S/Makefile \
+	  src/conf/ucm/chtrt5645/Makefile \
 	  src/conf/ucm/apq8064-tabla-snd-card/Makefile \
 	  src/conf/ucm/Tuna/Makefile \
 	  src/conf/ucm/tegra-rt5640/Makefile \
@@ -667,6 +684,8 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/topology/Makefile \
 	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
+	  src/conf/topology/sklrt286/data/Makefile \
+	  src/conf/topology/sklrt286/Makefile \
 	  alsalisp/Makefile aserver/Makefile \
 	  test/Makefile test/lsb/Makefile \
 	  utils/Makefile utils/alsa-lib.spec utils/alsa.pc)

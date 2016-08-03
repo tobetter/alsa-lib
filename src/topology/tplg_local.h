@@ -58,7 +58,7 @@ struct snd_tplg {
 
 	/* manifest */
 	struct snd_soc_tplg_manifest manifest;
-	const void *manifest_pdata;	/* copied by builder at file write */
+	void *manifest_pdata;	/* copied by builder at file write */
 
 	/* list of each element type */
 	struct list_head tlv_list;
@@ -69,6 +69,9 @@ struct snd_tplg {
 	struct list_head route_list;
 	struct list_head text_list;
 	struct list_head pdata_list;
+	struct list_head token_list;
+	struct list_head tuple_list;
+	struct list_head manifest_list;
 	struct list_head pcm_config_list;
 	struct list_head pcm_caps_list;
 
@@ -84,6 +87,38 @@ struct tplg_ref {
 	struct tplg_elem *elem;
 	char id[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
 	struct list_head list;
+};
+
+/* element for vendor tokens */
+struct tplg_token {
+	char id[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
+	unsigned int value;
+};
+
+struct tplg_vendor_tokens {
+	unsigned int num_tokens;
+	struct tplg_token token[0];
+};
+
+/* element for vendor tuples */
+struct tplg_tuple {
+	char token[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
+	union {
+		char string[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
+		unsigned char uuid[16];
+		unsigned int value;
+	};
+};
+
+struct tplg_tuple_set {
+	unsigned int  type; /* uuid, bool, byte, short, word, string*/
+	unsigned int  num_tuples;
+	struct tplg_tuple tuple[0];
+};
+
+struct tplg_vendor_tuples {
+	unsigned int  num_sets;
+	struct tplg_tuple_set **set;
 };
 
 /* topology element */
@@ -118,6 +153,9 @@ struct tplg_elem {
 		/* these do not map to UAPI structs but are internal only */
 		struct snd_soc_tplg_ctl_tlv *tlv;
 		struct snd_soc_tplg_private *data;
+		struct tplg_vendor_tokens *tokens;
+		struct tplg_vendor_tuples *tuples;
+		struct snd_soc_tplg_manifest *manifest;
 	};
 
 	/* an element may refer to other elements:
@@ -127,6 +165,8 @@ struct tplg_elem {
 	 */
 	struct list_head ref_list;
 	struct list_head list; /* list of all elements with same type */
+
+	void (*free)(void *obj);
 };
 
 struct map_elem {
@@ -149,6 +189,17 @@ int tplg_parse_text(snd_tplg_t *tplg, snd_config_t *cfg,
 int tplg_parse_data(snd_tplg_t *tplg, snd_config_t *cfg,
 	void *private ATTRIBUTE_UNUSED);
 
+int tplg_parse_tokens(snd_tplg_t *tplg, snd_config_t *cfg,
+	void *private ATTRIBUTE_UNUSED);
+
+int tplg_parse_tuples(snd_tplg_t *tplg, snd_config_t *cfg,
+	void *private ATTRIBUTE_UNUSED);
+
+void tplg_free_tuples(void *obj);
+
+int tplg_parse_manifest_data(snd_tplg_t *tplg, snd_config_t *cfg,
+	void *private ATTRIBUTE_UNUSED);
+
 int tplg_parse_control_bytes(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
 
@@ -164,7 +215,7 @@ int tplg_parse_dapm_graph(snd_tplg_t *tplg, snd_config_t *cfg,
 int tplg_parse_dapm_widget(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
 
-int tplg_parse_pcm_caps(snd_tplg_t *tplg,
+int tplg_parse_stream_caps(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
 
 int tplg_parse_pcm(snd_tplg_t *tplg,
@@ -176,12 +227,17 @@ int tplg_parse_be(snd_tplg_t *tplg,
 int tplg_parse_cc(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
 
+int tplg_build_data(snd_tplg_t *tplg);
+int tplg_build_manifest_data(snd_tplg_t *tplg);
 int tplg_build_controls(snd_tplg_t *tplg);
 int tplg_build_widgets(snd_tplg_t *tplg);
 int tplg_build_routes(snd_tplg_t *tplg);
 int tplg_build_pcm_dai(snd_tplg_t *tplg, unsigned int type);
 
-int tplg_copy_data(struct tplg_elem *elem, struct tplg_elem *ref);
+int tplg_copy_data(snd_tplg_t *tplg, struct tplg_elem *elem,
+		   struct tplg_ref *ref);
+
+int tplg_parse_data_refs(snd_config_t *cfg, struct tplg_elem *elem);
 
 int tplg_ref_add(struct tplg_elem *elem, int type, const char* id);
 int tplg_ref_add_elem(struct tplg_elem *elem, struct tplg_elem *elem_ref);
@@ -197,6 +253,9 @@ struct tplg_elem* tplg_elem_new_common(snd_tplg_t *tplg,
 
 static inline void elem_copy_text(char *dest, const char *src, int len)
 {
+	if (!dest || !src || !len)
+		return;
+
 	strncpy(dest, src, len);
 	dest[len - 1] = 0;
 }

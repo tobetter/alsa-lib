@@ -351,15 +351,24 @@ static void snd_pcm_hw_close_timer(snd_pcm_hw_t *hw)
 static int snd_pcm_hw_change_timer(snd_pcm_t *pcm, int enable)
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
-	snd_timer_params_t *params;
+	snd_timer_params_t params = {0};
 	unsigned int suspend, resume;
 	int err;
 	
 	if (enable) {
-		snd_timer_params_alloca(&params);
-		err = snd_timer_hw_open(&hw->period_timer, "hw-pcm-period-event", SND_TIMER_CLASS_PCM, SND_TIMER_SCLASS_NONE, hw->card, hw->device, (hw->subdevice << 1) | (pcm->stream & 1), SND_TIMER_OPEN_NONBLOCK | SND_TIMER_OPEN_TREAD);
+		err = snd_timer_hw_open(&hw->period_timer,
+				"hw-pcm-period-event",
+				SND_TIMER_CLASS_PCM, SND_TIMER_SCLASS_NONE,
+				hw->card, hw->device,
+				(hw->subdevice << 1) | (pcm->stream & 1),
+				SND_TIMER_OPEN_NONBLOCK | SND_TIMER_OPEN_TREAD);
 		if (err < 0) {
-			err = snd_timer_hw_open(&hw->period_timer, "hw-pcm-period-event", SND_TIMER_CLASS_PCM, SND_TIMER_SCLASS_NONE, hw->card, hw->device, (hw->subdevice << 1) | (pcm->stream & 1), SND_TIMER_OPEN_NONBLOCK);
+			err = snd_timer_hw_open(&hw->period_timer,
+				"hw-pcm-period-event",
+				SND_TIMER_CLASS_PCM, SND_TIMER_SCLASS_NONE,
+				hw->card, hw->device,
+				(hw->subdevice << 1) | (pcm->stream & 1),
+				SND_TIMER_OPEN_NONBLOCK);
 			return err;
 		}
 		if (snd_timer_poll_descriptors_count(hw->period_timer) != 1) {
@@ -368,7 +377,8 @@ static int snd_pcm_hw_change_timer(snd_pcm_t *pcm, int enable)
 		}
 		hw->period_timer_pfd.events = POLLIN;
  		hw->period_timer_pfd.revents = 0;
-		snd_timer_poll_descriptors(hw->period_timer, &hw->period_timer_pfd, 1);
+		snd_timer_poll_descriptors(hw->period_timer,
+					   &hw->period_timer_pfd, 1);
 		hw->period_timer_need_poll = 0;
 		suspend = 1<<SND_TIMER_EVENT_MSUSPEND;
 		resume = 1<<SND_TIMER_EVENT_MRESUME;
@@ -377,10 +387,12 @@ static int snd_pcm_hw_change_timer(snd_pcm_t *pcm, int enable)
 		 */
 		{
 			int ver = 0;
-			ioctl(hw->period_timer_pfd.fd, SNDRV_TIMER_IOCTL_PVERSION, &ver);
-			/* In older versions, check via poll before read() is needed
-                         * because of the confliction between TIMER_START and
-                         * FIONBIO ioctls.
+			ioctl(hw->period_timer_pfd.fd,
+			      SNDRV_TIMER_IOCTL_PVERSION, &ver);
+			/*
+			 * In older versions, check via poll before read() is
+			 * needed because of the confliction between
+			 * TIMER_START and FIONBIO ioctls.
                          */
 			if (ver < SNDRV_PROTOCOL_VERSION(2, 0, 4))
 				hw->period_timer_need_poll = 1;
@@ -393,11 +405,11 @@ static int snd_pcm_hw_change_timer(snd_pcm_t *pcm, int enable)
 				resume = 1<<SND_TIMER_EVENT_MCONTINUE;
 			}
 		}
-		snd_timer_params_set_auto_start(params, 1);
-		snd_timer_params_set_ticks(params, 1);
-		snd_timer_params_set_filter(params, (1<<SND_TIMER_EVENT_TICK) |
+		snd_timer_params_set_auto_start(&params, 1);
+		snd_timer_params_set_ticks(&params, 1);
+		snd_timer_params_set_filter(&params, (1<<SND_TIMER_EVENT_TICK) |
 					    suspend | resume);
-		err = snd_timer_params(hw->period_timer, params);
+		err = snd_timer_params(hw->period_timer, &params);
 		if (err < 0) {
 			snd_pcm_hw_close_timer(hw);
 			return err;
@@ -1082,7 +1094,7 @@ snd_pcm_query_chmaps_from_hw(int card, int dev, int subdev,
 			     snd_pcm_stream_t stream)
 {
 	snd_ctl_t *ctl;
-	snd_ctl_elem_id_t *id;
+	snd_ctl_elem_id_t id = {0};
 	unsigned int tlv[2048], *start;
 	snd_pcm_chmap_query_t **map;
 	int i, ret, nums;
@@ -1093,9 +1105,8 @@ snd_pcm_query_chmaps_from_hw(int card, int dev, int subdev,
 		return NULL;
 	}
 
-	snd_ctl_elem_id_alloca(&id);
-	__fill_chmap_ctl_id(id, dev, subdev, stream);
-	ret = snd_ctl_elem_tlv_read(ctl, id, tlv, sizeof(tlv));
+	__fill_chmap_ctl_id(&id, dev, subdev, stream);
+	ret = snd_ctl_elem_tlv_read(ctl, &id, tlv, sizeof(tlv));
 	snd_ctl_close(ctl);
 	if (ret < 0) {
 		SYSMSG("Cannot read Channel Map TLV\n");
@@ -1195,8 +1206,8 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 	snd_pcm_hw_t *hw = pcm->private_data;
 	snd_pcm_chmap_t *map;
 	snd_ctl_t *ctl;
-	snd_ctl_elem_id_t *id;
-	snd_ctl_elem_value_t *val;
+	snd_ctl_elem_id_t id = {0};
+	snd_ctl_elem_value_t val = {0};
 	unsigned int i;
 	int ret;
 
@@ -1230,11 +1241,9 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 		chmap_caps_set_error(hw, CHMAP_CTL_GET);
 		return NULL;
 	}
-	snd_ctl_elem_value_alloca(&val);
-	snd_ctl_elem_id_alloca(&id);
-	fill_chmap_ctl_id(pcm, id);
-	snd_ctl_elem_value_set_id(val, id);
-	ret = snd_ctl_elem_read(ctl, val);
+	fill_chmap_ctl_id(pcm, &id);
+	snd_ctl_elem_value_set_id(&val, &id);
+	ret = snd_ctl_elem_read(ctl, &val);
 	snd_ctl_close(ctl);
 	if (ret < 0) {
 		free(map);
@@ -1243,7 +1252,7 @@ static snd_pcm_chmap_t *snd_pcm_hw_get_chmap(snd_pcm_t *pcm)
 		return NULL;
 	}
 	for (i = 0; i < pcm->channels; i++)
-		map->pos[i] = snd_ctl_elem_value_get_integer(val, i);
+		map->pos[i] = snd_ctl_elem_value_get_integer(&val, i);
 	chmap_caps_set_ok(hw, CHMAP_CTL_GET);
 	return map;
 }
@@ -1252,8 +1261,8 @@ static int snd_pcm_hw_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
 	snd_ctl_t *ctl;
-	snd_ctl_elem_id_t *id;
-	snd_ctl_elem_value_t *val;
+	snd_ctl_elem_id_t id = {0};
+	snd_ctl_elem_value_t val = {0};
 	unsigned int i;
 	int ret;
 
@@ -1278,13 +1287,12 @@ static int snd_pcm_hw_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
 		chmap_caps_set_error(hw, CHMAP_CTL_SET);
 		return ret;
 	}
-	snd_ctl_elem_id_alloca(&id);
-	snd_ctl_elem_value_alloca(&val);
-	fill_chmap_ctl_id(pcm, id);
-	snd_ctl_elem_value_set_id(val, id);
+
+	fill_chmap_ctl_id(pcm, &id);
+	snd_ctl_elem_value_set_id(&val, &id);
 	for (i = 0; i < map->channels; i++)
-		snd_ctl_elem_value_set_integer(val, i, map->pos[i]);
-	ret = snd_ctl_elem_write(ctl, val);
+		snd_ctl_elem_value_set_integer(&val, i, map->pos[i]);
+	ret = snd_ctl_elem_write(ctl, &val);
 	snd_ctl_close(ctl);
 	if (ret >= 0)
 		chmap_caps_set_ok(hw, CHMAP_CTL_SET);
@@ -1505,6 +1513,9 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 	pcm->poll_fd = fd;
 	pcm->poll_events = info.stream == SND_PCM_STREAM_PLAYBACK ? POLLOUT : POLLIN;
 	pcm->tstamp_type = tstamp_type;
+#ifdef THREAD_SAFE_API
+	pcm->thread_safe = 1;
+#endif
 
 	ret = snd_pcm_hw_mmap_status(pcm);
 	if (ret < 0) {
@@ -1769,6 +1780,7 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 			chmap = _snd_pcm_parse_config_chmaps(n);
 			if (!chmap) {
 				SNDERR("Invalid channel map for %s", id);
+				err = -EINVAL;
 				goto fail;
 			}
 			continue;

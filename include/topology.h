@@ -203,12 +203,128 @@ extern "C" {
  *	bytes "0x12,0x34,0x56,0x78"
  *	shorts "0x1122,0x3344,0x5566,0x7788"
  *	words "0xaabbccdd,0x11223344,0x66aa77bb,0xefef1234"
+ *	tuples "section id of the vendor tuples"
  * };
  * </pre>
- * The file, bytes, shorts and words keywords are all mutually exclusive as
- * the private data should only be taken from one source.  The private data can
- * either be read from a separate file or defined in the topology file using
- * the bytes, shorts or words keywords.
+ * The file, bytes, shorts, words and tuples keywords are all mutually
+ * exclusive as the private data should only be taken from one source.
+ * The private data can either be read from a separate file or defined in
+ * the topology file using the bytes, shorts, words or tuples keywords.
+ * The keyword tuples is to define vendor specific tuples. Please refer to
+ * section Vendor Tokens and Vendor tuples.
+ *
+ * <h5>How to define an element with private data</h5>
+ * An element can refer to a single data section or multiple data
+ * sections.
+ *
+ * <h6>To refer to a single data section:</h6>
+ * <pre>
+ * Sectionxxx."element name" {
+ *    ...
+ *	data "name of data section"		# optional private data
+ * }
+ * </pre>
+ *
+ * <h6>To refer to multiple data sections:</h6>
+ * <pre>
+ * Sectionxxx."element name" {
+ *	...
+ *	data [						# optional private data
+ *		"name of 1st data section"
+ *		"name of 2nd data section"
+ *		...
+ *	]
+ * }
+ * </pre>
+ * And data of these sections will be merged in the same order as they are
+ * in the list, as the element's private data for kernel.
+ *
+ * </pre>
+ *
+ *  <h6>Vendor Tokens</h6>
+ * A vendor token list is defined as a new section. Each token element is
+ * a pair of string ID and integer value. And both the ID and value are
+ * vendor-specific.
+ *
+ * <pre>
+ * SectionVendorTokens."id of the vendor tokens" {
+ *	comment "optional comments"
+ *	VENDOR_TOKEN_ID1 "1"
+ *	VENDOR_TOKEN_ID2 "2"
+ *	VENDOR_TOKEN_ID3 "3"
+ *	...
+ * }
+ * </pre>
+ *
+ *  <h6>Vendor Tuples</h6>
+ * Vendor tuples are defined as a new section. It contains a reference to
+ * a vendor token list and several tuple arrays.
+ * All arrays share a vendor token list, defined by the tokens keyword.
+ * Each tuple array is for a specific type, defined by the string following
+ * the tuples keyword. Supported types are: string, uuid, bool, byte,
+ * short and word.
+ *
+ * <pre>
+ * SectionVendorTuples."id of the vendor tuples" {
+ *	tokens "id of the vendor tokens"
+ *
+ *	tuples."string" {
+ *		VENDOR_TOKEN_ID1 "character string"
+ *		...
+ *	}
+ *
+ *	tuples."uuid" {			# 16 characters separated by commas
+ *		VENDOR_TOKEN_ID2 "0x01,0x02,...,0x0f"
+ *		...
+ *	}
+ *
+ *	tuples."bool" {
+ *		VENDOR_TOKEN_ID3 "true/false"
+ *		...
+ *	}
+ *
+ *	tuples."byte" {
+ *		VENDOR_TOKEN_ID4 "0x11"
+ *		VENDOR_TOKEN_ID5 "0x22"
+ *		...
+ *	}
+ *
+ *	tuples."short" {
+ *		VENDOR_TOKEN_ID6 "0x1122"
+ *		VENDOR_TOKEN_ID7 "0x3344"
+ *		...
+ *	}
+ *
+ *	tuples."word" {
+ *		VENDOR_TOKEN_ID8 "0x11223344"
+ *		VENDOR_TOKEN_ID9 "0x55667788"
+ *		...
+ *	}
+ * }
+ * </pre>
+ * To define multiple vendor tuples of same type, please append some
+ * characters after the type string ("string", "uuid", "bool", "byte", "short"
+ * or "word"), to avoid ID duplication in the SectionVendorTuples.<br>
+ * The parser will check the first few characters in ID to get the tuple type.
+ * Here is an example:
+ * <pre>
+ * SectionVendorTuples."id of the vendor tuples" {
+ *    ...
+ *	tuples."word.module0" {
+ *		VENDOR_TOKEN_PARAM_ID1 "0x00112233"
+ *		VENDOR_TOKEN_PARAM_ID2 "0x44556677"
+ *		...
+ *	}
+ *
+ *	tuples."word.module2" {
+ *		VENDOR_TOKEN_PARAM_ID1 "0x11223344"
+ *		VENDOR_TOKEN_PARAM_ID2 "0x55667788"
+ *		...
+ *	}
+ *	...
+ * }
+ *
+ * </pre>
  *
  * <h5>Mixer Controls</h5>
  * A mixer control is defined as a new section that can include channel mapping,
@@ -389,6 +505,10 @@ extern "C" {
  * fields are the same for widgets as they are for controls whilst the other
  * fields map on very closely to the driver widget fields.
  *
+ * <h5>Widget Private Data</h5>
+ * Widget can have private data. For the format of the private data, please
+ * refer to section Control Private Data.
+ *
  * <h4>PCM Capabilities</h4>
  * Topology can also define the capabilities of FE and BE PCMs. Capabilities
  * can be defined with the following section :-
@@ -464,6 +584,10 @@ extern "C" {
  *
  *	id "0"				# used for binding to the PCM
  *
+ *	dai."name of front-end DAI" {
+ *		id "0"		# used for binding to the front-end DAI
+ *	}
+ *
  *	pcm."playback" {
  *		capabilities "capabilities1"	# capabilities for playback
  *
@@ -485,6 +609,20 @@ extern "C" {
  * }
  * </pre>
  *
+ * <h4>Manifest Private Data</h4>
+ * Manfiest may have private data. Users need to define a manifest section
+ * and add the references to 1 or multiple data sections. Please refer to
+ * section 'How to define an element with private data'. <br>
+ * And the text conf file can have at most 1 manifest section. <br><br>
+ *
+ * Manifest section is defined as follows :-
+ *
+ * <pre>
+ * SectionManifest"name" {
+ *
+ *	data "name"			# optional private data
+ * }
+ * </pre>
  */
 
 /** Maximum number of channels supported in one control */
@@ -509,6 +647,8 @@ enum snd_tplg_type {
 	SND_TPLG_TYPE_BE,		/*!< BE DAI link */
 	SND_TPLG_TYPE_CC,		/*!< Hostless codec <-> codec link */
 	SND_TPLG_TYPE_MANIFEST,		/*!< Topology manifest */
+	SND_TPLG_TYPE_TOKEN,		/*!< Vendor tokens */
+	SND_TPLG_TYPE_TUPLE,		/*!< Vendor tuples */
 };
 
 /**

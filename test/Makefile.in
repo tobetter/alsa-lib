@@ -54,7 +54,8 @@ check_PROGRAMS = control$(EXEEXT) pcm$(EXEEXT) pcm_min$(EXEEXT) \
 	timer$(EXEEXT) rawmidi$(EXEEXT) midiloop$(EXEEXT) \
 	oldapi$(EXEEXT) queue_timer$(EXEEXT) namehint$(EXEEXT) \
 	client_event_filter$(EXEEXT) chmap$(EXEEXT) \
-	audio_time$(EXEEXT)
+	audio_time$(EXEEXT) user-ctl-element-set$(EXEEXT) \
+	pcm-multi-thread$(EXEEXT)
 subdir = test
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(top_srcdir)/depcomp
@@ -104,6 +105,13 @@ pcm_DEPENDENCIES = ../src/libasound.la
 pcm_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(pcm_LDFLAGS) $(LDFLAGS) -o $@
+pcm_multi_thread_SOURCES = pcm-multi-thread.c
+pcm_multi_thread_OBJECTS = pcm-multi-thread.$(OBJEXT)
+pcm_multi_thread_DEPENDENCIES = ../src/libasound.la
+pcm_multi_thread_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(pcm_multi_thread_LDFLAGS) $(LDFLAGS) \
+	-o $@
 pcm_min_SOURCES = pcm_min.c
 pcm_min_OBJECTS = pcm_min.$(OBJEXT)
 pcm_min_DEPENDENCIES = ../src/libasound.la
@@ -122,6 +130,14 @@ seq_DEPENDENCIES = ../src/libasound.la
 timer_SOURCES = timer.c
 timer_OBJECTS = timer.$(OBJEXT)
 timer_DEPENDENCIES = ../src/libasound.la
+user_ctl_element_set_SOURCES = user-ctl-element-set.c
+user_ctl_element_set_OBJECTS =  \
+	user_ctl_element_set-user-ctl-element-set.$(OBJEXT)
+user_ctl_element_set_DEPENDENCIES = ../src/libasound.la
+user_ctl_element_set_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(user_ctl_element_set_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -157,11 +173,13 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = audio_time.c chmap.c client_event_filter.c control.c \
-	latency.c midiloop.c namehint.c oldapi.c pcm.c pcm_min.c \
-	playmidi1.c queue_timer.c rawmidi.c seq.c timer.c
+	latency.c midiloop.c namehint.c oldapi.c pcm.c \
+	pcm-multi-thread.c pcm_min.c playmidi1.c queue_timer.c \
+	rawmidi.c seq.c timer.c user-ctl-element-set.c
 DIST_SOURCES = audio_time.c chmap.c client_event_filter.c control.c \
-	latency.c midiloop.c namehint.c oldapi.c pcm.c pcm_min.c \
-	playmidi1.c queue_timer.c rawmidi.c seq.c timer.c
+	latency.c midiloop.c namehint.c oldapi.c pcm.c \
+	pcm-multi-thread.c pcm_min.c playmidi1.c queue_timer.c \
+	rawmidi.c seq.c timer.c user-ctl-element-set.c
 RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	html-recursive info-recursive install-data-recursive \
 	install-dvi-recursive install-exec-recursive \
@@ -355,6 +373,10 @@ client_event_filter_LDADD = ../src/libasound.la
 code_CFLAGS = -Wall -pipe -g -O2
 chmap_LDADD = ../src/libasound.la
 audio_time_LDADD = ../src/libasound.la
+pcm_multi_thread_LDADD = ../src/libasound.la
+pcm_multi_thread_LDFLAGS = -lpthread
+user_ctl_element_set_LDADD = ../src/libasound.la
+user_ctl_element_set_CFLAGS = -Wall -g
 AM_CPPFLAGS = -I$(top_srcdir)/include
 AM_CFLAGS = -Wall -pipe -g
 EXTRA_DIST = seq-decoder.c seq-sender.c midifile.h midifile.c midifile.3
@@ -428,6 +450,9 @@ oldapi$(EXEEXT): $(oldapi_OBJECTS) $(oldapi_DEPENDENCIES) $(EXTRA_oldapi_DEPENDE
 pcm$(EXEEXT): $(pcm_OBJECTS) $(pcm_DEPENDENCIES) $(EXTRA_pcm_DEPENDENCIES) 
 	@rm -f pcm$(EXEEXT)
 	$(AM_V_CCLD)$(pcm_LINK) $(pcm_OBJECTS) $(pcm_LDADD) $(LIBS)
+pcm-multi-thread$(EXEEXT): $(pcm_multi_thread_OBJECTS) $(pcm_multi_thread_DEPENDENCIES) $(EXTRA_pcm_multi_thread_DEPENDENCIES) 
+	@rm -f pcm-multi-thread$(EXEEXT)
+	$(AM_V_CCLD)$(pcm_multi_thread_LINK) $(pcm_multi_thread_OBJECTS) $(pcm_multi_thread_LDADD) $(LIBS)
 pcm_min$(EXEEXT): $(pcm_min_OBJECTS) $(pcm_min_DEPENDENCIES) $(EXTRA_pcm_min_DEPENDENCIES) 
 	@rm -f pcm_min$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(pcm_min_OBJECTS) $(pcm_min_LDADD) $(LIBS)
@@ -446,6 +471,9 @@ seq$(EXEEXT): $(seq_OBJECTS) $(seq_DEPENDENCIES) $(EXTRA_seq_DEPENDENCIES)
 timer$(EXEEXT): $(timer_OBJECTS) $(timer_DEPENDENCIES) $(EXTRA_timer_DEPENDENCIES) 
 	@rm -f timer$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(timer_OBJECTS) $(timer_LDADD) $(LIBS)
+user-ctl-element-set$(EXEEXT): $(user_ctl_element_set_OBJECTS) $(user_ctl_element_set_DEPENDENCIES) $(EXTRA_user_ctl_element_set_DEPENDENCIES) 
+	@rm -f user-ctl-element-set$(EXEEXT)
+	$(AM_V_CCLD)$(user_ctl_element_set_LINK) $(user_ctl_element_set_OBJECTS) $(user_ctl_element_set_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -461,6 +489,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/midiloop.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/namehint.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/oldapi.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm-multi-thread.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_min.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/playmidi1.Po@am__quote@
@@ -468,6 +497,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rawmidi.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/timer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -489,6 +519,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+user_ctl_element_set-user-ctl-element-set.o: user-ctl-element-set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(user_ctl_element_set_CFLAGS) $(CFLAGS) -MT user_ctl_element_set-user-ctl-element-set.o -MD -MP -MF $(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Tpo -c -o user_ctl_element_set-user-ctl-element-set.o `test -f 'user-ctl-element-set.c' || echo '$(srcdir)/'`user-ctl-element-set.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Tpo $(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='user-ctl-element-set.c' object='user_ctl_element_set-user-ctl-element-set.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(user_ctl_element_set_CFLAGS) $(CFLAGS) -c -o user_ctl_element_set-user-ctl-element-set.o `test -f 'user-ctl-element-set.c' || echo '$(srcdir)/'`user-ctl-element-set.c
+
+user_ctl_element_set-user-ctl-element-set.obj: user-ctl-element-set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(user_ctl_element_set_CFLAGS) $(CFLAGS) -MT user_ctl_element_set-user-ctl-element-set.obj -MD -MP -MF $(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Tpo -c -o user_ctl_element_set-user-ctl-element-set.obj `if test -f 'user-ctl-element-set.c'; then $(CYGPATH_W) 'user-ctl-element-set.c'; else $(CYGPATH_W) '$(srcdir)/user-ctl-element-set.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Tpo $(DEPDIR)/user_ctl_element_set-user-ctl-element-set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='user-ctl-element-set.c' object='user_ctl_element_set-user-ctl-element-set.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(user_ctl_element_set_CFLAGS) $(CFLAGS) -c -o user_ctl_element_set-user-ctl-element-set.obj `if test -f 'user-ctl-element-set.c'; then $(CYGPATH_W) 'user-ctl-element-set.c'; else $(CYGPATH_W) '$(srcdir)/user-ctl-element-set.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

@@ -601,7 +601,8 @@ static int snd_pcm_dmix_drop(snd_pcm_t *pcm)
 	return 0;
 }
 
-static int snd_pcm_dmix_drain(snd_pcm_t *pcm)
+/* locked version */
+static int __snd_pcm_dmix_drain(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
 	snd_pcm_uframes_t stop_threshold;
@@ -657,6 +658,16 @@ static int snd_pcm_dmix_drain(snd_pcm_t *pcm)
 	} while (dmix->state == SND_PCM_STATE_DRAINING);
 	pcm->stop_threshold = stop_threshold;
 	return 0;
+}
+
+static int snd_pcm_dmix_drain(snd_pcm_t *pcm)
+{
+	int err;
+
+	snd_pcm_lock(pcm);
+	err = __snd_pcm_dmix_drain(pcm);
+	snd_pcm_unlock(pcm);
+	return err;
 }
 
 static int snd_pcm_dmix_pause(snd_pcm_t *pcm ATTRIBUTE_UNUSED, int enable ATTRIBUTE_UNUSED)
@@ -1020,6 +1031,7 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	dmix->max_periods = opts->max_periods;
 	dmix->sync_ptr = snd_pcm_dmix_sync_ptr;
 
+ retry:
 	if (first_instance) {
 		/* recursion is already checked in
 		   snd_pcm_direct_get_slave_ipc_offset() */
@@ -1076,6 +1088,13 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 						 SND_PCM_APPEND,
 						 NULL);
 			if (ret < 0) {
+				/* all other streams have been closed;
+				 * retry as the first instance
+				 */
+				if (ret == -EBADFD) {
+					first_instance = 1;
+					goto retry;
+				}
 				SNDERR("unable to open slave");
 				goto _err;
 			}

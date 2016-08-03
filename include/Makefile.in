@@ -104,7 +104,7 @@ am__can_run_installinfo = \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
 am__alsainclude_HEADERS_DIST = asoundlib.h asoundef.h version.h \
-	global.h input.h output.h error.h conf.h control.h iatomic.h \
+	global.h input.h output.h error.h conf.h control.h \
 	control_external.h pcm.h pcm_old.h timer.h pcm_plugin.h \
 	pcm_rate.h pcm_external.h pcm_extplug.h pcm_ioplug.h rawmidi.h \
 	hwdep.h mixer.h mixer_abst.h seq_event.h seq.h seqmid.h \
@@ -304,12 +304,12 @@ SUBDIRS = sound
 sysincludedir = ${includedir}/sys
 alsaincludedir = ${includedir}/alsa
 alsainclude_HEADERS = asoundlib.h asoundef.h version.h global.h \
-	input.h output.h error.h conf.h control.h iatomic.h \
-	$(am__append_1) $(am__append_2) $(am__append_3) \
-	$(am__append_4) $(am__append_5) $(am__append_6) \
-	$(am__append_7) $(am__append_8) $(am__append_9) \
-	$(am__append_10) $(am__append_11) $(am__append_12) \
-	$(am__append_13) $(am__append_14)
+	input.h output.h error.h conf.h control.h $(am__append_1) \
+	$(am__append_2) $(am__append_3) $(am__append_4) \
+	$(am__append_5) $(am__append_6) $(am__append_7) \
+	$(am__append_8) $(am__append_9) $(am__append_10) \
+	$(am__append_11) $(am__append_12) $(am__append_13) \
+	$(am__append_14)
 noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
 	asoundlib-head.h asoundlib-tail.h bswap.h type_compat.h
 

@@ -40,9 +40,9 @@ struct tplg_elem *lookup_pcm_dai_stream(struct list_head *base, const char* id)
 	return NULL;
 }
 
-/* copy referenced caps to the pcm */
-static void copy_pcm_caps(const char *id, struct snd_soc_tplg_stream_caps *caps,
-	struct tplg_elem *ref_elem)
+/* copy referenced caps to the parent (pcm or be dai) */
+static void copy_stream_caps(const char *id,
+	struct snd_soc_tplg_stream_caps *caps, struct tplg_elem *ref_elem)
 {
 	struct snd_soc_tplg_stream_caps *ref_caps = ref_elem->stream_caps;
 
@@ -52,24 +52,19 @@ static void copy_pcm_caps(const char *id, struct snd_soc_tplg_stream_caps *caps,
 	*caps =  *ref_caps;
 }
 
-/* check referenced config and caps for a pcm */
-static int tplg_build_pcm_caps(snd_tplg_t *tplg, struct tplg_elem *elem)
+/* find and copy the referenced stream caps */
+static int tplg_build_stream_caps(snd_tplg_t *tplg,
+	const char *id, struct snd_soc_tplg_stream_caps *caps)
 {
 	struct tplg_elem *ref_elem = NULL;
-	struct snd_soc_tplg_pcm *pcm;
-	struct snd_soc_tplg_stream_caps *caps;
 	unsigned int i;
 
-	pcm = elem->pcm;
-
 	for (i = 0; i < 2; i++) {
-		caps = &pcm->caps[i];
-
 		ref_elem = tplg_elem_lookup(&tplg->pcm_caps_list,
-			caps->name, SND_TPLG_TYPE_STREAM_CAPS);
+			caps[i].name, SND_TPLG_TYPE_STREAM_CAPS);
 
 		if (ref_elem != NULL)
-			copy_pcm_caps(elem->id, caps, ref_elem);
+			copy_stream_caps(id, &caps[i], ref_elem);
 	}
 
 	return 0;
@@ -91,7 +86,7 @@ int tplg_build_pcm(snd_tplg_t *tplg, unsigned int type)
 			return -EINVAL;
 		}
 
-		err = tplg_build_pcm_caps(tplg, elem);
+		err = tplg_build_stream_caps(tplg, elem->id, elem->pcm->caps);
 		if (err < 0)
 			return err;
 
@@ -184,8 +179,8 @@ static int split_format(struct snd_soc_tplg_stream_caps *caps, char *str)
 	return 0;
 }
 
-/* Parse pcm Capabilities */
-int tplg_parse_pcm_caps(snd_tplg_t *tplg,
+/* Parse pcm stream capabilities */
+int tplg_parse_stream_caps(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED)
 {
 	struct snd_soc_tplg_stream_caps *sc;
@@ -263,29 +258,40 @@ int tplg_parse_pcm_caps(snd_tplg_t *tplg,
 	return 0;
 }
 
-/* Parse the caps of a pcm stream */
-int tplg_parse_stream_caps(snd_tplg_t *tplg, snd_config_t *cfg,
-	void *private)
+/* Parse the caps and config of a pcm stream */
+static int tplg_parse_streams(snd_tplg_t *tplg ATTRIBUTE_UNUSED,
+			      snd_config_t *cfg, void *private)
 {
 	snd_config_iterator_t i, next;
 	snd_config_t *n;
 	struct tplg_elem *elem = private;
 	struct snd_soc_tplg_pcm *pcm;
+	unsigned int *playback, *capture;
+	struct snd_soc_tplg_stream_caps *caps;
 	const char *id, *value;
 	int stream;
-
-	pcm = elem->pcm;
 
 	snd_config_get_id(cfg, &id);
 
 	tplg_dbg("\t%s:\n", id);
 
+	switch (elem->type) {
+	case SND_TPLG_TYPE_PCM:
+		pcm = elem->pcm;
+		playback = &pcm->playback;
+		capture = &pcm->capture;
+		caps = pcm->caps;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	if (strcmp(id, "playback") == 0) {
 		stream = SND_SOC_TPLG_STREAM_PLAYBACK;
-		pcm->playback = 1;
+		*playback = 1;
 	} else if (strcmp(id, "capture") == 0) {
 		stream = SND_SOC_TPLG_STREAM_CAPTURE;
-		pcm->capture = 1;
+		*capture = 1;
 	} else
 		return -EINVAL;
 
@@ -300,8 +306,10 @@ int tplg_parse_stream_caps(snd_tplg_t *tplg, snd_config_t *cfg,
 		if (strcmp(id, "capabilities") == 0) {
 			if (snd_config_get_string(n, &value) < 0)
 				continue;
-
-			elem_copy_text(pcm->caps[stream].name, value,
+			/* store stream caps name, to find and merge
+			 * the caps in building phase.
+			 */
+			elem_copy_text(caps[stream].name, value,
 				SNDRV_CTL_ELEM_ID_NAME_MAXLEN);
 
 			tplg_dbg("\t\t%s\n\t\t\t%s\n", id, value);
@@ -312,7 +320,51 @@ int tplg_parse_stream_caps(snd_tplg_t *tplg, snd_config_t *cfg,
 	return 0;
 }
 
-/* Parse pcm */
+/* Parse name and id of a front-end DAI (ie. cpu dai of a FE DAI link) */
+static int tplg_parse_fe_dai(snd_tplg_t *tplg ATTRIBUTE_UNUSED,
+			     snd_config_t *cfg, void *private)
+{
+	struct tplg_elem *elem = private;
+	struct snd_soc_tplg_pcm *pcm = elem->pcm;
+	snd_config_iterator_t i, next;
+	snd_config_t *n;
+	const char *id, *value = NULL;
+	unsigned long int id_val;
+
+	snd_config_get_id(cfg, &id);
+	tplg_dbg("\t\tFE DAI %s:\n", id);
+	elem_copy_text(pcm->dai_name, id, SNDRV_CTL_ELEM_ID_NAME_MAXLEN);
+
+	snd_config_for_each(i, next, cfg) {
+
+		n = snd_config_iterator_entry(i);
+
+		/* get id */
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+
+		if (strcmp(id, "id") == 0) {
+			if (snd_config_get_string(n, &value) < 0)
+				continue;
+			errno = 0;
+			/* no support for negative value */
+			id_val = strtoul(value, NULL, 0);
+			if ((errno == ERANGE && id_val == ULONG_MAX)
+				|| (errno != 0 && id_val == 0)
+				|| id_val > UINT_MAX) {
+				SNDERR("error: invalid fe dai ID\n");
+				return -EINVAL;
+			}
+
+			pcm->dai_id = (int) id_val;
+			tplg_dbg("\t\t\tindex: %d\n", pcm->dai_id);
+		}
+	}
+
+	return 0;
+}
+
+/* Parse pcm (for front end DAI & DAI link) */
 int tplg_parse_pcm(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED)
 {
@@ -329,7 +381,7 @@ int tplg_parse_pcm(snd_tplg_t *tplg,
 
 	pcm = elem->pcm;
 	pcm->size = elem->size;
-	elem_copy_text(pcm->dai_name, elem->id, SNDRV_CTL_ELEM_ID_NAME_MAXLEN);
+	elem_copy_text(pcm->pcm_name, elem->id, SNDRV_CTL_ELEM_ID_NAME_MAXLEN);
 
 	tplg_dbg(" PCM: %s\n", elem->id);
 
@@ -358,14 +410,22 @@ int tplg_parse_pcm(snd_tplg_t *tplg,
 			if (snd_config_get_string(n, &val) < 0)
 				return -EINVAL;
 
-			pcm->dai_id = atoi(val);
-			tplg_dbg("\t%s: %d\n", id, pcm->dai_id);
+			pcm->pcm_id = atoi(val);
+			tplg_dbg("\t%s: %d\n", id, pcm->pcm_id);
 			continue;
 		}
 
 		if (strcmp(id, "pcm") == 0) {
 			err = tplg_parse_compound(tplg, n,
-				tplg_parse_stream_caps, elem);
+				tplg_parse_streams, elem);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "dai") == 0) {
+			err = tplg_parse_compound(tplg, n,
+				tplg_parse_fe_dai, elem);
 			if (err < 0)
 				return err;
 			continue;

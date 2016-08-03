@@ -191,18 +191,17 @@ static int tplg_build_widget(snd_tplg_t *tplg,
 			break;
 
 		case SND_TPLG_TYPE_DATA:
-			if (!ref->elem)
-				ref->elem = tplg_elem_lookup(&tplg->pdata_list,
-						ref->id, SND_TPLG_TYPE_DATA);
-			if (ref->elem)
-				err = tplg_copy_data(elem, ref->elem);
+			err = tplg_copy_data(tplg, elem, ref);
+			if (err < 0)
+				return err;
 			break;
+
 		default:
 			break;
 		}
 
 		if (!ref->elem) {
-			SNDERR("error: cannot find control '%s'"
+			SNDERR("error: cannot find '%s'"
 				" referenced by widget '%s'\n",
 				ref->id, elem->id);
 			return -EINVAL;
@@ -598,11 +597,9 @@ int tplg_parse_dapm_widget(snd_tplg_t *tplg,
 		}
 
 		if (strcmp(id, "data") == 0) {
-			if (snd_config_get_string(n, &val) < 0)
-				return -EINVAL;
-
-			tplg_ref_add(elem, SND_TPLG_TYPE_DATA, val);
-			tplg_dbg("\t%s: %s\n", id, val);
+			err = tplg_parse_data_refs(n, elem);
+			if (err < 0)
+				return err;
 			continue;
 		}
 	}
