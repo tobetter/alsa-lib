@@ -559,7 +559,7 @@ int snd_pcm_direct_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned in
 	events = pfds[0].revents;
 	if (events & POLLIN) {
 		snd_pcm_uframes_t avail;
-		snd_pcm_avail_update(pcm);
+		__snd_pcm_avail_update(pcm);
 		if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
 			events |= POLLOUT;
 			events &= ~POLLIN;
@@ -580,7 +580,7 @@ int snd_pcm_direct_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned in
 			snd_pcm_direct_clear_timer_queue(dmix);
 			events &= ~(POLLOUT|POLLIN);
 			/* additional check */
-			switch (snd_pcm_state(pcm)) {
+			switch (__snd_pcm_state(pcm)) {
 			case SND_PCM_STATE_XRUN:
 			case SND_PCM_STATE_SUSPENDED:
 			case SND_PCM_STATE_SETUP:
@@ -819,13 +819,18 @@ int snd_pcm_direct_prepare(snd_pcm_t *pcm)
 	int err;
 
 	switch (snd_pcm_state(dmix->spcm)) {
+	case SND_PCM_STATE_SETUP:
 	case SND_PCM_STATE_XRUN:
 	case SND_PCM_STATE_SUSPENDED:
-	case SND_PCM_STATE_DISCONNECTED:
 		err = snd_pcm_prepare(dmix->spcm);
 		if (err < 0)
 			return err;
 		snd_pcm_start(dmix->spcm);
+		break;
+	case SND_PCM_STATE_OPEN:
+	case SND_PCM_STATE_DISCONNECTED:
+		return -EBADFD;
+	default:
 		break;
 	}
 	snd_pcm_direct_check_interleave(dmix, pcm);
@@ -838,18 +843,27 @@ int snd_pcm_direct_prepare(snd_pcm_t *pcm)
 int snd_pcm_direct_resume(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
-	int err;
-	
+	snd_pcm_t *spcm = dmix->spcm;
+
 	snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT);
-	err = snd_pcm_resume(dmix->spcm);
-	if (err == -ENOSYS) {
-		/* FIXME: error handling? */
-		snd_pcm_prepare(dmix->spcm);
-		snd_pcm_start(dmix->spcm);
-		err = 0;
+	/* some buggy drivers require the device resumed before prepared;
+	 * when a device has RESUME flag and is in SUSPENDED state, resume
+	 * here but immediately drop to bring it to a sane active state.
+	 */
+	if ((spcm->info & SND_PCM_INFO_RESUME) &&
+	    snd_pcm_state(spcm) == SND_PCM_STATE_SUSPENDED) {
+		snd_pcm_resume(spcm);
+		snd_pcm_drop(spcm);
+		snd_pcm_direct_timer_stop(dmix);
+		snd_pcm_direct_clear_timer_queue(dmix);
+		snd_pcm_areas_silence(snd_pcm_mmap_areas(spcm), 0,
+				      spcm->channels, spcm->buffer_size,
+				      spcm->format);
+		snd_pcm_prepare(spcm);
+		snd_pcm_start(spcm);
 	}
 	snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
-	return err;
+	return -ENOSYS;
 }
 
 #define COPY_SLAVE(field) (dmix->shmptr->s.field = spcm->field)
@@ -886,6 +900,8 @@ static void save_slave_setting(snd_pcm_direct_t *dmix, snd_pcm_t *spcm)
 	COPY_SLAVE(buffer_time);
 	COPY_SLAVE(sample_bits);
 	COPY_SLAVE(frame_bits);
+
+	dmix->shmptr->s.info &= ~SND_PCM_INFO_RESUME;
 }
 
 #undef COPY_SLAVE
@@ -897,29 +913,28 @@ static void save_slave_setting(snd_pcm_direct_t *dmix, snd_pcm_t *spcm)
  */
 int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, struct slave_params *params)
 {
-	snd_pcm_hw_params_t *hw_params;
-	snd_pcm_sw_params_t *sw_params;
+	snd_pcm_hw_params_t hw_params = {0};
+	snd_pcm_sw_params_t sw_params = {0};
 	int ret, buffer_is_not_initialized;
 	snd_pcm_uframes_t boundary;
 	struct pollfd fd;
 	int loops = 10;
-
-	snd_pcm_hw_params_alloca(&hw_params);
-	snd_pcm_sw_params_alloca(&sw_params);
 
       __again:
       	if (loops-- <= 0) {
       		SNDERR("unable to find a valid configuration for slave");
       		return -EINVAL;
       	}
-	ret = snd_pcm_hw_params_any(spcm, hw_params);
+	ret = snd_pcm_hw_params_any(spcm, &hw_params);
 	if (ret < 0) {
 		SNDERR("snd_pcm_hw_params_any failed");
 		return ret;
 	}
-	ret = snd_pcm_hw_params_set_access(spcm, hw_params, SND_PCM_ACCESS_MMAP_INTERLEAVED);
+	ret = snd_pcm_hw_params_set_access(spcm, &hw_params,
+					   SND_PCM_ACCESS_MMAP_INTERLEAVED);
 	if (ret < 0) {
-		ret = snd_pcm_hw_params_set_access(spcm, hw_params, SND_PCM_ACCESS_MMAP_NONINTERLEAVED);
+		ret = snd_pcm_hw_params_set_access(spcm, &hw_params,
+					SND_PCM_ACCESS_MMAP_NONINTERLEAVED);
 		if (ret < 0) {
 			SNDERR("slave plugin does not support mmap interleaved or mmap noninterleaved access");
 			return ret;
@@ -928,14 +943,16 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	if (params->format == SND_PCM_FORMAT_UNKNOWN)
 		ret = -EINVAL;
 	else
-		ret = snd_pcm_hw_params_set_format(spcm, hw_params,
+		ret = snd_pcm_hw_params_set_format(spcm, &hw_params,
 						   params->format);
 	if (ret < 0) {
 		static const snd_pcm_format_t dmix_formats[] = {
 			SND_PCM_FORMAT_S32,
-			SND_PCM_FORMAT_S32 ^ SND_PCM_FORMAT_S32_LE ^ SND_PCM_FORMAT_S32_BE,
+			SND_PCM_FORMAT_S32 ^ SND_PCM_FORMAT_S32_LE ^
+							SND_PCM_FORMAT_S32_BE,
 			SND_PCM_FORMAT_S16,
-			SND_PCM_FORMAT_S16 ^ SND_PCM_FORMAT_S16_LE ^ SND_PCM_FORMAT_S16_BE,
+			SND_PCM_FORMAT_S16 ^ SND_PCM_FORMAT_S16_LE ^
+							SND_PCM_FORMAT_S16_BE,
 			SND_PCM_FORMAT_S24_LE,
 			SND_PCM_FORMAT_S24_3LE,
 			SND_PCM_FORMAT_U8,
@@ -943,15 +960,17 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 		snd_pcm_format_t format;
 		unsigned int i;
 
-		for (i = 0; i < sizeof dmix_formats / sizeof dmix_formats[0]; ++i) {
+		for (i = 0; i < ARRAY_SIZE(dmix_formats); ++i) {
 			format = dmix_formats[i];
-			ret = snd_pcm_hw_params_set_format(spcm, hw_params, format);
+			ret = snd_pcm_hw_params_set_format(spcm, &hw_params,
+							   format);
 			if (ret >= 0)
 				break;
 		}
 		if (ret < 0 && dmix->type != SND_PCM_TYPE_DMIX) {
 			/* TODO: try to choose a good format */
-			ret = INTERNAL(snd_pcm_hw_params_set_format_first)(spcm, hw_params, &format);
+			ret = INTERNAL(snd_pcm_hw_params_set_format_first)(spcm,
+							&hw_params, &format);
 		}
 		if (ret < 0) {
 			SNDERR("requested or auto-format is not available");
@@ -959,12 +978,14 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 		}
 		params->format = format;
 	}
-	ret = INTERNAL(snd_pcm_hw_params_set_channels_near)(spcm, hw_params, (unsigned int *)&params->channels);
+	ret = INTERNAL(snd_pcm_hw_params_set_channels_near)(spcm, &hw_params,
+					(unsigned int *)&params->channels);
 	if (ret < 0) {
 		SNDERR("requested count of channels is not available");
 		return ret;
 	}
-	ret = INTERNAL(snd_pcm_hw_params_set_rate_near)(spcm, hw_params, (unsigned int *)&params->rate, 0);
+	ret = INTERNAL(snd_pcm_hw_params_set_rate_near)(spcm, &hw_params,
+					(unsigned int *)&params->rate, 0);
 	if (ret < 0) {
 		SNDERR("requested rate is not available");
 		return ret;
@@ -972,13 +993,15 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 
 	buffer_is_not_initialized = 0;
 	if (params->buffer_time > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_buffer_time_near)(spcm, hw_params, (unsigned int *)&params->buffer_time, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_buffer_time_near)(spcm,
+			&hw_params, (unsigned int *)&params->buffer_time, 0);
 		if (ret < 0) {
 			SNDERR("unable to set buffer time");
 			return ret;
 		}
 	} else if (params->buffer_size > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_buffer_size_near)(spcm, hw_params, (snd_pcm_uframes_t *)&params->buffer_size);
+		ret = INTERNAL(snd_pcm_hw_params_set_buffer_size_near)(spcm,
+			&hw_params, (snd_pcm_uframes_t *)&params->buffer_size);
 		if (ret < 0) {
 			SNDERR("unable to set buffer size");
 			return ret;
@@ -988,13 +1011,16 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	}
 
 	if (params->period_time > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_period_time_near)(spcm, hw_params, (unsigned int *)&params->period_time, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_period_time_near)(spcm,
+			&hw_params, (unsigned int *)&params->period_time, 0);
 		if (ret < 0) {
 			SNDERR("unable to set period_time");
 			return ret;
 		}
 	} else if (params->period_size > 0) {
-		ret = INTERNAL(snd_pcm_hw_params_set_period_size_near)(spcm, hw_params, (snd_pcm_uframes_t *)&params->period_size, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_period_size_near)(spcm,
+			&hw_params, (snd_pcm_uframes_t *)&params->period_size,
+			0);
 		if (ret < 0) {
 			SNDERR("unable to set period_size");
 			return ret;
@@ -1003,7 +1029,8 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	
 	if (buffer_is_not_initialized && params->periods > 0) {
 		unsigned int periods = params->periods;
-		ret = INTERNAL(snd_pcm_hw_params_set_periods_near)(spcm, hw_params, &params->periods, 0);
+		ret = INTERNAL(snd_pcm_hw_params_set_periods_near)(spcm,
+					&hw_params, &params->periods, 0);
 		if (ret < 0) {
 			SNDERR("unable to set requested periods");
 			return ret;
@@ -1022,34 +1049,42 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 		}
 	}
 	
-	ret = snd_pcm_hw_params(spcm, hw_params);
+	ret = snd_pcm_hw_params(spcm, &hw_params);
 	if (ret < 0) {
 		SNDERR("unable to install hw params");
 		return ret;
 	}
 
 	/* store some hw_params values to shared info */
-	dmix->shmptr->hw.format = snd_mask_value(hw_param_mask(hw_params, SND_PCM_HW_PARAM_FORMAT));
-	dmix->shmptr->hw.rate = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_RATE);
-	dmix->shmptr->hw.buffer_size = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_BUFFER_SIZE);
-	dmix->shmptr->hw.buffer_time = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_BUFFER_TIME);
-	dmix->shmptr->hw.period_size = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_PERIOD_SIZE);
-	dmix->shmptr->hw.period_time = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_PERIOD_TIME);
-	dmix->shmptr->hw.periods = *hw_param_interval(hw_params, SND_PCM_HW_PARAM_PERIODS);
+	dmix->shmptr->hw.format =
+		snd_mask_value(hw_param_mask(&hw_params,
+					     SND_PCM_HW_PARAM_FORMAT));
+	dmix->shmptr->hw.rate =
+		*hw_param_interval(&hw_params, SND_PCM_HW_PARAM_RATE);
+	dmix->shmptr->hw.buffer_size =
+		*hw_param_interval(&hw_params, SND_PCM_HW_PARAM_BUFFER_SIZE);
+	dmix->shmptr->hw.buffer_time =
+		*hw_param_interval(&hw_params, SND_PCM_HW_PARAM_BUFFER_TIME);
+	dmix->shmptr->hw.period_size =
+		*hw_param_interval(&hw_params, SND_PCM_HW_PARAM_PERIOD_SIZE);
+	dmix->shmptr->hw.period_time =
+		*hw_param_interval(&hw_params, SND_PCM_HW_PARAM_PERIOD_TIME);
+	dmix->shmptr->hw.periods =
+		*hw_param_interval(&hw_params, SND_PCM_HW_PARAM_PERIODS);
 
 
-	ret = snd_pcm_sw_params_current(spcm, sw_params);
+	ret = snd_pcm_sw_params_current(spcm, &sw_params);
 	if (ret < 0) {
 		SNDERR("unable to get current sw_params");
 		return ret;
 	}
 
-	ret = snd_pcm_sw_params_get_boundary(sw_params, &boundary);
+	ret = snd_pcm_sw_params_get_boundary(&sw_params, &boundary);
 	if (ret < 0) {
 		SNDERR("unable to get boundary");
 		return ret;
 	}
-	ret = snd_pcm_sw_params_set_stop_threshold(spcm, sw_params, boundary);
+	ret = snd_pcm_sw_params_set_stop_threshold(spcm, &sw_params, boundary);
 	if (ret < 0) {
 		SNDERR("unable to set stop threshold");
 		return ret;
@@ -1059,7 +1094,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	 * the slave timestamp is copied appropriately in dsnoop/dmix/dshare
 	 * based on the tstamp_mode of each client
 	 */
-	ret = snd_pcm_sw_params_set_tstamp_mode(spcm, sw_params,
+	ret = snd_pcm_sw_params_set_tstamp_mode(spcm, &sw_params,
 						SND_PCM_TSTAMP_ENABLE);
 	if (ret < 0) {
 		SNDERR("unable to tstamp mode MMAP");
@@ -1069,12 +1104,12 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	if (dmix->type != SND_PCM_TYPE_DMIX)
 		goto __skip_silencing;
 
-	ret = snd_pcm_sw_params_set_silence_threshold(spcm, sw_params, 0);
+	ret = snd_pcm_sw_params_set_silence_threshold(spcm, &sw_params, 0);
 	if (ret < 0) {
 		SNDERR("unable to set silence threshold");
 		return ret;
 	}
-	ret = snd_pcm_sw_params_set_silence_size(spcm, sw_params, boundary);
+	ret = snd_pcm_sw_params_set_silence_size(spcm, &sw_params, boundary);
 	if (ret < 0) {
 		SNDERR("unable to set silence threshold (please upgrade to 0.9.0rc8+ driver)");
 		return ret;
@@ -1082,7 +1117,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 
       __skip_silencing:
 
-	ret = snd_pcm_sw_params(spcm, sw_params);
+	ret = snd_pcm_sw_params(spcm, &sw_params);
 	if (ret < 0) {
 		SNDERR("unable to install sw params (please upgrade to 0.9.0rc8+ driver)");
 		return ret;
@@ -1091,7 +1126,8 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	if (dmix->type == SND_PCM_TYPE_DSHARE) {
 		const snd_pcm_channel_area_t *dst_areas;
 		dst_areas = snd_pcm_mmap_areas(spcm);
-		snd_pcm_areas_silence(dst_areas, 0, spcm->channels, spcm->buffer_size, spcm->format);
+		snd_pcm_areas_silence(dst_areas, 0, spcm->channels,
+				      spcm->buffer_size, spcm->format);
 	}
 	
 	ret = snd_pcm_start(spcm);
@@ -1140,27 +1176,28 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 int snd_pcm_direct_initialize_poll_fd(snd_pcm_direct_t *dmix)
 {
 	int ret;
-	snd_pcm_info_t *info;
+	snd_pcm_info_t info = {0};
 	char name[128];
 	int capture = dmix->type == SND_PCM_TYPE_DSNOOP ? 1 : 0;
 
 	dmix->tread = 1;
 	dmix->timer_need_poll = 0;
-	snd_pcm_info_alloca(&info);
-	ret = snd_pcm_info(dmix->spcm, info);
+	ret = snd_pcm_info(dmix->spcm, &info);
 	if (ret < 0) {
 		SNDERR("unable to info for slave pcm");
 		return ret;
 	}
 	sprintf(name, "hw:CLASS=%i,SCLASS=0,CARD=%i,DEV=%i,SUBDEV=%i",
-				(int)SND_TIMER_CLASS_PCM, 
-				snd_pcm_info_get_card(info),
-				snd_pcm_info_get_device(info),
-				snd_pcm_info_get_subdevice(info) * 2 + capture);
-	ret = snd_timer_open(&dmix->timer, name, SND_TIMER_OPEN_NONBLOCK | SND_TIMER_OPEN_TREAD);
+		(int)SND_TIMER_CLASS_PCM,
+		snd_pcm_info_get_card(&info),
+		snd_pcm_info_get_device(&info),
+		snd_pcm_info_get_subdevice(&info) * 2 + capture);
+	ret = snd_timer_open(&dmix->timer, name,
+			     SND_TIMER_OPEN_NONBLOCK | SND_TIMER_OPEN_TREAD);
 	if (ret < 0) {
 		dmix->tread = 0;
-		ret = snd_timer_open(&dmix->timer, name, SND_TIMER_OPEN_NONBLOCK);
+		ret = snd_timer_open(&dmix->timer, name,
+				     SND_TIMER_OPEN_NONBLOCK);
 		if (ret < 0) {
 			SNDERR("unable to open timer '%s'", name);
 			return ret;
@@ -1321,24 +1358,23 @@ int snd_pcm_direct_initialize_secondary_slave(snd_pcm_direct_t *dmix,
 
 int snd_pcm_direct_set_timer_params(snd_pcm_direct_t *dmix)
 {
-	snd_timer_params_t *params;
+	snd_timer_params_t params = {0};
 	unsigned int filter;
 	int ret;
 
-	snd_timer_params_alloca(&params);
-	snd_timer_params_set_auto_start(params, 1);
+	snd_timer_params_set_auto_start(&params, 1);
 	if (dmix->type != SND_PCM_TYPE_DSNOOP)
-		snd_timer_params_set_early_event(params, 1);
-	snd_timer_params_set_ticks(params, 1);
+		snd_timer_params_set_early_event(&params, 1);
+	snd_timer_params_set_ticks(&params, 1);
 	if (dmix->tread) {
 		filter = (1<<SND_TIMER_EVENT_TICK) |
 			 dmix->timer_events;
-		snd_timer_params_set_filter(params, filter);
+		snd_timer_params_set_filter(&params, filter);
 	}
-	ret = snd_timer_params(dmix->timer, params);
+	ret = snd_timer_params(dmix->timer, &params);
 	if (ret < 0) {
 		SNDERR("unable to set timer parameters");
-                return ret;
+		return ret;
 	}
 	return 0;
 }

@@ -166,6 +166,9 @@
 /* Support resmgr with alsa-lib */
 #undef SUPPORT_RESMGR
 
+/* Disable thread-safe API functions */
+#undef THREAD_SAFE_API
+
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #undef TIME_WITH_SYS_TIME
 
