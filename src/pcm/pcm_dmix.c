@@ -391,23 +391,14 @@ static void snd_pcm_dmix_sync_area(snd_pcm_t *pcm)
 /*
  *  synchronize hardware pointer (hw_ptr) with ours
  */
-static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
+static int snd_pcm_dmix_sync_ptr0(snd_pcm_t *pcm, snd_pcm_uframes_t slave_hw_ptr)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_uframes_t slave_hw_ptr, old_slave_hw_ptr, avail;
+	snd_pcm_uframes_t old_slave_hw_ptr, avail;
 	snd_pcm_sframes_t diff;
 	
-	switch (snd_pcm_state(dmix->spcm)) {
-	case SND_PCM_STATE_DISCONNECTED:
-		dmix->state = SND_PCM_STATE_DISCONNECTED;
-		return -ENODEV;
-	default:
-		break;
-	}
-	if (dmix->slowptr)
-		snd_pcm_hwsync(dmix->spcm);
 	old_slave_hw_ptr = dmix->slave_hw_ptr;
-	slave_hw_ptr = dmix->slave_hw_ptr = *dmix->spcm->hw.ptr;
+	dmix->slave_hw_ptr = *dmix->spcm->hw.ptr;
 	diff = slave_hw_ptr - old_slave_hw_ptr;
 	if (diff == 0)		/* fast path */
 		return 0;
@@ -440,6 +431,24 @@ static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
 	return 0;
 }
 
+static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+
+	switch (snd_pcm_state(dmix->spcm)) {
+	case SND_PCM_STATE_DISCONNECTED:
+		dmix->state = SND_PCM_STATE_DISCONNECTED;
+		return -ENODEV;
+	default:
+		break;
+	}
+
+	if (dmix->slowptr)
+		snd_pcm_hwsync(dmix->spcm);
+
+	return snd_pcm_dmix_sync_ptr0(pcm, *dmix->spcm->hw.ptr);
+}
+
 /*
  *  plugin implementation
  */
@@ -467,22 +476,24 @@ static int snd_pcm_dmix_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
 
+	memset(status, 0, sizeof(*status));
+	snd_pcm_status(dmix->spcm, status);
+
 	switch (dmix->state) {
 	case SNDRV_PCM_STATE_DRAINING:
 	case SNDRV_PCM_STATE_RUNNING:
-		snd_pcm_dmix_sync_ptr(pcm);
+		snd_pcm_dmix_sync_ptr0(pcm, status->hw_ptr);
+		status->delay += snd_pcm_mmap_playback_delay(pcm)
+				+ status->avail - dmix->spcm->buffer_size;
 		break;
 	default:
 		break;
 	}
-	memset(status, 0, sizeof(*status));
-	snd_pcm_status(dmix->spcm, status);
-	status->state = snd_pcm_dmix_state(pcm);
+
 	status->trigger_tstamp = dmix->trigger_tstamp;
 	status->avail = snd_pcm_mmap_playback_avail(pcm);
 	status->avail_max = status->avail > dmix->avail_max ? status->avail : dmix->avail_max;
 	dmix->avail_max = 0;
-	status->delay = snd_pcm_mmap_playback_delay(pcm);
 	return 0;
 }
 
@@ -1154,9 +1165,10 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 		snd_pcm_close(spcm);
 	if (dmix->u.dmix.shmid_sum >= 0)
 		shm_sum_discard(dmix);
-	if (dmix->shmid >= 0)
-		snd_pcm_direct_shm_discard(dmix);
-	if (snd_pcm_direct_semaphore_discard(dmix) < 0)
+	if ((dmix->shmid >= 0) && (snd_pcm_direct_shm_discard(dmix))) {
+		if (snd_pcm_direct_semaphore_discard(dmix))
+			snd_pcm_direct_semaphore_final(dmix, DIRECT_IPC_SEM_CLIENT);
+	} else
 		snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
  _err_nosem:
 	if (dmix) {

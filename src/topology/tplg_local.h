@@ -64,6 +64,7 @@ struct snd_tplg {
 	struct list_head tlv_list;
 	struct list_head widget_list;
 	struct list_head pcm_list;
+	struct list_head dai_list;
 	struct list_head be_list;
 	struct list_head cc_list;
 	struct list_head route_list;
@@ -74,6 +75,7 @@ struct snd_tplg {
 	struct list_head manifest_list;
 	struct list_head pcm_config_list;
 	struct list_head pcm_caps_list;
+	struct list_head hw_cfg_list;
 
 	/* type-specific control lists */
 	struct list_head mixer_list;
@@ -87,6 +89,11 @@ struct tplg_ref {
 	struct tplg_elem *elem;
 	char id[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
 	struct list_head list;
+};
+
+struct tplg_texts {
+	unsigned int num_items;
+	char items[SND_SOC_TPLG_NUM_TEXTS][SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
 };
 
 /* element for vendor tokens */
@@ -126,9 +133,6 @@ struct tplg_elem {
 
 	char id[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
 
-	/* storage for texts and data if this is text or data elem*/
-	char texts[SND_SOC_TPLG_NUM_TEXTS][SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
-
 	int index;
 	enum snd_tplg_type type;
 
@@ -144,14 +148,16 @@ struct tplg_elem {
 		struct snd_soc_tplg_bytes_control *bytes_ext;
 		struct snd_soc_tplg_dapm_widget *widget;
 		struct snd_soc_tplg_pcm *pcm;
-		struct snd_soc_tplg_link_config *be;
-		struct snd_soc_tplg_link_config *cc;
+		struct snd_soc_tplg_dai *dai;
+		struct snd_soc_tplg_link_config *link;/* physical link */
 		struct snd_soc_tplg_dapm_graph_elem *route;
 		struct snd_soc_tplg_stream *stream_cfg;
 		struct snd_soc_tplg_stream_caps *stream_caps;
+		struct snd_soc_tplg_hw_config *hw_cfg;
 
 		/* these do not map to UAPI structs but are internal only */
 		struct snd_soc_tplg_ctl_tlv *tlv;
+		struct tplg_texts *texts;
 		struct snd_soc_tplg_private *data;
 		struct tplg_vendor_tokens *tokens;
 		struct tplg_vendor_tuples *tuples;
@@ -221,11 +227,17 @@ int tplg_parse_stream_caps(snd_tplg_t *tplg,
 int tplg_parse_pcm(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
 
-int tplg_parse_be(snd_tplg_t *tplg,
+int tplg_parse_dai(snd_tplg_t *tplg, snd_config_t *cfg,
+		   void *private ATTRIBUTE_UNUSED);
+
+int tplg_parse_link(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
 
 int tplg_parse_cc(snd_tplg_t *tplg,
 	snd_config_t *cfg, void *private ATTRIBUTE_UNUSED);
+
+int tplg_parse_hw_config(snd_tplg_t *tplg, snd_config_t *cfg,
+			 void *private ATTRIBUTE_UNUSED);
 
 int tplg_build_data(snd_tplg_t *tplg);
 int tplg_build_manifest_data(snd_tplg_t *tplg);
@@ -284,7 +296,9 @@ int tplg_add_enum(snd_tplg_t *tplg, struct snd_tplg_enum_template *enum_ctl,
 int tplg_add_bytes(snd_tplg_t *tplg, struct snd_tplg_bytes_template *bytes_ctl,
 		   struct tplg_elem **e);
 
-int tplg_build_pcm(snd_tplg_t *tplg, unsigned int type);
-int tplg_build_link_cfg(snd_tplg_t *tplg, unsigned int type);
+int tplg_build_pcms(snd_tplg_t *tplg, unsigned int type);
+int tplg_build_dais(snd_tplg_t *tplg, unsigned int type);
+int tplg_build_links(snd_tplg_t *tplg, unsigned int type);
 int tplg_add_link_object(snd_tplg_t *tplg, snd_tplg_obj_template_t *t);
 int tplg_add_pcm_object(snd_tplg_t *tplg, snd_tplg_obj_template_t *t);
+int tplg_add_dai_object(snd_tplg_t *tplg, snd_tplg_obj_template_t *t);

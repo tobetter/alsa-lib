@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(alsa-lib, 1.1.2)
+AC_INIT(alsa-lib, 1.1.3)
 
 AC_CONFIG_SRCDIR([src/control/control.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -673,8 +673,10 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/PAZ00/Makefile \
 	  src/conf/ucm/GoogleNyan/Makefile \
 	  src/conf/ucm/broadwell-rt286/Makefile \
+	  src/conf/ucm/skylake-rt286/Makefile \
 	  src/conf/ucm/VEYRON-I2S/Makefile \
 	  src/conf/ucm/chtrt5645/Makefile \
+	  src/conf/ucm/DB410c/Makefile \
 	  src/conf/ucm/apq8064-tabla-snd-card/Makefile \
 	  src/conf/ucm/Tuna/Makefile \
 	  src/conf/ucm/tegra-rt5640/Makefile \
@@ -684,8 +686,8 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/topology/Makefile \
 	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
-	  src/conf/topology/sklrt286/data/Makefile \
 	  src/conf/topology/sklrt286/Makefile \
+	  src/conf/topology/bxtrt298/Makefile \
 	  alsalisp/Makefile aserver/Makefile \
 	  test/Makefile test/lsb/Makefile \
 	  utils/Makefile utils/alsa-lib.spec utils/alsa.pc)

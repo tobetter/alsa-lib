@@ -1,1 +1,1 @@
-SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 PAZ00 GoogleNyan broadwell-rt286 VEYRON-I2S chtrt5645 apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF msm8974-taiko-mtp-snd-card
+SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 PAZ00 GoogleNyan broadwell-rt286 skylake-rt286 VEYRON-I2S chtrt5645 DB410c apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF msm8974-taiko-mtp-snd-card

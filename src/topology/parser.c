@@ -133,8 +133,25 @@ static int tplg_parse_config(snd_tplg_t *tplg, snd_config_t *cfg)
 			continue;
 		}
 
-		if (strcmp(id, "SectionBE") == 0) {
-			err = tplg_parse_compound(tplg, n, tplg_parse_be,
+		if (strcmp(id, "SectionDAI") == 0) {
+			err = tplg_parse_compound(tplg, n,
+				tplg_parse_dai, NULL);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "SectionHWConfig") == 0) {
+			err = tplg_parse_compound(tplg, n, tplg_parse_hw_config,
+				NULL);
+			if (err < 0)
+				return err;
+			continue;
+		}
+
+		if (strcmp(id, "SectionLink") == 0
+			|| strcmp(id, "SectionBE") == 0) {
+			err = tplg_parse_compound(tplg, n, tplg_parse_link,
 				NULL);
 			if (err < 0)
 				return err;
@@ -267,15 +284,19 @@ static int tplg_build_integ(snd_tplg_t *tplg)
 	if (err <  0)
 		return err;
 
-	err = tplg_build_pcm(tplg, SND_TPLG_TYPE_PCM);
+	err = tplg_build_pcms(tplg, SND_TPLG_TYPE_PCM);
 	if (err <  0)
 		return err;
 
-	err = tplg_build_link_cfg(tplg, SND_TPLG_TYPE_BE);
+	err = tplg_build_dais(tplg, SND_TPLG_TYPE_DAI);
 	if (err <  0)
 		return err;
 
-	err = tplg_build_link_cfg(tplg, SND_TPLG_TYPE_CC);
+	err = tplg_build_links(tplg, SND_TPLG_TYPE_BE);
+	if (err <  0)
+		return err;
+
+	err = tplg_build_links(tplg, SND_TPLG_TYPE_CC);
 	if (err <  0)
 		return err;
 
@@ -347,6 +368,9 @@ int snd_tplg_add_object(snd_tplg_t *tplg, snd_tplg_obj_template_t *t)
 		return tplg_add_graph_object(tplg, t);
 	case SND_TPLG_TYPE_PCM:
 		return tplg_add_pcm_object(tplg, t);
+	case SND_TPLG_TYPE_DAI:
+		return tplg_add_dai_object(tplg, t);
+	case SND_TPLG_TYPE_LINK:
 	case SND_TPLG_TYPE_BE:
 	case SND_TPLG_TYPE_CC:
 		return tplg_add_link_object(tplg, t);
@@ -440,6 +464,7 @@ snd_tplg_t *snd_tplg_new(void)
 	INIT_LIST_HEAD(&tplg->tlv_list);
 	INIT_LIST_HEAD(&tplg->widget_list);
 	INIT_LIST_HEAD(&tplg->pcm_list);
+	INIT_LIST_HEAD(&tplg->dai_list);
 	INIT_LIST_HEAD(&tplg->be_list);
 	INIT_LIST_HEAD(&tplg->cc_list);
 	INIT_LIST_HEAD(&tplg->route_list);
@@ -453,6 +478,7 @@ snd_tplg_t *snd_tplg_new(void)
 	INIT_LIST_HEAD(&tplg->bytes_ext_list);
 	INIT_LIST_HEAD(&tplg->token_list);
 	INIT_LIST_HEAD(&tplg->tuple_list);
+	INIT_LIST_HEAD(&tplg->hw_cfg_list);
 
 	return tplg;
 }
@@ -465,6 +491,7 @@ void snd_tplg_free(snd_tplg_t *tplg)
 	tplg_elem_free_list(&tplg->tlv_list);
 	tplg_elem_free_list(&tplg->widget_list);
 	tplg_elem_free_list(&tplg->pcm_list);
+	tplg_elem_free_list(&tplg->dai_list);
 	tplg_elem_free_list(&tplg->be_list);
 	tplg_elem_free_list(&tplg->cc_list);
 	tplg_elem_free_list(&tplg->route_list);
@@ -478,6 +505,7 @@ void snd_tplg_free(snd_tplg_t *tplg)
 	tplg_elem_free_list(&tplg->bytes_ext_list);
 	tplg_elem_free_list(&tplg->token_list);
 	tplg_elem_free_list(&tplg->tuple_list);
+	tplg_elem_free_list(&tplg->hw_cfg_list);
 
 	free(tplg);
 }
