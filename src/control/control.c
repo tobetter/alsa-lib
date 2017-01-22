@@ -59,27 +59,27 @@ elements included in the element set.
 When the value of member is changed, corresponding events are transferred to
 userspace applications. The applications should subscribe any events in advance.
 
-\section tlv_blob Thredshold level and arbitrary data
+\section tlv_blob Supplemental data for elements in an element set
 
-TLV feature is designed to transfer data about threshold level between a driver
-and any userspace applications. The data is for an element set.
+TLV feature is designed to transfer data in a shape of Type/Length/Value,
+between a driver and any userspace applications. The main purpose is to attach
+supplement information for elements to an element set; e.g. dB range.
 
 At first, this feature was implemented to add pre-defined data readable to
 userspace applications. Soon, it was extended to handle several operations;
 read, write and command. The original implementation remains as the read
 operation. The command operation allows drivers to have own implementations
-against requests from userspace applications. As of 2016, simple write operation
-is not supported yet.
+against requests from userspace applications.
 
 This feature was introduced to ALSA control feature in 2006, at commit
 c7a0708a2362, corresponding to a series of work for Linux kernel (42750b04c5ba
 and 8aa9b586e420).
 
-This feature can transfer arbitrary data in a shape of an array with members of
-unsigned int type, therefore it can be used to deliver quite large arbitrary
-data from userspace to in-kernel drivers via ALSA control character device.
-Focusing on this nature, some in-kernel implementations utilize this feature for
-I/O operations.
+There's no limitation about maximum size of the data, therefore it can be used
+to deliver quite large arbitrary data from userspace to in-kernel drivers via
+ALSA control character device. Focusing on this nature, as of 2016, some
+in-kernel implementations utilize this feature for I/O operations. This is
+against the original design.
 */
 
 #include <stdio.h>
@@ -912,12 +912,19 @@ static int snd_ctl_tlv_do(snd_ctl_t *ctl, int op_flag,
 }
 
 /**
- * \brief Set given data to an element as threshold level.
+ * \brief Read structured data from an element set to given buffer.
  * \param ctl A handle of backend module for control interface.
  * \param id ID of an element.
  * \param tlv An array with members of unsigned int type.
  * \param tlv_size The length of the array.
  * \return 0 on success otherwise a negative error code
+ *
+ * The format of an array of \a tlv argument is:
+ *   tlv[0]:   Type. One of SND_CTL_TLVT_XXX.
+ *   tlv[1]:   Length. The length of value in units of byte.
+ *   tlv[2..]: Value. Depending on the type.
+ *
+ * Details are described in <sound/tlv.h>.
  */
 int snd_ctl_elem_tlv_read(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 			  unsigned int *tlv, unsigned int tlv_size)
@@ -940,7 +947,7 @@ int snd_ctl_elem_tlv_read(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 }
 
 /**
- * \brief Set given data to an element as threshold level.
+ * \brief Write structured data from given buffer to an element set.
  * \param ctl A handle of backend module for control interface.
  * \param id ID of an element.
  * \param tlv An array with members of unsigned int type. The second member
@@ -948,6 +955,13 @@ int snd_ctl_elem_tlv_read(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
  * \retval 0 on success
  * \retval >0 on success when value was changed
  * \retval <0 a negative error code
+ *
+ * The format of an array of \a tlv argument is:
+ *   tlv[0]:   Type. One of SND_CTL_TLVT_XXX.
+ *   tlv[1]:   Length. The length of value in units of byte.
+ *   tlv[2..]: Value. Depending on the type.
+ *
+ * Details are described in <sound/tlv.h>.
  */
 int snd_ctl_elem_tlv_write(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 			   const unsigned int *tlv)
@@ -957,7 +971,7 @@ int snd_ctl_elem_tlv_write(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 }
 
 /**
- * \brief Set given data to an element as threshold level.
+ * \brief Process structured data from given buffer for an element set.
  * \param ctl A handle of backend module for control interface.
  * \param id ID of an element.
  * \param tlv An array with members of unsigned int type. The second member
@@ -965,6 +979,13 @@ int snd_ctl_elem_tlv_write(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
  * \retval 0 on success
  * \retval >0 on success when value was changed
  * \retval <0 a negative error code
+ *
+ * The format of an array of \a tlv argument is:
+ *   tlv[0]:   Type. One of SND_CTL_TLVT_XXX.
+ *   tlv[1]:   Length. The length of value in units of byte.
+ *   tlv[2..]: Value. Depending on the type.
+ *
+ * Details are described in <sound/tlv.h>.
  */
 int snd_ctl_elem_tlv_command(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
 			     const unsigned int *tlv)

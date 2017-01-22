@@ -111,6 +111,9 @@ struct tplg_elem *tplg_elem_lookup(struct list_head *base, const char* id,
 	struct list_head *pos;
 	struct tplg_elem *elem;
 
+	if (!base || !id)
+		return NULL;
+
 	list_for_each(pos, base) {
 
 		elem = list_entry(pos, struct tplg_elem, list);
@@ -156,6 +159,7 @@ struct tplg_elem* tplg_elem_new_common(snd_tplg_t *tplg,
 		break;
 	case SND_TPLG_TYPE_TEXT:
 		list_add_tail(&elem->list, &tplg->text_list);
+		obj_size = sizeof(struct tplg_texts);
 		break;
 	case SND_TPLG_TYPE_TLV:
 		list_add_tail(&elem->list, &tplg->tlv_list);
@@ -189,7 +193,12 @@ struct tplg_elem* tplg_elem_new_common(snd_tplg_t *tplg,
 		list_add_tail(&elem->list, &tplg->pcm_list);
 		obj_size = sizeof(struct snd_soc_tplg_pcm);
 		break;
+	case SND_TPLG_TYPE_DAI:
+		list_add_tail(&elem->list, &tplg->dai_list);
+		obj_size = sizeof(struct snd_soc_tplg_dai);
+		break;
 	case SND_TPLG_TYPE_BE:
+	case SND_TPLG_TYPE_LINK:
 		list_add_tail(&elem->list, &tplg->be_list);
 		obj_size = sizeof(struct snd_soc_tplg_link_config);
 		break;
@@ -203,6 +212,10 @@ struct tplg_elem* tplg_elem_new_common(snd_tplg_t *tplg,
 	case SND_TPLG_TYPE_TUPLE:
 		list_add_tail(&elem->list, &tplg->tuple_list);
 		elem->free = tplg_free_tuples;
+		break;
+	case SND_TPLG_TYPE_HW_CONFIG:
+		list_add_tail(&elem->list, &tplg->hw_cfg_list);
+		obj_size = sizeof(struct snd_soc_tplg_hw_config);
 		break;
 	default:
 		free(elem);

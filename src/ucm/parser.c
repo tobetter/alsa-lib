@@ -36,6 +36,25 @@
 /** The name of the environment variable containing the UCM directory */
 #define ALSA_CONFIG_UCM_VAR "ALSA_CONFIG_UCM"
 
+/* Directories to store UCM configuration files for components, like
+ * off-soc codecs or embedded DSPs. Components can define their own
+ * devices and sequences, to be reused by sound cards/machines. UCM
+ * manager should not scan these component directories.
+ * Machine use case files can include component configratuation files
+ * via alsaconf syntax:
+ * <searchdir:component-directory-name> and <component-conf-file-name>.
+ * Alsaconf will import the included files automatically. After including
+ * a component file, a machine device's sequence can enable or disable
+ * a component device via syntax:
+ * enadev "component_device_name"
+ * disdev "component_device_name"
+ */
+static const char * const component_dir[] = {
+	"codecs",	/* for off-soc codecs */
+	"dsps",		/* for DSPs embedded in SoC */
+	NULL,		/* terminator */
+};
+
 static int parse_sequence(snd_use_case_mgr_t *uc_mgr,
 			  struct list_head *base,
 			  snd_config_t *cfg);
@@ -235,6 +254,82 @@ static int parse_device_list(snd_use_case_mgr_t *uc_mgr ATTRIBUTE_UNUSED,
 	return 0;
 }
 
+/* Find a component device by its name, and remove it from machine device
+ * list.
+ *
+ * Component devices are defined by machine components (usually off-soc
+ * codes or DSP embeded in SoC). Since alsaconf imports their configuration
+ * files automatically, we don't know which devices are component devices
+ * until they are referenced by a machine device sequence. So here when we
+ * find a referenced device, we move it from the machine device list to the
+ * component device list. Component devices will not be exposed to applications
+ * by the original API to list devices for backward compatibility. So sound
+ * servers can only see the machine devices.
+ */
+struct use_case_device *find_component_dev(snd_use_case_mgr_t *uc_mgr,
+	const char *name)
+{
+	struct list_head *pos, *posdev, *_posdev;
+	struct use_case_verb *verb;
+	struct use_case_device *dev;
+
+	list_for_each(pos, &uc_mgr->verb_list) {
+		verb = list_entry(pos, struct use_case_verb, list);
+
+		/* search in the component device list */
+		list_for_each(posdev, &verb->cmpt_device_list) {
+			dev = list_entry(posdev, struct use_case_device, list);
+			if (!strcmp(dev->name, name))
+				return dev;
+		}
+
+		/* search the machine device list */
+		list_for_each_safe(posdev, _posdev, &verb->device_list) {
+			dev = list_entry(posdev, struct use_case_device, list);
+			if (!strcmp(dev->name, name)) {
+				/* find the component device, move it from the
+				 * machine device list to the component device
+				 * list.
+				 */
+				list_del(&dev->list);
+				list_add_tail(&dev->list,
+					      &verb->cmpt_device_list);
+				return dev;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+/* parse sequence of a component device
+ *
+ * This function will find the component device and mark if its enable or
+ * disable sequence is needed by its parenet device.
+ */
+static int parse_component_seq(snd_use_case_mgr_t *uc_mgr,
+			  snd_config_t *n, int enable,
+			  struct component_sequence *cmpt_seq)
+{
+	const char *val;
+	int err;
+
+	err = snd_config_get_string(n, &val);
+	if (err < 0)
+		return err;
+
+	cmpt_seq->device = find_component_dev(uc_mgr, val);
+	if (!cmpt_seq->device) {
+		uc_error("error: Cannot find component device %s", val);
+		return -EINVAL;
+	}
+
+	/* Parent needs its enable or disable sequence */
+	cmpt_seq->enable = enable;
+
+	return 0;
+}
+
 /*
  * Parse sequences.
  *
@@ -244,12 +339,16 @@ static int parse_device_list(snd_use_case_mgr_t *uc_mgr ATTRIBUTE_UNUSED,
  * cset "element_id_syntax value_syntax"
  * usleep time
  * exec "any unix command with arguments"
+ * enadev "component device name"
+ * disdev "component device name"
  *
  * e.g.
  *	cset "name='Master Playback Switch' 0,0"
  *      cset "iface=PCM,name='Disable HDMI',index=1 0"
+ *	enadev "rt286:Headphones"
+ *	disdev "rt286:Speaker"
  */
-static int parse_sequence(snd_use_case_mgr_t *uc_mgr ATTRIBUTE_UNUSED,
+static int parse_sequence(snd_use_case_mgr_t *uc_mgr,
 			  struct list_head *base,
 			  snd_config_t *cfg)
 {
@@ -301,6 +400,30 @@ static int parse_sequence(snd_use_case_mgr_t *uc_mgr ATTRIBUTE_UNUSED,
 			err = parse_string(n, &curr->data.cset);
 			if (err < 0) {
 				uc_error("error: cset requires a string!");
+				return err;
+			}
+			continue;
+		}
+
+		if (strcmp(cmd, "enadev") == 0) {
+			/* need to enable a component device */
+			curr->type = SEQUENCE_ELEMENT_TYPE_CMPT_SEQ;
+			err = parse_component_seq(uc_mgr, n, 1,
+						&curr->data.cmpt_seq);
+			if (err < 0) {
+				uc_error("error: enadev requires a valid device!");
+				return err;
+			}
+			continue;
+		}
+
+		if (strcmp(cmd, "disdev") == 0) {
+			/* need to disable a component device */
+			curr->type = SEQUENCE_ELEMENT_TYPE_CMPT_SEQ;
+			err = parse_component_seq(uc_mgr, n, 0,
+						&curr->data.cmpt_seq);
+			if (err < 0) {
+				uc_error("error: disdev requires a valid device!");
 				return err;
 			}
 			continue;
@@ -938,6 +1061,7 @@ static int parse_verb_file(snd_use_case_mgr_t *uc_mgr,
 	INIT_LIST_HEAD(&verb->disable_list);
 	INIT_LIST_HEAD(&verb->transition_list);
 	INIT_LIST_HEAD(&verb->device_list);
+	INIT_LIST_HEAD(&verb->cmpt_device_list);
 	INIT_LIST_HEAD(&verb->modifier_list);
 	INIT_LIST_HEAD(&verb->value_list);
 	list_add_tail(&verb->list, &uc_mgr->verb_list);
@@ -1259,7 +1383,28 @@ static int filename_filter(const struct dirent *dirent)
 	return 0;
 }
 
-/* scan all cards and comments */
+/* whether input dir is a predefined component directory */
+static int is_component_directory(const char *dir)
+{
+	int i = 0;
+
+	while (component_dir[i]) {
+		if (!strncmp(dir, component_dir[i], PATH_MAX))
+			return 1;
+		i++;
+	};
+
+	return 0;
+}
+
+/* scan all cards and comments
+ *
+ * Cards are defined by machines. Each card/machine installs its UCM
+ * configuration files in a subdirectory with the same name as the sound
+ * card under /usr/share/alsa/ucm. This function will scan all the card
+ * directories and skip the component directories defined in the array
+ * component_dir.
+ */
 int uc_mgr_scan_master_configs(const char **_list[])
 {
 	char filename[MAX_FILE], dfl[MAX_FILE];
@@ -1309,6 +1454,11 @@ int uc_mgr_scan_master_configs(const char **_list[])
 	}
 
 	for (i = 0; i < cnt; i++) {
+
+		/* Skip the directories for component devices */
+		if (is_component_directory(namelist[i]->d_name))
+			continue;
+
 		err = load_master_config(namelist[i]->d_name, &cfg);
 		if (err < 0)
 			goto __err;

@@ -49,11 +49,18 @@
 #define SEQUENCE_ELEMENT_TYPE_EXEC	4
 #define SEQUENCE_ELEMENT_TYPE_CSET_BIN_FILE	5
 #define SEQUENCE_ELEMENT_TYPE_CSET_TLV	6
+#define SEQUENCE_ELEMENT_TYPE_CMPT_SEQ	7
 
 struct ucm_value {
         struct list_head list;
         char *name;
         char *data;
+};
+
+/* sequence of a component device */
+struct component_sequence {
+	struct use_case_device *device; /* component device */
+	int enable; /* flag to choose enable or disable list of the device */
 };
 
 struct sequence_element {
@@ -64,6 +71,7 @@ struct sequence_element {
 		char *cdev;
 		char *cset;
 		char *exec;
+		struct component_sequence cmpt_seq; /* component sequence */
 	} data;
 };
 
@@ -167,6 +175,9 @@ struct use_case_verb {
 	/* hardware devices that can be used with this use case */
 	struct list_head device_list;
 
+	/* component device list */
+	struct list_head cmpt_device_list;
+
 	/* modifiers that can be used with this use case */
 	struct list_head modifier_list;
 
@@ -201,6 +212,14 @@ struct snd_use_case_mgr {
 	/* change to list of ctl handles */
 	snd_ctl_t *ctl;
 	char *ctl_dev;
+
+	/* Components don't define cdev, the card device. When executing
+	 * a sequence of a component device, ucm manager enters component
+	 * domain and needs to provide cdev to the component. This cdev
+	 * should be defined by the machine, parent of the component.
+	 */
+	int in_component_domain;
+	char *cdev;
 };
 
 #define uc_error SNDERR

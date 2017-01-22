@@ -35,6 +35,7 @@ am__make_dryrun = \
   }
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
+pkglibdir = $(libdir)/@PACKAGE@
 pkglibexecdir = $(libexecdir)/@PACKAGE@
 am__cd = CDPATH="$${ZSH_VERSION+.}$(PATH_SEPARATOR)" && cd
 install_sh_DATA = $(install_sh) -c -m 644
@@ -50,9 +51,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@BUILD_PYTHON_TRUE@am__append_1 = smixer-python.la
 subdir = modules/mixer/simple
-DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
+DIST_COMMON = $(am__noinst_HEADERS_DIST) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(top_srcdir)/depcomp
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
@@ -92,8 +92,10 @@ am__uninstall_files_from_dir = { \
   }
 am__installdirs = "$(DESTDIR)$(pkglibdir)"
 LTLIBRARIES = $(pkglib_LTLIBRARIES)
-smixer_ac97_la_DEPENDENCIES = ../../../src/libasound.la
-am_smixer_ac97_la_OBJECTS = ac97.lo sbasedl.lo
+@BUILD_PYTHON_TRUE@smixer_ac97_la_DEPENDENCIES =  \
+@BUILD_PYTHON_TRUE@	../../../src/libasound.la
+am__smixer_ac97_la_SOURCES_DIST = ac97.c sbasedl.c
+@BUILD_PYTHON_TRUE@am_smixer_ac97_la_OBJECTS = ac97.lo sbasedl.lo
 smixer_ac97_la_OBJECTS = $(am_smixer_ac97_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -103,12 +105,16 @@ smixer_ac97_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(smixer_ac97_la_LDFLAGS) $(LDFLAGS) -o \
 	$@
-smixer_hda_la_DEPENDENCIES = ../../../src/libasound.la
-am_smixer_hda_la_OBJECTS = hda.lo sbasedl.lo
+@BUILD_PYTHON_TRUE@am_smixer_ac97_la_rpath = -rpath $(pkglibdir)
+@BUILD_PYTHON_TRUE@smixer_hda_la_DEPENDENCIES =  \
+@BUILD_PYTHON_TRUE@	../../../src/libasound.la
+am__smixer_hda_la_SOURCES_DIST = hda.c sbasedl.c
+@BUILD_PYTHON_TRUE@am_smixer_hda_la_OBJECTS = hda.lo sbasedl.lo
 smixer_hda_la_OBJECTS = $(am_smixer_hda_la_OBJECTS)
 smixer_hda_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(smixer_hda_la_LDFLAGS) $(LDFLAGS) -o $@
+@BUILD_PYTHON_TRUE@am_smixer_hda_la_rpath = -rpath $(pkglibdir)
 am__DEPENDENCIES_1 =
 @BUILD_PYTHON_TRUE@smixer_python_la_DEPENDENCIES =  \
 @BUILD_PYTHON_TRUE@	../../../src/libasound.la \
@@ -122,13 +128,16 @@ smixer_python_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(smixer_python_la_CFLAGS) $(CFLAGS) \
 	$(smixer_python_la_LDFLAGS) $(LDFLAGS) -o $@
 @BUILD_PYTHON_TRUE@am_smixer_python_la_rpath = -rpath $(pkglibdir)
-smixer_sbase_la_DEPENDENCIES = ../../../src/libasound.la
-am_smixer_sbase_la_OBJECTS = sbase.lo
+@BUILD_PYTHON_TRUE@smixer_sbase_la_DEPENDENCIES =  \
+@BUILD_PYTHON_TRUE@	../../../src/libasound.la
+am__smixer_sbase_la_SOURCES_DIST = sbase.c
+@BUILD_PYTHON_TRUE@am_smixer_sbase_la_OBJECTS = sbase.lo
 smixer_sbase_la_OBJECTS = $(am_smixer_sbase_la_OBJECTS)
 smixer_sbase_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(smixer_sbase_la_LDFLAGS) $(LDFLAGS) \
 	-o $@
+@BUILD_PYTHON_TRUE@am_smixer_sbase_la_rpath = -rpath $(pkglibdir)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -165,19 +174,21 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(smixer_ac97_la_SOURCES) $(smixer_hda_la_SOURCES) \
 	$(smixer_python_la_SOURCES) $(smixer_sbase_la_SOURCES)
-DIST_SOURCES = $(smixer_ac97_la_SOURCES) $(smixer_hda_la_SOURCES) \
+DIST_SOURCES = $(am__smixer_ac97_la_SOURCES_DIST) \
+	$(am__smixer_hda_la_SOURCES_DIST) \
 	$(am__smixer_python_la_SOURCES_DIST) \
-	$(smixer_sbase_la_SOURCES)
+	$(am__smixer_sbase_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+am__noinst_HEADERS_DIST = sbase.h
 HEADERS = $(noinst_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-pkglibdir = $(alsaplugindir)/smixer
+@BUILD_PYTHON_TRUE@pkglibdir = $(alsaplugindir)/smixer
 ACLOCAL = @ACLOCAL@
 ALSA_CONFIG_DIR = @ALSA_CONFIG_DIR@
 ALSA_DEPLIBS = @ALSA_DEPLIBS@
@@ -306,21 +317,21 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-alsaplugindir = @ALSA_PLUGIN_DIR@
-AM_CFLAGS = -g -O2 -W -Wall
-AM_CPPFLAGS = -I$(top_srcdir)/include
-pkglib_LTLIBRARIES = smixer-sbase.la smixer-ac97.la smixer-hda.la \
-	$(am__append_1)
-noinst_HEADERS = sbase.h
-smixer_sbase_la_SOURCES = sbase.c
-smixer_sbase_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
-smixer_sbase_la_LIBADD = ../../../src/libasound.la
-smixer_ac97_la_SOURCES = ac97.c sbasedl.c
-smixer_ac97_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
-smixer_ac97_la_LIBADD = ../../../src/libasound.la -ldl
-smixer_hda_la_SOURCES = hda.c sbasedl.c
-smixer_hda_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
-smixer_hda_la_LIBADD = ../../../src/libasound.la -ldl
+@BUILD_PYTHON_TRUE@alsaplugindir = @ALSA_PLUGIN_DIR@
+@BUILD_PYTHON_TRUE@AM_CFLAGS = -g -O2 -W -Wall
+@BUILD_PYTHON_TRUE@AM_CPPFLAGS = -I$(top_srcdir)/include
+@BUILD_PYTHON_TRUE@pkglib_LTLIBRARIES = smixer-sbase.la smixer-ac97.la \
+@BUILD_PYTHON_TRUE@	smixer-hda.la smixer-python.la
+@BUILD_PYTHON_TRUE@noinst_HEADERS = sbase.h
+@BUILD_PYTHON_TRUE@smixer_sbase_la_SOURCES = sbase.c
+@BUILD_PYTHON_TRUE@smixer_sbase_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
+@BUILD_PYTHON_TRUE@smixer_sbase_la_LIBADD = ../../../src/libasound.la
+@BUILD_PYTHON_TRUE@smixer_ac97_la_SOURCES = ac97.c sbasedl.c
+@BUILD_PYTHON_TRUE@smixer_ac97_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
+@BUILD_PYTHON_TRUE@smixer_ac97_la_LIBADD = ../../../src/libasound.la -ldl
+@BUILD_PYTHON_TRUE@smixer_hda_la_SOURCES = hda.c sbasedl.c
+@BUILD_PYTHON_TRUE@smixer_hda_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
+@BUILD_PYTHON_TRUE@smixer_hda_la_LIBADD = ../../../src/libasound.la -ldl
 @BUILD_PYTHON_TRUE@smixer_python_la_SOURCES = python.c
 @BUILD_PYTHON_TRUE@smixer_python_la_LDFLAGS = -module -avoid-version $(LDFLAGS_NOUNDEFINED)
 @BUILD_PYTHON_TRUE@smixer_python_la_CFLAGS = $(PYTHON_INCLUDES)
@@ -394,13 +405,13 @@ clean-pkglibLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 smixer-ac97.la: $(smixer_ac97_la_OBJECTS) $(smixer_ac97_la_DEPENDENCIES) $(EXTRA_smixer_ac97_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(smixer_ac97_la_LINK) -rpath $(pkglibdir) $(smixer_ac97_la_OBJECTS) $(smixer_ac97_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(smixer_ac97_la_LINK) $(am_smixer_ac97_la_rpath) $(smixer_ac97_la_OBJECTS) $(smixer_ac97_la_LIBADD) $(LIBS)
 smixer-hda.la: $(smixer_hda_la_OBJECTS) $(smixer_hda_la_DEPENDENCIES) $(EXTRA_smixer_hda_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(smixer_hda_la_LINK) -rpath $(pkglibdir) $(smixer_hda_la_OBJECTS) $(smixer_hda_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(smixer_hda_la_LINK) $(am_smixer_hda_la_rpath) $(smixer_hda_la_OBJECTS) $(smixer_hda_la_LIBADD) $(LIBS)
 smixer-python.la: $(smixer_python_la_OBJECTS) $(smixer_python_la_DEPENDENCIES) $(EXTRA_smixer_python_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(smixer_python_la_LINK) $(am_smixer_python_la_rpath) $(smixer_python_la_OBJECTS) $(smixer_python_la_LIBADD) $(LIBS)
 smixer-sbase.la: $(smixer_sbase_la_OBJECTS) $(smixer_sbase_la_DEPENDENCIES) $(EXTRA_smixer_sbase_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(smixer_sbase_la_LINK) -rpath $(pkglibdir) $(smixer_sbase_la_OBJECTS) $(smixer_sbase_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(smixer_sbase_la_LINK) $(am_smixer_sbase_la_rpath) $(smixer_sbase_la_OBJECTS) $(smixer_sbase_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)

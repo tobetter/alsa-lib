@@ -260,8 +260,9 @@ If you like to use the compatibility functions in mmap mode, there are
 read / write routines equaling to standard read / write transfers. Using
 these functions discards the benefits of direct access to memory region.
 See the #snd_pcm_mmap_readi(),
-#snd_pcm_writei(), #snd_pcm_readn()
-and #snd_pcm_writen() functions.
+#snd_pcm_mmap_writei(), #snd_pcm_mmap_readn()
+and #snd_pcm_mmap_writen() functions. These functions use
+#snd_pcm_areas_copy() internally.
 
 \section pcm_errors Error codes
 
@@ -654,6 +655,23 @@ playback devices.
 #include <sys/mman.h>
 #include <limits.h>
 #include "pcm_local.h"
+
+#ifndef DOC_HIDDEN
+#define P_STATE(x)	(1U << SND_PCM_STATE_ ## x)
+#define P_STATE_RUNNABLE (P_STATE(PREPARED) | \
+			  P_STATE(RUNNING) | \
+			  P_STATE(XRUN) | \
+			  P_STATE(PAUSED) | \
+			  P_STATE(DRAINING))
+
+/* check whether the PCM is in the unexpected state */
+static int bad_pcm_state(snd_pcm_t *pcm, unsigned int supported_states)
+{
+	if (pcm->own_state_check)
+		return 0; /* don't care, the plugin checks by itself */
+	return !(supported_states & (1U << snd_pcm_state(pcm)));
+}
+#endif
 
 /**
  * \brief get identifier of PCM handle
@@ -1120,6 +1138,8 @@ int snd_pcm_prepare(snd_pcm_t *pcm)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, ~P_STATE(DISCONNECTED)))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	err = pcm->fast_ops->prepare(pcm->fast_op_arg);
 	snd_pcm_unlock(pcm);
@@ -1166,6 +1186,8 @@ int snd_pcm_start(snd_pcm_t *pcm)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, P_STATE(PREPARED)))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	err = __snd_pcm_start(pcm);
 	snd_pcm_unlock(pcm);
@@ -1194,6 +1216,9 @@ int snd_pcm_drop(snd_pcm_t *pcm)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE | P_STATE(SETUP) |
+			     P_STATE(SUSPENDED)))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	err = pcm->fast_ops->drop(pcm->fast_op_arg);
 	snd_pcm_unlock(pcm);
@@ -1222,6 +1247,8 @@ int snd_pcm_drain(snd_pcm_t *pcm)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	/* lock handled in the callback */
 	return pcm->fast_ops->drain(pcm->fast_op_arg);
 }
@@ -1247,6 +1274,8 @@ int snd_pcm_pause(snd_pcm_t *pcm, int enable)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	err = pcm->fast_ops->pause(pcm->fast_op_arg, enable);
 	snd_pcm_unlock(pcm);
@@ -1273,6 +1302,8 @@ snd_pcm_sframes_t snd_pcm_rewindable(snd_pcm_t *pcm)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	result = pcm->fast_ops->rewindable(pcm->fast_op_arg);
 	snd_pcm_unlock(pcm);
@@ -1299,6 +1330,8 @@ snd_pcm_sframes_t snd_pcm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 	}
 	if (frames == 0)
 		return 0;
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	result = pcm->fast_ops->rewind(pcm->fast_op_arg, frames);
 	snd_pcm_unlock(pcm);
@@ -1325,6 +1358,8 @@ snd_pcm_sframes_t snd_pcm_forwardable(snd_pcm_t *pcm)
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	result = pcm->fast_ops->forwardable(pcm->fast_op_arg);
 	snd_pcm_unlock(pcm);
@@ -1355,6 +1390,8 @@ snd_pcm_sframes_t snd_pcm_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 	}
 	if (frames == 0)
 		return 0;
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	result = pcm->fast_ops->forward(pcm->fast_op_arg, frames);
 	snd_pcm_unlock(pcm);
@@ -1393,6 +1430,8 @@ snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_ufr
 		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
 		return -EINVAL;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	return _snd_pcm_writei(pcm, buffer, size);
 }
 
@@ -1427,6 +1466,8 @@ snd_pcm_sframes_t snd_pcm_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t 
 		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
 		return -EINVAL;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	return _snd_pcm_writen(pcm, bufs, size);
 }
 
@@ -1461,6 +1502,8 @@ snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t 
 		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
 		return -EINVAL;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	return _snd_pcm_readi(pcm, buffer, size);
 }
 
@@ -1495,6 +1538,8 @@ snd_pcm_sframes_t snd_pcm_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t s
 		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
 		return -EINVAL;
 	}
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	return _snd_pcm_readn(pcm, bufs, size);
 }
 
@@ -2545,14 +2590,20 @@ int snd_pcm_new(snd_pcm_t **pcmp, snd_pcm_type_t type, const char *name,
 	INIT_LIST_HEAD(&pcm->async_handlers);
 #ifdef THREAD_SAFE_API
 	pthread_mutex_init(&pcm->lock, NULL);
+	/* use locking as default;
+	 * each plugin may suppress this in its open call
+	 */
+	pcm->need_lock = 1;
 	{
-		static int default_thread_safe = -1;
-		if (default_thread_safe < 0) {
+		/* set lock_enabled field depending on $LIBASOUND_THREAD_SAFE */
+		static int do_lock_enable = -1; /* uninitialized */
+
+		/* evaluate env var only once at the first open for consistency */
+		if (do_lock_enable == -1) {
 			char *p = getenv("LIBASOUND_THREAD_SAFE");
-			default_thread_safe = !p || *p != '0';
+			do_lock_enable = !p || *p != '0';
 		}
-		if (!default_thread_safe)
-			pcm->thread_safe = -1; /* force to disable */
+		pcm->lock_enabled = do_lock_enable;
 	}
 #endif
 	*pcmp = pcm;
@@ -6932,6 +6983,8 @@ int snd_pcm_mmap_begin(snd_pcm_t *pcm,
 {
 	int err;
 
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	err = __snd_pcm_mmap_begin(pcm, areas, offset, frames);
 	snd_pcm_unlock(pcm);
@@ -7027,6 +7080,8 @@ snd_pcm_sframes_t snd_pcm_mmap_commit(snd_pcm_t *pcm,
 {
 	snd_pcm_sframes_t result;
 
+	if (bad_pcm_state(pcm, P_STATE_RUNNABLE))
+		return -EBADFD;
 	snd_pcm_lock(pcm);
 	result = __snd_pcm_mmap_commit(pcm, offset, frames);
 	snd_pcm_unlock(pcm);
