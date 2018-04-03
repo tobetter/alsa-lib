@@ -1,5 +1,5 @@
 /**
- * \file <alsa/hwdep.h>
+ * \file include/hwdep.h
  * \brief Application interface library for the ALSA driver
  * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
@@ -7,8 +7,8 @@
  * \date 1998-2001
  *
  * Application interface library for the ALSA driver
- *
- *
+ */
+/*
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -65,8 +65,11 @@ typedef enum _snd_hwdep_iface {
 	SND_HWDEP_IFACE_USX2Y,		/**< Tascam US122, US224 & US428 usb */
 	SND_HWDEP_IFACE_EMUX_WAVETABLE,	/**< EmuX wavetable */
 	SND_HWDEP_IFACE_BLUETOOTH,	/**< Bluetooth audio */
+	SND_HWDEP_IFACE_USX2Y_PCM,	/**< Tascam US122, US224 & US428 raw USB PCM */
+	SND_HWDEP_IFACE_PCXHR,		/**< Digigram PCXHR */
+	SND_HWDEP_IFACE_SB_RC,		/**< SB Extigy/Audigy2NX remote control */
                 
-	SND_HWDEP_IFACE_LAST = SND_HWDEP_IFACE_BLUETOOTH  /**< last know hwdep interface */
+	SND_HWDEP_IFACE_LAST = SND_HWDEP_IFACE_SB_RC  /**< last known hwdep interface */
 } snd_hwdep_iface_t;
 
 /** open for reading */

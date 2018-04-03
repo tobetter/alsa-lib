@@ -21,6 +21,47 @@
   
 #include "pcm_local.h"
 
+#ifndef NDEBUG
+/*
+ * dump hw_params when $LIBASOUND_DEBUG is set to >= 1
+ */
+static void dump_hw_params(snd_pcm_hw_params_t *params, const char *type,
+			   snd_pcm_hw_param_t var, unsigned int val, int err)
+{
+	const char *verbose = getenv("LIBASOUND_DEBUG");
+	snd_output_t *out;
+
+	if (! verbose || ! *verbose || atoi(verbose) < 1)
+		return;
+	if (snd_output_stdio_attach(&out, stderr, 0) < 0)
+		return;
+	fprintf(stderr, "ALSA ERROR hw_params: %s (%s)\n",
+		type, snd_pcm_hw_param_name(var));
+	fprintf(stderr, "           value = ");
+	switch (var) {
+	case SND_PCM_HW_PARAM_ACCESS:
+		fprintf(stderr, "%s", snd_pcm_access_name(val));
+		break;
+	case SND_PCM_HW_PARAM_FORMAT:
+		fprintf(stderr, "%s", snd_pcm_format_name(val));
+		break;
+	case SND_PCM_HW_PARAM_SUBFORMAT:
+		fprintf(stderr, "%s", snd_pcm_subformat_name(val));
+		break;
+	default:
+		fprintf(stderr, "%u", val);
+	}
+	fprintf(stderr, " : %s\n", snd_strerror(err));
+	snd_pcm_hw_params_dump(params, out);
+	snd_output_close(out);
+}
+#else
+static inline void dump_hw_params(snd_pcm_hw_params_t *params, const char *type,
+				  snd_pcm_hw_param_t var, unsigned int val, int err)
+{
+}
+#endif
+
 static inline int hw_is_mask(snd_pcm_hw_param_t var)
 {
 #if SND_PCM_HW_PARAM_FIRST_MASK == 0
@@ -438,6 +479,8 @@ int snd_pcm_hw_param_set_min(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
  _fail:
 	if (mode == SND_TRY)
 		*params = save;
+	if (err < 0 && mode == SND_TRY)
+		dump_hw_params(params, "set_min", var, *val, err);
 	return err;
 }
 
@@ -513,6 +556,8 @@ int snd_pcm_hw_param_set_max(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
  _fail:
 	if (mode == SND_TRY)
 		*params = save;
+	if (err < 0 && mode == SND_TRY)
+		dump_hw_params(params, "set_max", var, *val, err);
 	return err;
 }
 
@@ -625,6 +670,8 @@ int snd_pcm_hw_param_set_minmax(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
  _fail:
 	if (mode == SND_TRY)
 		*params = save;
+	if (err < 0)
+		dump_hw_params(params, "set_minmax", var, *min, err);
 	return err;
 }
 
@@ -713,6 +760,8 @@ int snd_pcm_hw_param_set(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
  _fail:
 	if (mode == SND_TRY)
 		*params = save;
+	if (err < 0 && mode == SND_TRY)
+		dump_hw_params(params, "set", var, val, err);
 	return err;
 }
 
@@ -807,8 +856,12 @@ int snd_pcm_hw_param_set_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
 	err = snd_pcm_hw_param_set_min(pcm, params, SND_CHANGE, var, &min, &mindir);
 
 	i = hw_param_interval(params, var);
-	if (!snd_interval_empty(i) && snd_interval_single(i))
-		return snd_pcm_hw_param_get_min(params, var, val, dir);
+	if (!snd_interval_empty(i) && snd_interval_single(i)) {
+		err = snd_pcm_hw_param_get_min(params, var, val, dir);
+		if (err < 0)
+			dump_hw_params(params, "set_near", var, *val, err);
+		return err;
+	}
 	
 	if (err >= 0) {
 		snd_pcm_hw_params_t params1;
@@ -827,8 +880,10 @@ int snd_pcm_hw_param_set_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
 	} else {
 		*params = save;
 		err = snd_pcm_hw_param_set_max(pcm, params, SND_CHANGE, var, &max, &maxdir);
-		if (err < 0)
+		if (err < 0) {
+			dump_hw_params(params, "set_near", var, *val, err);
 			return err;
+		}
 		last = 1;
 	}
  _end:
@@ -836,6 +891,8 @@ int snd_pcm_hw_param_set_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
 		err = snd_pcm_hw_param_set_last(pcm, params, var, val, dir);
 	else
 		err = snd_pcm_hw_param_set_first(pcm, params, var, val, dir);
+	if (err < 0)
+		dump_hw_params(params, "set_near", var, *val, err);
 	return err;
 }
 
@@ -2061,6 +2118,7 @@ int _snd_pcm_hw_params_refine(snd_pcm_hw_params_t *params,
 		if (changed < 0)
 			err = changed;
 	}
+	params->info &= src->info;
 	return err;
 }
 
@@ -2281,6 +2339,7 @@ int _snd_pcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 	}
 	pcm->min_align = min_align;
 	
+	pcm->hw_flags = params->flags;
 	pcm->info = params->info;
 	pcm->msbits = params->msbits;
 	pcm->rate_num = params->rate_num;

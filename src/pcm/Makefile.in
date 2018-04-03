@@ -148,23 +148,28 @@ target_cpu = @target_cpu@
 target_os = @target_os@
 target_vendor = @target_vendor@
 SUBDIRS = 
-DIST_SUBDIRS = ext scopes
+DIST_SUBDIRS = scopes
 
 EXTRA_LTLIBRARIES = libpcm.la
 
 libpcm_la_SOURCES = atomic.c mask.c interval.c \
 		    pcm.c pcm_params.c pcm_simple.c \
-		    pcm_hw.c pcm_plugin.c pcm_copy.c pcm_linear.c \
+		    pcm_hw.c pcm_generic.c pcm_plugin.c pcm_copy.c pcm_linear.c \
 		    pcm_route.c pcm_mulaw.c pcm_alaw.c pcm_adpcm.c \
 		    pcm_rate.c pcm_plug.c pcm_misc.c pcm_mmap.c pcm_multi.c \
 	            pcm_shm.c pcm_file.c pcm_null.c pcm_share.c \
 		    pcm_meter.c pcm_hooks.c pcm_lfloat.c pcm_ladspa.c \
 		    pcm_direct.c pcm_dmix.c pcm_dsnoop.c pcm_dshare.c \
-		    pcm_asym.c pcm_iec958.c pcm_softvol.c pcm_symbols.c
+		    pcm_asym.c pcm_iec958.c pcm_softvol.c pcm_symbols.c \
+		    pcm_ioplug.c pcm_extplug.c
+
+
+EXTRA_DIST = pcm_dmix_i386.c pcm_dmix_x86_64.c pcm_dmix_generic.c
 
 noinst_HEADERS = pcm_local.h pcm_plugin.h mask.h mask_inline.h \
 	         interval.h interval_inline.h plugin_ops.h ladspa.h \
-		 pcm_direct.h pcm_dmix_i386.h pcm_dmix_x86_64.h
+		 pcm_direct.h pcm_dmix_i386.h pcm_dmix_x86_64.h \
+		 pcm_generic.h pcm_ext_parm.h
 
 
 alsadir = $(datadir)/alsa
@@ -178,13 +183,14 @@ CONFIG_CLEAN_FILES =
 libpcm_la_LDFLAGS =
 libpcm_la_LIBADD =
 am_libpcm_la_OBJECTS = atomic.lo mask.lo interval.lo pcm.lo \
-	pcm_params.lo pcm_simple.lo pcm_hw.lo pcm_plugin.lo pcm_copy.lo \
-	pcm_linear.lo pcm_route.lo pcm_mulaw.lo pcm_alaw.lo \
-	pcm_adpcm.lo pcm_rate.lo pcm_plug.lo pcm_misc.lo pcm_mmap.lo \
-	pcm_multi.lo pcm_shm.lo pcm_file.lo pcm_null.lo pcm_share.lo \
-	pcm_meter.lo pcm_hooks.lo pcm_lfloat.lo pcm_ladspa.lo \
-	pcm_direct.lo pcm_dmix.lo pcm_dsnoop.lo pcm_dshare.lo \
-	pcm_asym.lo pcm_iec958.lo pcm_softvol.lo pcm_symbols.lo
+	pcm_params.lo pcm_simple.lo pcm_hw.lo pcm_generic.lo \
+	pcm_plugin.lo pcm_copy.lo pcm_linear.lo pcm_route.lo \
+	pcm_mulaw.lo pcm_alaw.lo pcm_adpcm.lo pcm_rate.lo pcm_plug.lo \
+	pcm_misc.lo pcm_mmap.lo pcm_multi.lo pcm_shm.lo pcm_file.lo \
+	pcm_null.lo pcm_share.lo pcm_meter.lo pcm_hooks.lo \
+	pcm_lfloat.lo pcm_ladspa.lo pcm_direct.lo pcm_dmix.lo \
+	pcm_dsnoop.lo pcm_dshare.lo pcm_asym.lo pcm_iec958.lo \
+	pcm_softvol.lo pcm_symbols.lo pcm_ioplug.lo pcm_extplug.lo
 libpcm_la_OBJECTS = $(am_libpcm_la_OBJECTS)
 
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/include
@@ -196,9 +202,13 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_asym.Plo ./$(DEPDIR)/pcm_copy.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_direct.Plo ./$(DEPDIR)/pcm_dmix.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_dshare.Plo \
-@AMDEP_TRUE@	./$(DEPDIR)/pcm_dsnoop.Plo ./$(DEPDIR)/pcm_file.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/pcm_dsnoop.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/pcm_extplug.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/pcm_file.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/pcm_generic.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_hooks.Plo ./$(DEPDIR)/pcm_hw.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_iec958.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/pcm_ioplug.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_ladspa.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_lfloat.Plo \
 @AMDEP_TRUE@	./$(DEPDIR)/pcm_linear.Plo \
@@ -260,10 +270,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_dmix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_dshare.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_dsnoop.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_extplug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_generic.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_hooks.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_hw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_iec958.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_ioplug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_ladspa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_lfloat.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcm_linear.Plo@am__quote@

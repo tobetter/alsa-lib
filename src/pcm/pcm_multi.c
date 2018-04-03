@@ -32,6 +32,7 @@
 #include <string.h>
 #include <math.h>
 #include "pcm_local.h"
+#include "pcm_generic.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -56,6 +57,7 @@ typedef struct {
 	unsigned int slaves_count;
 	unsigned int master_slave;
 	snd_pcm_multi_slave_t *slaves;
+	int slave_link_master;
 	unsigned int channels_count;
 	snd_pcm_multi_channel_t *channels;
 } snd_pcm_multi_t;
@@ -91,6 +93,40 @@ static int snd_pcm_multi_async(snd_pcm_t *pcm, int sig, pid_t pid)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
 	return snd_pcm_async(slave_0, sig, pid);
+}
+
+static int snd_pcm_multi_poll_descriptors_count(snd_pcm_t *pcm)
+{
+	snd_pcm_multi_t *multi = pcm->private_data;
+	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
+	return snd_pcm_poll_descriptors_count(slave_0);
+}
+
+static int snd_pcm_multi_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int space)
+{
+	snd_pcm_multi_t *multi = pcm->private_data;
+	snd_pcm_t *slave;
+	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
+	int err;
+	unsigned int i;
+
+	for (i = 0; i < multi->slaves_count; ++i) {
+		slave = multi->slaves[i].pcm;
+		if (slave == slave_0)
+			continue;
+		err = snd_pcm_poll_descriptors(slave, pfds, space);
+		if (err < 0)
+			return err;
+	}
+	/* finally overwrite with master's pfds */
+	return snd_pcm_poll_descriptors(slave_0, pfds, space);
+}
+
+static int snd_pcm_multi_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
+{
+	snd_pcm_multi_t *multi = pcm->private_data;
+	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
+	return snd_pcm_poll_descriptors_revents(slave_0, pfds, nfds, revents);
 }
 
 static int snd_pcm_multi_info(snd_pcm_t *pcm, snd_pcm_info_t *info)
@@ -296,6 +332,7 @@ static int snd_pcm_multi_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		}
 	}
 	multi->slaves[0].linked = 0;
+	multi->slave_link_master = 0;
 	for (i = 1; i < multi->slaves_count; ++i) {
 		err = snd_pcm_link(multi->slaves[0].pcm, multi->slaves[i].pcm);
 		multi->slaves[i].linked = (err >= 0);
@@ -560,21 +597,47 @@ static int snd_pcm_multi_resume(snd_pcm_t *pcm)
 	return err;
 }
 
-static int snd_pcm_multi_poll_ask(snd_pcm_t *pcm)
+static int snd_pcm_multi_link_fd_failed(snd_pcm_t *pcm, int fd)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_t *slave;
-	int err = 0;
 	unsigned int i;
+
 	for (i = 0; i < multi->slaves_count; ++i) {
-		slave = multi->slaves[i].pcm;
-		if (slave->fast_ops->poll_ask == NULL)
+		if (_snd_pcm_link_descriptor(multi->slaves[i].pcm) != fd)
 			continue;
-		err = slave->fast_ops->poll_ask(slave->fast_op_arg);
-		if (err < 0)
-			return err;
+		 multi->slaves[i].linked = 0;
 	}
-	return err;
+	return 0;
+}
+
+static int snd_pcm_multi_link_fd(snd_pcm_t *pcm, int *fds, int count, int (**failed)(snd_pcm_t *pcm, int fd))
+{ 
+	snd_pcm_multi_t *multi = pcm->private_data;
+	unsigned int i;
+
+	if (count < (int)multi->slaves_count)
+		return -ENOMEM;
+	for (i = 0; i < multi->slaves_count; ++i) {
+		if (multi->slaves[i].linked)
+			snd_pcm_unlink(multi->slaves[i].pcm);
+		fds[i] = _snd_pcm_link_descriptor(multi->slaves[i].pcm);
+		multi->slaves[i].linked = 1;
+	}
+	*failed = snd_pcm_multi_link_fd_failed;
+	return multi->slaves_count;
+}
+
+static int snd_pcm_multi_unlink(snd_pcm_t *pcm)
+{
+	snd_pcm_multi_t *multi = pcm->private_data;
+	unsigned int i;
+
+	for (i = 0; i < multi->slaves_count; ++i) {
+		if (multi->slaves[i].linked)
+			snd_pcm_unlink(multi->slaves[i].pcm);
+		multi->slaves[i].linked = 0;
+	}
+	return 0;
 }
 
 static snd_pcm_sframes_t snd_pcm_multi_mmap_commit(snd_pcm_t *pcm,
@@ -663,9 +726,14 @@ static snd_pcm_fast_ops_t snd_pcm_multi_fast_ops = {
 	.rewind = snd_pcm_multi_rewind,
 	.forward = snd_pcm_multi_forward,
 	.resume = snd_pcm_multi_resume,
-	.poll_ask = snd_pcm_multi_poll_ask,
+	.link_fd = snd_pcm_multi_link_fd,
+	.link = snd_pcm_generic_link2,
+	.unlink = snd_pcm_multi_unlink,
 	.avail_update = snd_pcm_multi_avail_update,
 	.mmap_commit = snd_pcm_multi_mmap_commit,
+	.poll_descriptors_count = snd_pcm_multi_poll_descriptors_count,
+	.poll_descriptors = snd_pcm_multi_poll_descriptors,
+	.poll_revents = snd_pcm_multi_poll_revents,
 };
 
 /**

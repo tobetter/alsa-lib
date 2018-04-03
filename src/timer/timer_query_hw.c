@@ -99,7 +99,8 @@ int snd_timer_query_hw_open(snd_timer_query_t **handle, const char *name, int mo
 	tmode = O_RDONLY;
 	if (mode & SND_TIMER_OPEN_NONBLOCK)
 		tmode |= O_NONBLOCK;	
-	if ((fd = open(SNDRV_FILE_TIMER, tmode)) < 0)
+	fd = snd_open_device(SNDRV_FILE_TIMER, tmode);
+	if (fd < 0)
 		return -errno;
 	if (ioctl(fd, SNDRV_TIMER_IOCTL_PVERSION, &ver) < 0) {
 		close(fd);

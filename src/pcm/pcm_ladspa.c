@@ -175,7 +175,7 @@ static int snd_pcm_ladspa_close(snd_pcm_t *pcm)
 	snd_pcm_ladspa_t *ladspa = pcm->private_data;
 
 	snd_pcm_ladspa_free(ladspa);
-	return snd_pcm_plugin_close(pcm);
+	return snd_pcm_generic_close(pcm);
 }
 
 static int snd_pcm_ladspa_hw_refine_cprepare(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_pcm_hw_params_t *params)
@@ -252,7 +252,7 @@ static int snd_pcm_ladspa_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 				       snd_pcm_ladspa_hw_refine_cchange,
 				       snd_pcm_ladspa_hw_refine_sprepare,
 				       snd_pcm_ladspa_hw_refine_schange,
-				       snd_pcm_plugin_hw_refine_slave);
+				       snd_pcm_generic_hw_refine);
 }
 
 static int snd_pcm_ladspa_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
@@ -262,7 +262,7 @@ static int snd_pcm_ladspa_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params
 					  snd_pcm_ladspa_hw_refine_cchange,
 					  snd_pcm_ladspa_hw_refine_sprepare,
 					  snd_pcm_ladspa_hw_refine_schange,
-					  snd_pcm_plugin_hw_params_slave);
+					  snd_pcm_generic_hw_params);
 	if (err < 0)
 		return err;
 	return 0;
@@ -554,7 +554,7 @@ static int snd_pcm_ladspa_hw_free(snd_pcm_t *pcm)
 	snd_pcm_ladspa_t *ladspa = pcm->private_data;
 
 	snd_pcm_ladspa_free_instances(pcm, ladspa, 1);
-	return snd_pcm_plugin_hw_free(pcm);
+	return snd_pcm_generic_hw_free(pcm);
 }
 
 static snd_pcm_uframes_t
@@ -693,23 +693,22 @@ static void snd_pcm_ladspa_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(ladspa->plug.slave, out);
+	snd_pcm_dump(ladspa->plug.gen.slave, out);
 }
 
 static snd_pcm_ops_t snd_pcm_ladspa_ops = {
 	.close = snd_pcm_ladspa_close,
-	.info = snd_pcm_plugin_info,
+	.info = snd_pcm_generic_info,
 	.hw_refine = snd_pcm_ladspa_hw_refine,
 	.hw_params = snd_pcm_ladspa_hw_params,
 	.hw_free = snd_pcm_ladspa_hw_free,
-	.sw_params = snd_pcm_plugin_sw_params,
-	.channel_info = snd_pcm_plugin_channel_info,
+	.sw_params = snd_pcm_generic_sw_params,
+	.channel_info = snd_pcm_generic_channel_info,
 	.dump = snd_pcm_ladspa_dump,
-	.nonblock = snd_pcm_plugin_nonblock,
-	.async = snd_pcm_plugin_async,
-	.poll_revents = snd_pcm_plugin_poll_revents,
-	.mmap = snd_pcm_plugin_mmap,
-	.munmap = snd_pcm_plugin_munmap,
+	.nonblock = snd_pcm_generic_nonblock,
+	.async = snd_pcm_generic_async,
+	.mmap = snd_pcm_generic_mmap,
+	.munmap = snd_pcm_generic_munmap,
 };
 
 static int snd_pcm_ladspa_check_file(snd_pcm_ladspa_plugin_t * const plugin,
@@ -1118,7 +1117,9 @@ static int snd_pcm_ladspa_build_plugins(struct list_head *list,
  * \brief Creates a new LADSPA<->ALSA Plugin
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
- * \param sformat Slave (destination) format
+ * \param ladspa_path The path for LADSPA plugins
+ * \param ladspa_pplugins The playback configuration
+ * \param ladspa_cplugins The capture configuration
  * \param slave Slave PCM handle
  * \param close_slave When set, the slave PCM handle is closed with copy PCM
  * \retval zero on success otherwise a negative error code
@@ -1149,8 +1150,8 @@ int snd_pcm_ladspa_open(snd_pcm_t **pcmp, const char *name,
 	ladspa->plug.write = snd_pcm_ladspa_write_areas;
 	ladspa->plug.undo_read = snd_pcm_plugin_undo_read_generic;
 	ladspa->plug.undo_write = snd_pcm_plugin_undo_write_generic;
-	ladspa->plug.slave = slave;
-	ladspa->plug.close_slave = close_slave;
+	ladspa->plug.gen.slave = slave;
+	ladspa->plug.gen.close_slave = close_slave;
 
 	INIT_LIST_HEAD(&ladspa->pplugins);
 	INIT_LIST_HEAD(&ladspa->cplugins);

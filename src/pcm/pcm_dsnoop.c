@@ -185,7 +185,7 @@ static snd_pcm_state_t snd_pcm_dsnoop_state(snd_pcm_t *pcm)
 	snd_pcm_direct_t *dsnoop = pcm->private_data;
 	switch (snd_pcm_state(dsnoop->spcm)) {
 	case SND_PCM_STATE_SUSPENDED:
-		return -ESTRPIPE;
+		return SND_PCM_STATE_SUSPENDED;
 	case SND_PCM_STATE_DISCONNECTED:
 		dsnoop->state = SNDRV_PCM_STATE_DISCONNECTED;
 		return -ENOTTY;
@@ -248,7 +248,7 @@ static int snd_pcm_dsnoop_prepare(snd_pcm_t *pcm)
 	dsnoop->state = SND_PCM_STATE_PREPARED;
 	dsnoop->appl_ptr = 0;
 	dsnoop->hw_ptr = 0;
-	return 0;
+	return snd_pcm_direct_set_timer_params(dsnoop);
 }
 
 static int snd_pcm_dsnoop_reset(snd_pcm_t *pcm)
@@ -268,12 +268,12 @@ static int snd_pcm_dsnoop_start(snd_pcm_t *pcm)
 	
 	if (dsnoop->state != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
+	snd_pcm_hwsync(dsnoop->spcm);
+	dsnoop->slave_appl_ptr = dsnoop->slave_hw_ptr = *dsnoop->spcm->hw.ptr;
 	err = snd_timer_start(dsnoop->timer);
 	if (err < 0)
 		return err;
 	dsnoop->state = SND_PCM_STATE_RUNNING;
-	snd_pcm_hwsync(dsnoop->spcm);
-	dsnoop->slave_appl_ptr = dsnoop->slave_hw_ptr = *dsnoop->spcm->hw.ptr;
 	gettimeofday(&tv, 0);
 	dsnoop->trigger_tstamp.tv_sec = tv.tv_sec;
 	dsnoop->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
@@ -313,21 +313,9 @@ static int snd_pcm_dsnoop_drain(snd_pcm_t *pcm)
 	return snd_pcm_dsnoop_drop(pcm);
 }
 
-static int snd_pcm_dsnoop_pause(snd_pcm_t *pcm, int enable)
+static int snd_pcm_dsnoop_pause(snd_pcm_t *pcm ATTRIBUTE_UNUSED, int enable ATTRIBUTE_UNUSED)
 {
-	snd_pcm_direct_t *dsnoop = pcm->private_data;
-        if (enable) {
-		if (dsnoop->state != SND_PCM_STATE_RUNNING)
-			return -EBADFD;
-		dsnoop->state = SND_PCM_STATE_PAUSED;
-		snd_timer_stop(dsnoop->timer);
-	} else {
-		if (dsnoop->state != SND_PCM_STATE_PAUSED)
-			return -EBADFD;
-                dsnoop->state = SND_PCM_STATE_RUNNING;
-                snd_timer_start(dsnoop->timer);
-	}
-	return 0;
+	return -EIO;
 }
 
 static snd_pcm_sframes_t snd_pcm_dsnoop_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
@@ -349,10 +337,10 @@ static snd_pcm_sframes_t snd_pcm_dsnoop_forward(snd_pcm_t *pcm, snd_pcm_uframes_
 	return frames;
 }
 
-static int snd_pcm_dsnoop_resume(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+static int snd_pcm_dsnoop_resume(snd_pcm_t *pcm)
 {
-	// snd_pcm_direct_t *dsnoop = pcm->private_data;
-	// FIXME
+	snd_pcm_direct_t *dsnoop = pcm->private_data;
+	snd_pcm_resume(dsnoop->spcm);
 	return 0;
 }
 
@@ -378,12 +366,8 @@ static int snd_pcm_dsnoop_close(snd_pcm_t *pcm)
  		snd_pcm_direct_server_discard(dsnoop);
  	if (dsnoop->client)
  		snd_pcm_direct_client_discard(dsnoop);
- 	if (snd_pcm_direct_shm_discard(dsnoop) > 0) {
- 		if (snd_pcm_direct_semaphore_discard(dsnoop) < 0)
- 			snd_pcm_direct_semaphore_up(dsnoop, DIRECT_IPC_SEM_CLIENT);
- 	} else {
-		snd_pcm_direct_semaphore_up(dsnoop, DIRECT_IPC_SEM_CLIENT);
-	}
+	snd_pcm_direct_shm_discard(dsnoop);
+	snd_pcm_direct_semaphore_up(dsnoop, DIRECT_IPC_SEM_CLIENT);
 	if (dsnoop->bindings)
 		free(dsnoop->bindings);
 	pcm->private_data = NULL;
@@ -398,12 +382,23 @@ static snd_pcm_sframes_t snd_pcm_dsnoop_mmap_commit(snd_pcm_t *pcm,
 	snd_pcm_direct_t *dsnoop = pcm->private_data;
 	int err;
 
+	switch (snd_pcm_state(dsnoop->spcm)) {
+	case SND_PCM_STATE_XRUN:
+		return -EPIPE;
+	case SND_PCM_STATE_SUSPENDED:
+		return -ESTRPIPE;
+	default:
+		break;
+	}
 	if (dsnoop->state == SND_PCM_STATE_RUNNING) {
 		err = snd_pcm_dsnoop_sync_ptr(pcm);
 		if (err < 0)
 			return err;
 	}
 	snd_pcm_mmap_appl_forward(pcm, size);
+	/* clear timer queue to avoid a bogus return from poll */
+	if (snd_pcm_mmap_capture_avail(pcm) < pcm->avail_min)
+		snd_pcm_direct_clear_timer_queue(dsnoop);
 	return size;
 }
 
@@ -444,7 +439,6 @@ static snd_pcm_ops_t snd_pcm_dsnoop_ops = {
 	.dump = snd_pcm_dsnoop_dump,
 	.nonblock = snd_pcm_direct_nonblock,
 	.async = snd_pcm_direct_async,
-	.poll_revents = snd_pcm_direct_poll_revents,
 	.mmap = snd_pcm_direct_mmap,
 	.munmap = snd_pcm_direct_munmap,
 };
@@ -463,13 +457,18 @@ static snd_pcm_fast_ops_t snd_pcm_dsnoop_fast_ops = {
 	.rewind = snd_pcm_dsnoop_rewind,
 	.forward = snd_pcm_dsnoop_forward,
 	.resume = snd_pcm_dsnoop_resume,
-	.poll_ask = NULL,
+	.link_fd = NULL,
+	.link = NULL,
+	.unlink = NULL,
 	.writei = snd_pcm_dsnoop_writei,
 	.writen = snd_pcm_dsnoop_writen,
 	.readi = snd_pcm_mmap_readi,
 	.readn = snd_pcm_mmap_readn,
 	.avail_update = snd_pcm_dsnoop_avail_update,
 	.mmap_commit = snd_pcm_dsnoop_mmap_commit,
+	.poll_descriptors = NULL,
+	.poll_descriptors_count = NULL,
+	.poll_revents = snd_pcm_direct_poll_revents,
 };
 
 /**
@@ -512,12 +511,12 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 	dsnoop = calloc(1, sizeof(snd_pcm_direct_t));
 	if (!dsnoop) {
 		ret = -ENOMEM;
-		goto _err;
+		goto _err_nosem;
 	}
 	
 	ret = snd_pcm_direct_parse_bindings(dsnoop, bindings);
 	if (ret < 0)
-		goto _err;
+		goto _err_nosem;
 	
 	dsnoop->ipc_key = ipc_key;
 	dsnoop->ipc_perm = ipc_perm;
@@ -526,20 +525,20 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 
 	ret = snd_pcm_new(&pcm, dsnoop->type = SND_PCM_TYPE_DSNOOP, name, stream, mode);
 	if (ret < 0)
-		goto _err;
+		goto _err_nosem;
 
 	while (1) {
 		ret = snd_pcm_direct_semaphore_create_or_connect(dsnoop);
 		if (ret < 0) {
 			SNDERR("unable to create IPC semaphore");
-			goto _err;
+			goto _err_nosem;
 		}
 	
 		ret = snd_pcm_direct_semaphore_down(dsnoop, DIRECT_IPC_SEM_CLIENT);
 		if (ret < 0) {
 			snd_pcm_direct_semaphore_discard(dsnoop);
 			if (--fail_sem_loop <= 0)
-				goto _err;
+				goto _err_nosem;
 			continue;
 		}
 		break;
@@ -559,7 +558,7 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 	dsnoop->sync_ptr = snd_pcm_dsnoop_sync_ptr;
 
 	if (first_instance) {
-		ret = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+		ret = snd_pcm_open_slave(&spcm, root, sconf, stream, mode | SND_PCM_NONBLOCK);
 		if (ret < 0) {
 			SNDERR("unable to open slave");
 			goto _err;
@@ -586,12 +585,15 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 
 		dsnoop->shmptr->type = spcm->type;
 	} else {
+		/* up semaphore to avoid deadlock */
+		snd_pcm_direct_semaphore_up(dsnoop, DIRECT_IPC_SEM_CLIENT);
 		ret = snd_pcm_direct_client_connect(dsnoop);
 		if (ret < 0) {
 			SNDERR("unable to connect client");
-			return ret;
+			goto _err_nosem;
 		}
 			
+		snd_pcm_direct_semaphore_down(dsnoop, DIRECT_IPC_SEM_CLIENT);
 		ret = snd_pcm_hw_open_fd(&spcm, "dsnoop_client", dsnoop->hw_fd, 0, 0);
 		if (ret < 0) {
 			SNDERR("unable to open hardware");
@@ -636,25 +638,22 @@ int snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 	return 0;
 	
  _err:
+ 	if (dsnoop->timer)
+		snd_timer_close(dsnoop->timer);
+	if (dsnoop->server)
+		snd_pcm_direct_server_discard(dsnoop);
+	if (dsnoop->client)
+		snd_pcm_direct_client_discard(dsnoop);
+	if (spcm)
+		snd_pcm_close(spcm);
+	if (dsnoop->shmid >= 0)
+		snd_pcm_direct_shm_discard(dsnoop);
+	if (snd_pcm_direct_semaphore_discard(dsnoop) < 0)
+		snd_pcm_direct_semaphore_up(dsnoop, DIRECT_IPC_SEM_CLIENT);
+ _err_nosem:
 	if (dsnoop) {
-	 	if (dsnoop->timer)
- 			snd_timer_close(dsnoop->timer);
- 		if (dsnoop->server)
- 			snd_pcm_direct_server_discard(dsnoop);
- 		if (dsnoop->client)
- 			snd_pcm_direct_client_discard(dsnoop);
- 		if (spcm)
- 			snd_pcm_close(spcm);
- 		if (dsnoop->shmid >= 0) {
- 			if (snd_pcm_direct_shm_discard(dsnoop) > 0) {
-			 	if (dsnoop->semid >= 0) {
- 					if (snd_pcm_direct_semaphore_discard(dsnoop) < 0)
- 						snd_pcm_direct_semaphore_up(dsnoop, DIRECT_IPC_SEM_CLIENT);
- 				}
- 			}
- 		}
- 		if (dsnoop->bindings)
- 			free(dsnoop->bindings);
+		if (dsnoop->bindings)
+			free(dsnoop->bindings);
 		free(dsnoop);
 	}
 	if (pcm)
@@ -768,14 +767,7 @@ int _snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 			continue;
 		}
 		if (strcmp(id, "ipc_key_add_uid") == 0) {
-			char *tmp;
-			err = snd_config_get_ascii(n, &tmp);
-			if (err < 0) {
-				SNDERR("The field ipc_key_add_uid must be a boolean type");
-				return err;
-			}
-			err = snd_config_get_bool_ascii(tmp);
-			free(tmp);
+			err = snd_config_get_bool(n);
 			if (err < 0) {
 				SNDERR("The field ipc_key_add_uid must be a boolean type");
 				return err;
@@ -792,14 +784,7 @@ int _snd_pcm_dsnoop_open(snd_pcm_t **pcmp, const char *name,
 			continue;
 		}
 		if (strcmp(id, "slowptr") == 0) {
-			char *tmp;
-			err = snd_config_get_ascii(n, &tmp);
-			if (err < 0) {
-				SNDERR("The field slowptr must be a boolean type");
-				return err;
-			}
-			err = snd_config_get_bool_ascii(tmp);
-			free(tmp);
+			err = snd_config_get_bool(n);
 			if (err < 0) {
 				SNDERR("The field slowptr must be a boolean type");
 				return err;

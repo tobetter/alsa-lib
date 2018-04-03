@@ -29,6 +29,7 @@
 const char *_snd_module_seq_hw = "";
 #endif
 
+#ifndef DOC_HIDDEN
 #define SNDRV_FILE_SEQ		"/dev/snd/seq"
 #define SNDRV_FILE_ALOADSEQ	"/dev/aloadSEQ"
 #define SNDRV_SEQ_VERSION_MAX	SNDRV_PROTOCOL_VERSION(1, 0, 1)
@@ -36,6 +37,7 @@ const char *_snd_module_seq_hw = "";
 typedef struct {
 	int fd;
 } snd_seq_hw_t;
+#endif /* DOC_HIDDEN */
 
 static int snd_seq_hw_close(snd_seq_t *seq)
 {
@@ -415,7 +417,7 @@ snd_seq_ops_t snd_seq_hw_ops = {
 int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 {
 	int fd, ver, client, fmode, ret;
-	char filename[32];
+	const char *filename;
 	snd_seq_t *seq;
 	snd_seq_hw_t *hw;
 
@@ -439,13 +441,19 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 	if (mode & SND_SEQ_NONBLOCK)
 		fmode |= O_NONBLOCK;
 
-	sprintf(filename, SNDRV_FILE_SEQ);
-	if ((fd = open(filename, fmode)) < 0) {
-		close(open(SNDRV_FILE_ALOADSEQ, O_RDWR));
-		if ((fd = open(filename, fmode)) < 0) {
-			SYSERR("open %s failed", filename);
-			return -errno;
-		}
+	filename = SNDRV_FILE_SEQ;
+	fd = snd_open_device(filename, fmode);
+#ifdef SUPPORT_ALOAD
+	if (fd < 0) {
+		fd = snd_open_device(SNDRV_FILE_ALOADSEQ, fmode);
+		if (fd >= 0)
+			close(fd);
+		fd = snd_open_device(filename, fmode);
+	}
+#endif
+	if (fd < 0) {
+		SYSERR("open %s failed", filename);
+		return -errno;
 	}
 #if 0
 	/*

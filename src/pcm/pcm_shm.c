@@ -288,6 +288,7 @@ static int snd_pcm_shm_hw_params_slave(snd_pcm_t *pcm,
 	snd_pcm_shm_t *shm = pcm->private_data;
 	volatile snd_pcm_shm_ctrl_t *ctrl = shm->ctrl;
 	int err;
+	params->flags |= SND_PCM_HW_PARAMS_EXPORT_BUFFER;
 	ctrl->cmd = SNDRV_PCM_IOCTL_HW_PARAMS;
 	ctrl->u.hw_params = *params;
 	err = snd_pcm_shm_action(pcm);
@@ -602,7 +603,6 @@ static snd_pcm_fast_ops_t snd_pcm_shm_fast_ops = {
 	.rewind = snd_pcm_shm_rewind,
 	.forward = snd_pcm_shm_forward,
 	.resume = snd_pcm_shm_resume,
-	.poll_ask = NULL,
 	.writei = snd_pcm_mmap_writei,
 	.writen = snd_pcm_mmap_writen,
 	.readi = snd_pcm_mmap_readi,

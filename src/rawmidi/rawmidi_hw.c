@@ -37,11 +37,13 @@ const char *_snd_module_rawmidi_hw = "";
 #define SNDRV_FILE_RAWMIDI		"/dev/snd/midiC%iD%i"
 #define SNDRV_RAWMIDI_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 0)
 
+#ifndef DOC_HIDDEN
 typedef struct {
 	int open;
 	int fd;
 	int card, device, subdevice;
 } snd_rawmidi_hw_t;
+#endif
 
 static int snd_rawmidi_hw_close(snd_rawmidi_t *rmidi)
 {
@@ -220,9 +222,11 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 
 	assert(!(mode & ~(SND_RAWMIDI_APPEND|SND_RAWMIDI_NONBLOCK|SND_RAWMIDI_SYNC)));
 
-	if ((fd = open(filename, fmode)) < 0) {
+	fd = snd_open_device(filename, fmode);
+	if (fd < 0) {
 		snd_card_load(card);
-		if ((fd = open(filename, fmode)) < 0) {
+		fd = snd_open_device(filename, fmode);
+		if (fd < 0) {
 			snd_ctl_close(ctl);
 			SYSERR("open %s failed", filename);
 			return -errno;

@@ -115,9 +115,11 @@ int snd_hwdep_hw_open(snd_hwdep_t **handle, const char *name, int card, int devi
 	if (card < 0 || card >= 32)
 		return -EINVAL;
 	sprintf(filename, SNDRV_FILE_HWDEP, card, device);
-	if ((fd = open(filename, mode)) < 0) {
+	fd = snd_open_device(filename, mode);
+	if (fd < 0) {
 		snd_card_load(card);
-		if ((fd = open(filename, mode)) < 0)
+		fd = snd_open_device(filename, mode);
+		if (fd < 0)
 			return -errno;
 	}
 #if 0

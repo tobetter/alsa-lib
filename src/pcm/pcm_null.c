@@ -244,12 +244,7 @@ static snd_pcm_sframes_t snd_pcm_null_mmap_commit(snd_pcm_t *pcm,
 						  snd_pcm_uframes_t offset ATTRIBUTE_UNUSED,
 						  snd_pcm_uframes_t size)
 {
-	snd_pcm_sframes_t res;
-	
-	res = snd_pcm_null_forward(pcm, size);
-	if (res < 0)
-		return res;
-	return res;
+	return snd_pcm_null_forward(pcm, size);
 }
 
 static snd_pcm_sframes_t snd_pcm_null_avail_update(snd_pcm_t *pcm)
@@ -329,7 +324,6 @@ static snd_pcm_fast_ops_t snd_pcm_null_fast_ops = {
 	.rewind = snd_pcm_null_rewind,
 	.forward = snd_pcm_null_forward,
 	.resume = snd_pcm_null_resume,
-	.poll_ask = NULL,
 	.writei = snd_pcm_null_writei,
 	.writen = snd_pcm_null_writen,
 	.readi = snd_pcm_null_readi,

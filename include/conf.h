@@ -1,5 +1,5 @@
 /**
- * \file <alsa/conf.h>
+ * \file include/conf.h
  * \brief Application interface library for the ALSA driver
  * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
@@ -170,6 +170,25 @@ int snd_config_get_bool(const snd_config_t *conf);
 int snd_config_get_ctl_iface_ascii(const char *ascii);
 int snd_config_get_ctl_iface(const snd_config_t *conf);
 
+/* Names functions */
+
+/**
+ * Device-name list element
+ */
+typedef struct snd_devname snd_devname_t;
+
+/**
+ * Device-name list element (definition)
+ */
+struct snd_devname {
+	char *name;	/**< Device name string */
+	char *comment;	/**< Comments */
+	snd_devname_t *next;	/**< Next pointer */
+};
+
+int snd_names_list(const char *interface, snd_devname_t **list);
+void snd_names_list_free(snd_devname_t *list);
+
 /** \} */
 
 #ifdef __cplusplus
@@ -177,4 +196,3 @@ int snd_config_get_ctl_iface(const snd_config_t *conf);
 #endif
 
 #endif /* __ALSA_CONF_H */
-
