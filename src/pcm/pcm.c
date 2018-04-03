@@ -104,9 +104,13 @@ implementation can be found in the \ref alsa_pcm_rw section.
 The poll or select functions (see 'man 2 poll' or 'man 2 select' for further
 details) allows to receive requests/events from the device while
 an application is waiting on events from other sources (like keyboard, screen,
-network etc.), too. \ref snd_pcm_poll_descriptors can be used to get a file
-descriptor to poll or select on. The implemented
-transfer routines can be found in the \ref alsa_transfers section.
+network etc.), too. \ref snd_pcm_poll_descriptors can be used to get file
+descriptors to poll or select on (note that wait direction might be diferent
+than expected - do not use only returned file descriptors, but handle
+events member as well - see \ref snd_pcm_poll_descriptors function
+description for more details and \ref snd_pcm_poll_descriptors_revents for
+events demangling). The implemented transfer routines can be found in
+the \ref alsa_transfers section.
 
 \subsection pcm_transfer_async Asynchronous notification
 
@@ -1405,7 +1409,9 @@ int snd_pcm_poll_descriptors_count(snd_pcm_t *pcm)
  * does the right "demangling".
  *
  * You can use output from this function as arguments for the select()
- * syscall, too.
+ * syscall, too. Do not forget to translate POLLIN and POLLOUT events to
+ * corresponding FD_SET arrays and demangle events using
+ * \link ::snd_pcm_poll_descriptors_revents() \endlink .
  */
 int snd_pcm_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int space)
 {
@@ -1430,7 +1436,7 @@ int snd_pcm_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int s
  * \param pcm PCM handle
  * \param pfds array of poll descriptors
  * \param nfds count of poll descriptors
- * \param revents returned events
+ * \param revents pointer to the returned (single) event
  * \return zero if success, otherwise a negative error code
  *
  * This function does "demangling" of the revents mask returned from
@@ -1440,6 +1446,9 @@ int snd_pcm_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int s
  * syscall returned that some events are waiting, this function might
  * return empty set of events. In this case, application should
  * do next event waiting using poll() or select().
+ *
+ * Note: Even if multiple poll descriptors are used (i.e. pfds > 1),
+ * this function returns only a single event.
  */
 int snd_pcm_poll_descriptors_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
 {
@@ -2338,8 +2347,8 @@ int snd_pcm_wait(snd_pcm_t *pcm, int timeout)
 int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout)
 {
 	struct pollfd *pfd;
-	unsigned short *revents;
-	int i, npfds, pollio, err, err_poll;
+	unsigned short revents = 0;
+	int npfds, err, err_poll;
 	
 	npfds = snd_pcm_poll_descriptors_count(pcm);
 	if (npfds <= 0 || npfds >= 16) {
@@ -2347,7 +2356,6 @@ int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout)
 		return -EIO;
 	}
 	pfd = alloca(sizeof(*pfd) * npfds);
-	revents = alloca(sizeof(*revents) * npfds);
 	err = snd_pcm_poll_descriptors(pcm, pfd, npfds);
 	if (err < 0)
 		return err;
@@ -2356,7 +2364,6 @@ int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout)
 		return -EIO;
 	}
 	do {
-		pollio = 0;
 		err_poll = poll(pfd, npfds, timeout);
 		if (err_poll < 0) {
 		        if (errno == EINTR)
@@ -2365,28 +2372,23 @@ int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout)
                 }
 		if (! err_poll)
 			break;
-		err = snd_pcm_poll_descriptors_revents(pcm, pfd, npfds, revents);
+		err = snd_pcm_poll_descriptors_revents(pcm, pfd, npfds, &revents);
 		if (err < 0)
 			return err;
-		for (i = 0; i < npfds; i++) {
-			if (revents[i] & (POLLERR | POLLNVAL)) {
-				/* check more precisely */
-				switch (snd_pcm_state(pcm)) {
-				case SND_PCM_STATE_XRUN:
-					return -EPIPE;
-				case SND_PCM_STATE_SUSPENDED:
-					return -ESTRPIPE;
-				case SND_PCM_STATE_DISCONNECTED:
-					return -ENODEV;
-				default:
-					return -EIO;
-				}
+		if (revents & (POLLERR | POLLNVAL)) {
+			/* check more precisely */
+			switch (snd_pcm_state(pcm)) {
+			case SND_PCM_STATE_XRUN:
+				return -EPIPE;
+			case SND_PCM_STATE_SUSPENDED:
+				return -ESTRPIPE;
+			case SND_PCM_STATE_DISCONNECTED:
+				return -ENODEV;
+			default:
+				return -EIO;
 			}
-			if ((revents[i] & (POLLIN | POLLOUT)) == 0)
-				continue;
-			pollio++;
 		}
-	} while (! pollio);
+	} while (!(revents & (POLLIN | POLLOUT)));
 #if 0 /* very useful code to test poll related problems */
 	{
 		snd_pcm_sframes_t avail_update;
@@ -7261,7 +7263,7 @@ int snd_pcm_recover(snd_pcm_t *pcm, int err, int silent)
  * \param channels required PCM channels
  * \param rate required sample rate in Hz
  * \param soft_resample 0 = disallow alsa-lib resample stream, 1 = allow resampling
- * \param latency required overall latency in us (0 = optimum latency for players)
+ * \param latency required overall latency in us
  * \return 0 on success otherwise a negative error code
  */
 int snd_pcm_set_params(snd_pcm_t *pcm,
