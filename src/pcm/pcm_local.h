@@ -1,6 +1,6 @@
 /*
  *  PCM Interface - local header file
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *                        Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -24,8 +24,6 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <sys/uio.h>
-#include <time.h>
-#include <sys/time.h>
 
 #define _snd_mask sndrv_mask
 #define _snd_pcm_access_mask _snd_mask
@@ -40,6 +38,7 @@
 #define SND_MASK_INLINE
 #include "mask.h"
 
+typedef enum sndrv_pcm_hw_param snd_pcm_hw_param_t;
 #define SND_PCM_HW_PARAM_ACCESS SNDRV_PCM_HW_PARAM_ACCESS
 #define SND_PCM_HW_PARAM_FIRST_MASK SNDRV_PCM_HW_PARAM_FIRST_MASK
 #define SND_PCM_HW_PARAM_FORMAT SNDRV_PCM_HW_PARAM_FORMAT
@@ -59,6 +58,7 @@
 #define SND_PCM_HW_PARAM_BUFFER_BYTES SNDRV_PCM_HW_PARAM_BUFFER_BYTES
 #define SND_PCM_HW_PARAM_TICK_TIME SNDRV_PCM_HW_PARAM_TICK_TIME
 #define SND_PCM_HW_PARAM_LAST_INTERVAL SNDRV_PCM_HW_PARAM_LAST_INTERVAL
+#define SND_PCM_HW_PARAMS_RUNTIME SNDRV_PCM_HW_PARAMS_RUNTIME
 #define SND_PCM_HW_PARAM_LAST_MASK SNDRV_PCM_HW_PARAM_LAST_MASK
 #define SND_PCM_HW_PARAM_FIRST_MASK SNDRV_PCM_HW_PARAM_FIRST_MASK
 #define SND_PCM_HW_PARAM_LAST_INTERVAL SNDRV_PCM_HW_PARAM_LAST_INTERVAL
@@ -92,14 +92,6 @@
 #define SND_PCM_INFO_JOINT_DUPLEX SNDRV_PCM_INFO_JOINT_DUPLEX
 /** device can do a kind of synchronized start */
 #define SND_PCM_INFO_SYNC_START SNDRV_PCM_INFO_SYNC_START
-/** device can disable period wakeups */
-#define SND_PCM_INFO_NO_PERIOD_WAKEUP SNDRV_PCM_INFO_NO_PERIOD_WAKEUP
-
-#define SND_PCM_HW_PARAMS_NORESAMPLE SNDRV_PCM_HW_PARAMS_NORESAMPLE
-#define SND_PCM_HW_PARAMS_EXPORT_BUFFER SNDRV_PCM_HW_PARAMS_EXPORT_BUFFER
-#define SND_PCM_HW_PARAMS_NO_PERIOD_WAKEUP SNDRV_PCM_HW_PARAMS_NO_PERIOD_WAKEUP
-
-#define SND_PCM_INFO_MONOTONIC	0x80000000
 
 typedef struct _snd_pcm_rbptr {
 	snd_pcm_t *master;
@@ -117,7 +109,7 @@ typedef struct _snd_pcm_channel_info {
 	void *addr;			/* base address of channel samples */
 	unsigned int first;		/* offset to first sample in bits */
 	unsigned int step;		/* samples distance in bits */
-	enum { SND_PCM_AREA_SHM, SND_PCM_AREA_MMAP, SND_PCM_AREA_LOCAL } type;
+	enum { SND_PCM_AREA_SHM, SND_PCM_AREA_MMAP } type;
 	union {
 		struct {
 			struct snd_shm_area *area;
@@ -135,6 +127,7 @@ typedef struct {
 	int (*close)(snd_pcm_t *pcm);
 	int (*nonblock)(snd_pcm_t *pcm, int nonblock);
 	int (*async)(snd_pcm_t *pcm, int sig, pid_t pid);
+	int (*poll_revents)(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
 	int (*info)(snd_pcm_t *pcm, snd_pcm_info_t *info);
 	int (*hw_refine)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
 	int (*hw_params)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
@@ -144,9 +137,6 @@ typedef struct {
 	void (*dump)(snd_pcm_t *pcm, snd_output_t *out);
 	int (*mmap)(snd_pcm_t *pcm);
 	int (*munmap)(snd_pcm_t *pcm);
-	snd_pcm_chmap_query_t **(*query_chmaps)(snd_pcm_t *pcm);
-	snd_pcm_chmap_t *(*get_chmap)(snd_pcm_t *pcm);
-	int (*set_chmap)(snd_pcm_t *pcm, const snd_pcm_chmap_t *map);
 } snd_pcm_ops_t;
 
 typedef struct {
@@ -161,12 +151,8 @@ typedef struct {
 	int (*hwsync)(snd_pcm_t *pcm);
 	int (*delay)(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp);
 	int (*resume)(snd_pcm_t *pcm);
-	int (*link)(snd_pcm_t *pcm1, snd_pcm_t *pcm2);
-	int (*link_slaves)(snd_pcm_t *pcm, snd_pcm_t *master);
-	int (*unlink)(snd_pcm_t *pcm);
-	snd_pcm_sframes_t (*rewindable)(snd_pcm_t *pcm);
+	int (*poll_ask)(snd_pcm_t *pcm);
 	snd_pcm_sframes_t (*rewind)(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
-	snd_pcm_sframes_t (*forwardable)(snd_pcm_t *pcm);
 	snd_pcm_sframes_t (*forward)(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
 	snd_pcm_sframes_t (*writei)(snd_pcm_t *pcm, const void *buffer, snd_pcm_uframes_t size);
 	snd_pcm_sframes_t (*writen)(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size);
@@ -174,25 +160,18 @@ typedef struct {
 	snd_pcm_sframes_t (*readn)(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size);
 	snd_pcm_sframes_t (*avail_update)(snd_pcm_t *pcm);
 	snd_pcm_sframes_t (*mmap_commit)(snd_pcm_t *pcm, snd_pcm_uframes_t offset, snd_pcm_uframes_t size);
-	int (*htimestamp)(snd_pcm_t *pcm, snd_pcm_uframes_t *avail, snd_htimestamp_t *tstamp);
-	int (*poll_descriptors_count)(snd_pcm_t *pcm);
-	int (*poll_descriptors)(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int space);
-	int (*poll_revents)(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
-	int (*may_wait_for_avail_min)(snd_pcm_t *pcm, snd_pcm_uframes_t avail);
 } snd_pcm_fast_ops_t;
 
 struct _snd_pcm {
-	void *open_func;
+	void *dl_handle;
 	char *name;
 	snd_pcm_type_t type;
 	snd_pcm_stream_t stream;
 	int mode;
-	long minperiodtime;		/* in us */
 	int poll_fd_count;
 	int poll_fd;
 	unsigned short poll_events;
-	int setup: 1,
-	    compat: 1;
+	int setup;
 	snd_pcm_access_t access;	/* access mode */
 	snd_pcm_format_t format;	/* SND_PCM_FORMAT_* */
 	snd_pcm_subformat_t subformat;	/* subformat */
@@ -201,22 +180,22 @@ struct _snd_pcm {
 	snd_pcm_uframes_t period_size;
 	unsigned int period_time;	/* period duration */
 	snd_interval_t periods;
+	unsigned int tick_time;
 	snd_pcm_tstamp_t tstamp_mode;	/* timestamp mode */
-	snd_pcm_tstamp_type_t tstamp_type;	/* timestamp type */
 	unsigned int period_step;
+	unsigned int sleep_min;
 	snd_pcm_uframes_t avail_min;	/* min avail frames for wakeup */
-	int period_event;
-	snd_pcm_uframes_t start_threshold;
-	snd_pcm_uframes_t stop_threshold;
+	snd_pcm_uframes_t start_threshold;	
+	snd_pcm_uframes_t stop_threshold;	
 	snd_pcm_uframes_t silence_threshold;	/* Silence filling happens when
 					   noise is nearest than this */
 	snd_pcm_uframes_t silence_size;	/* Silence filling size */
+	snd_pcm_uframes_t xfer_align;	/* xfer size need to be a multiple */
 	snd_pcm_uframes_t boundary;	/* pointers wrap point */
 	unsigned int info;		/* Info for returned setup */
 	unsigned int msbits;		/* used most significant bits */
 	unsigned int rate_num;		/* rate numerator */
 	unsigned int rate_den;		/* rate denominator */
-	unsigned int hw_flags;		/* actual hardware flags */
 	snd_pcm_uframes_t fifo_size;	/* chip FIFO size in frames */
 	snd_pcm_uframes_t buffer_size;
 	snd_interval_t buffer_time;
@@ -225,129 +204,23 @@ struct _snd_pcm {
 	snd_pcm_rbptr_t appl;
 	snd_pcm_rbptr_t hw;
 	snd_pcm_uframes_t min_align;
-	unsigned int mmap_rw: 1;	/* use always mmapped buffer */
-	unsigned int mmap_shadow: 1;	/* don't call actual mmap,
-					 * use the mmaped buffer of the slave
-					 */
-	unsigned int donot_close: 1;	/* don't close this PCM */
+	int mmap_rw: 1,
+	    mmap_shadow: 1,
+	    donot_close: 1;
 	snd_pcm_channel_info_t *mmap_channels;
 	snd_pcm_channel_area_t *running_areas;
 	snd_pcm_channel_area_t *stopped_areas;
-	const snd_pcm_ops_t *ops;
-	const snd_pcm_fast_ops_t *fast_ops;
+	snd_pcm_ops_t *ops;
+	snd_pcm_fast_ops_t *fast_ops;
 	snd_pcm_t *op_arg;
 	snd_pcm_t *fast_op_arg;
 	void *private_data;
 	struct list_head async_handlers;
 };
 
-/* make local functions really local */
-/* Grrr, these cannot be local - a bad aserver uses them!
-#define snd_pcm_async \
-	snd1_pcm_async
-#define snd_pcm_mmap \
-	snd1_pcm_mmap
-#define snd_pcm_munmap \
-	snd1_pcm_munmap
-#define snd_pcm_hw_refine \
-	snd1_pcm_hw_refine
-*/
-#define snd_pcm_new \
-	snd1_pcm_new
-#define snd_pcm_free \
-	snd1_pcm_free
-#define snd_pcm_areas_from_buf \
-	snd1_pcm_areas_from_buf
-#define snd_pcm_areas_from_bufs \
-	snd1_pcm_areas_from_bufs
-#define snd_pcm_open_named_slave \
-	snd1_pcm_open_named_slave
-#define snd_pcm_hw_open_fd \
-	snd1_pcm_hw_open_fd
-#define snd_pcm_wait_nocheck \
-	snd1_pcm_wait_nocheck
-#define snd_pcm_rate_get_default_converter \
-	snd1_pcm_rate_get_default_converter
-#define snd_pcm_set_hw_ptr \
-	snd1_pcm_set_hw_ptr
-#define snd_pcm_set_appl_ptr \
-	snd1_pcm_set_appl_ptr
-#define snd_pcm_link_hw_ptr \
-	snd1_pcm_link_hw_ptr
-#define snd_pcm_link_appl_ptr \
-	snd1_pcm_link_appl_ptr
-#define snd_pcm_unlink_hw_ptr \
-	snd1_pcm_unlink_hw_ptr
-#define snd_pcm_unlink_appl_ptr \
-	snd1_pcm_unlink_appl_ptr
-#define snd_pcm_mmap_appl_ptr \
-	snd1_pcm_mmap_appl_ptr
-#define snd_pcm_mmap_appl_backward \
-	snd1_pcm_mmap_appl_backward
-#define snd_pcm_mmap_appl_forward \
-	snd1_pcm_mmap_appl_forward
-#define snd_pcm_mmap_hw_backward \
-	snd1_pcm_mmap_hw_backward
-#define snd_pcm_mmap_hw_forward \
-	snd1_pcm_mmap_hw_forward
-#define snd_pcm_read_areas \
-	snd1_pcm_read_areas
-#define snd_pcm_write_areas \
-	snd1_pcm_write_areas
-#define snd_pcm_read_mmap \
-	snd1_pcm_read_mmap
-#define snd_pcm_write_mmap \
-	snd1_pcm_write_mmap
-#define snd_pcm_channel_info_shm \
-	snd1_pcm_channel_info_shm
-#define snd_pcm_hw_refine_soft \
-	snd1_pcm_hw_refine_soft
-#define snd_pcm_hw_refine_slave \
-	snd1_pcm_hw_refine_slave
-#define snd_pcm_hw_params_slave \
-	snd1_pcm_hw_params_slave
-#define snd_pcm_hw_param_refine_near \
-	snd1_pcm_hw_param_refine_near
-#define snd_pcm_hw_param_refine_multiple \
-	snd1_pcm_hw_param_refine_multiple
-#define snd_pcm_hw_param_empty \
-	snd1_pcm_hw_param_empty
-#define snd_pcm_hw_param_always_eq \
-	snd1_pcm_hw_param_always_eq
-#define snd_pcm_hw_param_never_eq \
-	snd1_pcm_hw_param_never_eq
-#define snd_pcm_hw_param_get_mask \
-	snd1_pcm_hw_param_get_mask
-#define snd_pcm_hw_param_get_interval \
-	snd1_pcm_hw_param_get_interval
-#define snd_pcm_hw_param_any \
-	snd1_pcm_hw_param_any
-#define snd_pcm_hw_param_set_integer \
-	snd1_pcm_hw_param_set_integer
-#define snd_pcm_hw_param_set_first \
-	snd1_pcm_hw_param_set_first
-#define snd_pcm_hw_param_set_last \
-	snd1_pcm_hw_param_set_last
-#define snd_pcm_hw_param_set_near \
-	snd1_pcm_hw_param_set_near
-#define snd_pcm_hw_param_set_min \
-	snd1_pcm_hw_param_set_min
-#define snd_pcm_hw_param_set_max \
-	snd1_pcm_hw_param_set_max
-#define snd_pcm_hw_param_set_minmax \
-	snd1_pcm_hw_param_set_minmax
-#define snd_pcm_hw_param_set \
-	snd1_pcm_hw_param_set
-#define snd_pcm_hw_param_set_mask \
-	snd1_pcm_hw_param_set_mask
-#define snd_pcm_hw_param_get \
-	snd1_pcm_hw_param_get
-#define snd_pcm_hw_param_get_min \
-	snd1_pcm_hw_param_get_min
-#define snd_pcm_hw_param_get_max \
-	snd1_pcm_hw_param_get_max
-#define snd_pcm_hw_param_name		\
-	snd1_pcm_hw_param_name
+/* FIXME */
+#define _snd_pcm_link_descriptor _snd_pcm_poll_descriptor
+#define _snd_pcm_async_descriptor _snd_pcm_poll_descriptor
 
 int snd_pcm_new(snd_pcm_t **pcmp, snd_pcm_type_t type, const char *name,
 		snd_pcm_stream_t stream, int mode);
@@ -388,18 +261,11 @@ snd_pcm_sframes_t snd_pcm_read_areas(snd_pcm_t *pcm, const snd_pcm_channel_area_
 snd_pcm_sframes_t snd_pcm_write_areas(snd_pcm_t *pcm, const snd_pcm_channel_area_t *areas,
 				      snd_pcm_uframes_t offset, snd_pcm_uframes_t size,
 				      snd_pcm_xfer_areas_func_t func);
-snd_pcm_sframes_t snd_pcm_read_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t offset,
-				    snd_pcm_uframes_t size);
-snd_pcm_sframes_t snd_pcm_write_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t offset,
-				     snd_pcm_uframes_t size);
-static inline int snd_pcm_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *info)
-{
-	return pcm->ops->channel_info(pcm, info);
-}
+snd_pcm_sframes_t snd_pcm_read_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t size);
+snd_pcm_sframes_t snd_pcm_write_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t size);
+int snd_pcm_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *info);
 int snd_pcm_channel_info_shm(snd_pcm_t *pcm, snd_pcm_channel_info_t *info, int shmid);
 int _snd_pcm_poll_descriptor(snd_pcm_t *pcm);
-#define _snd_pcm_link_descriptor _snd_pcm_poll_descriptor /* FIXME */
-#define _snd_pcm_async_descriptor _snd_pcm_poll_descriptor /* FIXME */
 
 /* handle special error cases */
 static inline int snd_pcm_check_error(snd_pcm_t *pcm, int err)
@@ -411,7 +277,7 @@ static inline int snd_pcm_check_error(snd_pcm_t *pcm, int err)
 		case SND_PCM_STATE_SUSPENDED:
 			return -ESTRPIPE;
 		case SND_PCM_STATE_DISCONNECTED:
-			return -ENODEV;
+			return -ENOTTY;
 		default:
 			break;
 		}
@@ -459,25 +325,13 @@ static inline snd_pcm_sframes_t snd_pcm_mmap_capture_hw_avail(snd_pcm_t *pcm)
 
 static inline snd_pcm_sframes_t snd_pcm_mmap_hw_avail(snd_pcm_t *pcm)
 {
-	return pcm->buffer_size - snd_pcm_mmap_avail(pcm);
-}
-
-static inline snd_pcm_sframes_t snd_pcm_mmap_playback_hw_rewindable(snd_pcm_t *pcm)
-{
-	snd_pcm_sframes_t ret = snd_pcm_mmap_playback_hw_avail(pcm);
-	return (ret >= 0) ? ret : 0;
-}
-
-static inline snd_pcm_sframes_t snd_pcm_mmap_capture_hw_rewindable(snd_pcm_t *pcm)
-{
-	snd_pcm_sframes_t ret = snd_pcm_mmap_capture_hw_avail(pcm);
-	return (ret >= 0) ? ret : 0;
-}
-
-static inline snd_pcm_uframes_t snd_pcm_mmap_hw_rewindable(snd_pcm_t *pcm)
-{
-	snd_pcm_sframes_t ret = snd_pcm_mmap_hw_avail(pcm);
-	return (ret >= 0) ? ret : 0;
+	snd_pcm_sframes_t avail;
+	avail = *pcm->hw.ptr - *pcm->appl.ptr;
+	if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
+		avail += pcm->buffer_size;
+	if (avail < 0)
+		avail += pcm->boundary;
+	return pcm->buffer_size - avail;
 }
 
 static inline const snd_pcm_channel_area_t *snd_pcm_mmap_areas(snd_pcm_t *pcm)
@@ -589,8 +443,7 @@ static inline int muldiv_near(int a, int b, int c)
 }
 
 int snd_pcm_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
-int _snd_pcm_hw_params_internal(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
-#undef _snd_pcm_hw_params
+int _snd_pcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
 int snd_pcm_hw_refine_soft(snd_pcm_t *pcm, snd_pcm_hw_params_t *params);
 int snd_pcm_hw_refine_slave(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
 			    int (*cprepare)(snd_pcm_t *pcm,
@@ -832,10 +685,26 @@ int INTERNAL(snd_pcm_hw_params_set_buffer_size_near)(snd_pcm_t *pcm, snd_pcm_hw_
 int INTERNAL(snd_pcm_hw_params_set_buffer_size_first)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, snd_pcm_uframes_t *val);
 int INTERNAL(snd_pcm_hw_params_set_buffer_size_last)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, snd_pcm_uframes_t *val);
 
+int INTERNAL(snd_pcm_hw_params_get_tick_time)(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int INTERNAL(snd_pcm_hw_params_get_tick_time_min)(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int INTERNAL(snd_pcm_hw_params_get_tick_time_max)(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int snd_pcm_hw_params_test_tick_time(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val, int dir);
+int snd_pcm_hw_params_set_tick_time(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val, int dir);
+int snd_pcm_hw_params_set_tick_time_min(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int snd_pcm_hw_params_set_tick_time_max(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int snd_pcm_hw_params_set_tick_time_minmax(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *min, int *mindir, unsigned int *max, int *maxdir);
+int INTERNAL(snd_pcm_hw_params_set_tick_time_near)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int INTERNAL(snd_pcm_hw_params_set_tick_time_first)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+int INTERNAL(snd_pcm_hw_params_set_tick_time_last)(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
+
 int snd_pcm_sw_params_set_tstamp_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_tstamp_t val);
 int INTERNAL(snd_pcm_sw_params_get_tstamp_mode)(const snd_pcm_sw_params_t *params, snd_pcm_tstamp_t *val);
+int snd_pcm_sw_params_set_sleep_min(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, unsigned int val);
+int INTERNAL(snd_pcm_sw_params_get_sleep_min)(const snd_pcm_sw_params_t *params, unsigned int *val);
 int snd_pcm_sw_params_set_avail_min(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
 int INTERNAL(snd_pcm_sw_params_get_avail_min)(const snd_pcm_sw_params_t *params, snd_pcm_uframes_t *val);
+int snd_pcm_sw_params_set_xfer_align(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
+int INTERNAL(snd_pcm_sw_params_get_xfer_align)(const snd_pcm_sw_params_t *params, snd_pcm_uframes_t *val);
 int snd_pcm_sw_params_set_start_threshold(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
 int INTERNAL(snd_pcm_sw_params_get_start_threshold)(const snd_pcm_sw_params_t *paramsm, snd_pcm_uframes_t *val);
 int snd_pcm_sw_params_set_stop_threshold(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
@@ -866,30 +735,12 @@ int snd_pcm_hw_strategy_simple_choices(snd_pcm_hw_strategy_t *strategy, int orde
 int snd_pcm_slave_conf(snd_config_t *root, snd_config_t *conf,
 		       snd_config_t **pcm_conf, unsigned int count, ...);
 
-#define SND_PCM_APPEND	(1<<8)
-
-int snd_pcm_open_named_slave(snd_pcm_t **pcmp, const char *name,
-			     snd_config_t *root,
-			     snd_config_t *conf, snd_pcm_stream_t stream,
-			     int mode, snd_config_t *parent_conf);
-static inline int
-snd_pcm_open_slave(snd_pcm_t **pcmp, snd_config_t *root,
-		   snd_config_t *conf, snd_pcm_stream_t stream,
-		   int mode, snd_config_t *parent_conf)
-{
-	return snd_pcm_open_named_slave(pcmp, NULL, root, conf, stream,
-					mode, parent_conf);
-}
-
-#define snd_pcm_conf_generic_id(id) _snd_conf_generic_id(id)
+int snd_pcm_open_slave(snd_pcm_t **pcmp, snd_config_t *root,
+		       snd_config_t *conf, snd_pcm_stream_t stream,
+		       int mode);
+int snd_pcm_conf_generic_id(const char *id);
 
 int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd, int mmap_emulation, int sync_ptr_ioctl);
-int __snd_pcm_mmap_emul_open(snd_pcm_t **pcmp, const char *name,
-			     snd_pcm_t *slave, int close_slave);
-
-int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout);
-
-const snd_config_t *snd_pcm_rate_get_default_converter(snd_config_t *root);
 
 #define SND_PCM_HW_PARBIT_ACCESS	(1U << SND_PCM_HW_PARAM_ACCESS)
 #define SND_PCM_HW_PARBIT_FORMAT	(1U << SND_PCM_HW_PARAM_FORMAT)
@@ -970,71 +821,3 @@ typedef union snd_tmp_double {
 	int64_t l;
 } snd_tmp_double_t;
 
-/* get the current timestamp */
-#ifdef HAVE_CLOCK_GETTIME
-static inline void gettimestamp(snd_htimestamp_t *tstamp,
-				snd_pcm_tstamp_type_t tstamp_type)
-{
-	clockid_t id;
-
-	switch (tstamp_type) {
-#ifdef CLOCK_MONOTONIC_RAW
-	case SND_PCM_TSTAMP_TYPE_MONOTONIC_RAW:
-		id = CLOCK_MONOTONIC_RAW;
-		break;
-#endif
-#ifdef CLOCK_MONOTONIC
-	case SND_PCM_TSTAMP_TYPE_MONOTONIC:
-		id = CLOCK_MONOTONIC;
-		break;
-#endif
-	default:
-		id = CLOCK_REALTIME;
-		break;
-	}
-	clock_gettime(id, tstamp);
-}
-#else /* HAVE_CLOCK_GETTIME */
-static inline void gettimestamp(snd_htimestamp_t *tstamp,
-				snd_pcm_tstamp_type_t tstamp_type)
-{
-	struct timeval tv;
-
-	gettimeofday(&tv, 0);
-	tstamp->tv_sec = tv.tv_sec;
-	tstamp->tv_nsec = tv.tv_usec * 1000L;
-}
-#endif /* HAVE_CLOCK_GETTIME */
-
-snd_pcm_chmap_query_t **
-_snd_pcm_make_single_query_chmaps(const snd_pcm_chmap_t *src);
-snd_pcm_chmap_t *_snd_pcm_copy_chmap(const snd_pcm_chmap_t *src);
-snd_pcm_chmap_query_t **
-_snd_pcm_copy_chmap_query(snd_pcm_chmap_query_t * const *src);
-snd_pcm_chmap_query_t **
-_snd_pcm_parse_config_chmaps(snd_config_t *conf);
-snd_pcm_chmap_t *
-_snd_pcm_choose_fixed_chmap(snd_pcm_t *pcm, snd_pcm_chmap_query_t * const *maps);
-
-/* return true if the PCM stream may wait to get avail_min space */
-static inline int snd_pcm_may_wait_for_avail_min(snd_pcm_t *pcm, snd_pcm_uframes_t avail)
-{
-	if (avail >= pcm->avail_min)
-		return 0;
-	if (pcm->fast_ops->may_wait_for_avail_min)
-		return pcm->fast_ops->may_wait_for_avail_min(pcm, avail);
-	return 1;
-}
-
-/* hack to access to internal period_event in snd_pcm_sw_parmams */
-static inline int sw_get_period_event(const snd_pcm_sw_params_t *params)
-{
-	return params->reserved[sizeof(params->reserved) / sizeof(params->reserved[0])- 1];
-}
-
-static inline void sw_set_period_event(snd_pcm_sw_params_t *params, int val)
-{
-	params->reserved[sizeof(params->reserved) / sizeof(params->reserved[0]) - 1] = val;
-}
-
-#define PCMINABORT(pcm) (((pcm)->mode & SND_PCM_ABORT) != 0)

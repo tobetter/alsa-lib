@@ -1,23 +1,8 @@
-ACLOCAL_AMFLAGS = -I m4
-
-SUBDIRS=doc include src
-if BUILD_MODULES
-SUBDIRS += modules
-endif
-if BUILD_PCM_PLUGIN_SHM
-SUBDIRS += aserver
-endif
-if BUILD_MIXER
-if BUILD_ALISP
-SUBDIRS += alsalisp
-endif
-endif
-SUBDIRS += test utils
-EXTRA_DIST=ChangeLog INSTALL TODO NOTES configure gitcompile libtool \
-	   depcomp version MEMORY-LEAK m4/attributes.m4
+SUBDIRS=doc include src aserver alsalisp test utils
+EXTRA_DIST=ChangeLog INSTALL TODO NOTES configure cvscompile libtool depcomp version MEMORY-LEAK
 AUTOMAKE_OPTIONS=foreign
 
-AM_CPPFLAGS=-I$(top_srcdir)/include
+INCLUDES=-I$(top_srcdir)/include
 
 rpm: dist
 	$(MAKE) -C utils rpm

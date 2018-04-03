@@ -35,7 +35,6 @@ const char *_snd_module_rawmidi_virt = "";
 #endif
 
 
-#ifndef DOC_HIDDEN
 typedef struct {
 	int open;
 
@@ -53,11 +52,6 @@ typedef struct {
 	snd_seq_event_t out_event;
 	int pending;
 } snd_rawmidi_virtual_t;
-
-int _snd_seq_open_lconf(snd_seq_t **seqp, const char *name, 
-			int streams, int mode, snd_config_t *lconf,
-			snd_config_t *parent_conf);
-#endif
 
 static int snd_rawmidi_virtual_close(snd_rawmidi_t *rmidi)
 {
@@ -89,9 +83,9 @@ static int snd_rawmidi_virtual_info(snd_rawmidi_t *rmidi, snd_rawmidi_info_t * i
 	info->device = 0;
 	info->subdevice = 0;
 	info->flags = 0;
-	strcpy((char *)info->id, "Virtual");
-	strcpy((char *)info->name, "Virtual RawMIDI");
-	strcpy((char *)info->subname, "Virtual RawMIDI");
+	strcpy(info->id, "Virtual");
+	strcpy(info->name, "Virtual RawMIDI");
+	strcpy(info->subname, "Virtual RawMIDI");
 	info->subdevices_count = 1;
 	info->subdevices_avail = 0;
 	return 0;
@@ -212,11 +206,11 @@ static ssize_t snd_rawmidi_virtual_write(snd_rawmidi_t *rmidi, const void *buffe
 		size1 = snd_midi_event_encode(virt->midi_event, buffer, size, &virt->out_event);
 		if (size1 <= 0)
 			break;
+		if (virt->out_event.type == SND_SEQ_EVENT_NONE)
+			continue;
 		size -= size1;
 		result += size1;
 		buffer += size1;
-		if (virt->out_event.type == SND_SEQ_EVENT_NONE)
-			continue;
 		snd_seq_ev_set_subs(&virt->out_event);
 		snd_seq_ev_set_source(&virt->out_event, virt->port);
 		snd_seq_ev_set_direct(&virt->out_event);
@@ -254,7 +248,7 @@ static ssize_t snd_rawmidi_virtual_read(snd_rawmidi_t *rmidi, void *buffer, size
 			} else {
 				virt->in_buf_ptr = virt->in_tmp_buf;
 				virt->in_buf_size = snd_midi_event_decode(virt->midi_event,
-									  (unsigned char *)virt->in_tmp_buf,
+									  virt->in_tmp_buf,
 									  sizeof(virt->in_tmp_buf),
 									  virt->in_event);
 			}
@@ -278,7 +272,7 @@ static ssize_t snd_rawmidi_virtual_read(snd_rawmidi_t *rmidi, void *buffer, size
 	return result;
 }
 
-static const snd_rawmidi_ops_t snd_rawmidi_virtual_ops = {
+snd_rawmidi_ops_t snd_rawmidi_virtual_ops = {
 	.close = snd_rawmidi_virtual_close,
 	.nonblock = snd_rawmidi_virtual_nonblock,
 	.info = snd_rawmidi_virtual_info,
@@ -383,14 +377,13 @@ int snd_rawmidi_virtual_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
  _err:
 	if (seq_handle)
 		snd_seq_close(seq_handle);
-	if (virt) {
-		if (virt->midi_event)
-			snd_midi_event_free(virt->midi_event);
+	if (virt->midi_event)
+		snd_midi_event_free(virt->midi_event);
+	if (virt)
 		free(virt);
-	}
-	if (inputp)
+	if (inputp && *inputp)
 		free(*inputp);
-	if (outputp)
+	if (outputp && *outputp)
 		free(*outputp);
 	return err;
 }
@@ -413,7 +406,9 @@ int _snd_rawmidi_virtual_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (snd_rawmidi_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
 			continue;
 		if (strcmp(id, "slave") == 0) {
 			err = snd_config_get_string(n, &slave_str);
@@ -438,12 +433,11 @@ int _snd_rawmidi_virtual_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 
 	seq_mode = 0;
 	if (mode & SND_RAWMIDI_NONBLOCK)
-		seq_mode |= SND_SEQ_NONBLOCK;
+		seq_mode |= O_NONBLOCK;
 
 	if (! slave_str)
 		slave_str = "default";
-	err = _snd_seq_open_lconf(&seq_handle, slave_str, streams, seq_mode,
-				  root, conf);
+	err = snd_seq_open_lconf(&seq_handle, slave_str, streams, seq_mode, root);
 	if (err < 0)
 		return err;
 

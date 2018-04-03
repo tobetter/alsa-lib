@@ -2,12 +2,12 @@
  * \file pcm/pcm_dmix.c
  * \ingroup PCM_Plugins
  * \brief PCM Direct Stream Mixing (dmix) Plugin Interface
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2003
  */
 /*
  *  PCM - Direct Stream Mixing
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -34,7 +34,6 @@
 #include <string.h>
 #include <fcntl.h>
 #include <ctype.h>
-#include <grp.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -50,22 +49,16 @@
 const char *_snd_module_pcm_dmix = "";
 #endif
 
-#ifndef DOC_HIDDEN
-/* start is pending - this state happens when rate plugin does a delayed commit */
-#define STATE_RUN_PENDING	1024
-#endif
-
 /*
  *
  */
-
-static int shm_sum_discard(snd_pcm_direct_t *dmix);
 
 /*
  *  sum ring buffer shared memory area 
  */
 static int shm_sum_create_or_connect(snd_pcm_direct_t *dmix)
 {
+	static int shm_sum_discard(snd_pcm_direct_t *dmix);
 	struct shmid_ds buf;
 	int tmpid, err;
 	size_t size;
@@ -74,12 +67,11 @@ static int shm_sum_create_or_connect(snd_pcm_direct_t *dmix)
 	       dmix->shmptr->s.buffer_size *
 	       sizeof(signed int);	
 retryshm:
-	dmix->u.dmix.shmid_sum = shmget(dmix->ipc_key + 1, size,
-					IPC_CREAT | dmix->ipc_perm);
+	dmix->u.dmix.shmid_sum = shmget(dmix->ipc_key + 1, size, IPC_CREAT | 0666);
 	err = -errno;
-	if (dmix->u.dmix.shmid_sum < 0) {
+	if (dmix->u.dmix.shmid_sum < 0){
 		if (errno == EINVAL)
-		if ((tmpid = shmget(dmix->ipc_key + 1, 0, dmix->ipc_perm)) != -1)
+		if ((tmpid = shmget(dmix->ipc_key + 1, 0, 0666)) != -1)
 		if (!shmctl(tmpid, IPC_STAT, &buf))
 	    	if (!buf.shm_nattch) 
 		/* no users so destroy the segment */
@@ -87,20 +79,10 @@ retryshm:
 		    goto retryshm;
 		return err;
 	}
-	if (shmctl(dmix->u.dmix.shmid_sum, IPC_STAT, &buf) < 0) {
-		err = -errno;
-		shm_sum_discard(dmix);
-		return err;
-	}
-	if (dmix->ipc_gid >= 0) {
-		buf.shm_perm.gid = dmix->ipc_gid;
-		shmctl(dmix->u.dmix.shmid_sum, IPC_SET, &buf); 
-	}
 	dmix->u.dmix.sum_buffer = shmat(dmix->u.dmix.shmid_sum, 0, 0);
 	if (dmix->u.dmix.sum_buffer == (void *) -1) {
-		err = -errno;
 		shm_sum_discard(dmix);
-		return err;
+		return -errno;
 	}
 	mlock(dmix->u.dmix.sum_buffer, size);
 	return 0;
@@ -139,16 +121,172 @@ static void dmix_server_free(snd_pcm_direct_t *dmix)
  *  FIXME: optimize it for different architectures
  */
 
-#include "pcm_dmix_generic.c"
-#if defined(__i386__)
-#include "pcm_dmix_i386.c"
-#elif defined(__x86_64__)
-#include "pcm_dmix_x86_64.c"
-#else
-#ifndef DOC_HIDDEN
-#define mix_select_callbacks(x)	generic_mix_select_callbacks(x)
-#define dmix_supported_format generic_dmix_supported_format
+#ifdef __i386__
+
+#define ADD_AND_SATURATE
+
+#define MIX_AREAS1 mix_areas1
+#define MIX_AREAS1_MMX mix_areas1_mmx
+#define MIX_AREAS2 mix_areas2
+#define LOCK_PREFIX ""
+#include "pcm_dmix_i386.h"
+#undef MIX_AREAS1
+#undef MIX_AREAS1_MMX
+#undef MIX_AREAS2
+#undef LOCK_PREFIX
+
+#define MIX_AREAS1 mix_areas1_smp
+#define MIX_AREAS1_MMX mix_areas1_smp_mmx
+#define MIX_AREAS2 mix_areas2_smp
+#define LOCK_PREFIX "lock ; "
+#include "pcm_dmix_i386.h"
+#undef MIX_AREAS1
+#undef MIX_AREAS1_MMX
+#undef MIX_AREAS2
+#undef LOCK_PREFIX
+ 
+static void mix_select_callbacks(snd_pcm_direct_t *dmix)
+{
+	FILE *in;
+	char line[255];
+	int smp = 0, mmx = 0;
+	
+	/* try to determine, if we have a MMX capable CPU */
+	in = fopen("/proc/cpuinfo", "r");
+	if (in) {
+		while (!feof(in)) {
+			fgets(line, sizeof(line), in);
+			if (!strncmp(line, "processor", 9))
+				smp++;
+			else if (!strncmp(line, "flags", 5)) {
+				if (strstr(line, " mmx"))
+					mmx = 1;
+			}
+		}
+		fclose(in);
+	}
+	// printf("MMX: %i, SMP: %i\n", mmx, smp);
+	if (mmx) {
+		dmix->u.dmix.mix_areas1 = smp > 1 ? mix_areas1_smp_mmx : mix_areas1_mmx;
+	} else {
+		dmix->u.dmix.mix_areas1 = smp > 1 ? mix_areas1_smp : mix_areas1;
+	}
+	dmix->u.dmix.mix_areas2 = smp > 1 ? mix_areas2_smp : mix_areas2;
+}
 #endif
+
+#ifdef __x86_64__
+#define ADD_AND_SATURATE
+
+#define MIX_AREAS1 mix_areas1
+#define MIX_AREAS2 mix_areas2
+#define LOCK_PREFIX ""
+#include "pcm_dmix_x86_64.h"
+#undef MIX_AREAS1
+#undef MIX_AREAS2
+#undef LOCK_PREFIX
+
+#define MIX_AREAS1 mix_areas1_smp
+#define MIX_AREAS2 mix_areas2_smp
+#define LOCK_PREFIX "lock ; "
+#include "pcm_dmix_x86_64.h"
+#undef MIX_AREAS1
+#undef MIX_AREAS2
+#undef LOCK_PREFIX
+ 
+static void mix_select_callbacks(snd_pcm_direct_t *dmix)
+{
+	FILE *in;
+	char line[255];
+	int smp = 0;
+	
+	/* try to determine, if we have SMP */
+	in = fopen("/proc/cpuinfo", "r");
+	if (in) {
+		while (!feof(in)) {
+			fgets(line, sizeof(line), in);
+			if (!strncmp(line, "processor", 9))
+				smp++;
+		}
+		fclose(in);
+	}
+	// printf("SMP: %i\n", smp);
+	dmix->u.dmix.mix_areas1 = smp > 1 ? mix_areas1_smp : mix_areas1;
+	dmix->u.dmix.mix_areas2 = smp > 1 ? mix_areas2_smp : mix_areas2;
+}
+#endif
+
+
+#ifndef ADD_AND_SATURATE
+#warning Please, recode mix_areas1() routine to your architecture...
+static void mix_areas1(unsigned int size,
+		       volatile signed short *dst, signed short *src,
+		       volatile signed int *sum, size_t dst_step,
+		       size_t src_step, size_t sum_step)
+{
+	register signed int sample, old_sample;
+
+	for (;;) {
+		sample = *src;
+		old_sample = *sum;
+		if (*dst == 0)
+			sample -= old_sample;
+		*sum += sample;
+		do {
+			old_sample = *sum;
+			if (old_sample > 0x7fff)
+				sample = 0x7fff;
+			else if (old_sample < -0x8000)
+				sample = -0x8000;
+			else
+				sample = old_sample;
+			*dst = sample;
+		} while (*sum != old_sample);
+		if (!--size)
+			return;
+		((char *)src) += src_step;
+		((char *)dst) += dst_step;
+		((char *)sum) += sum_step;
+	}
+}
+
+#warning Please, recode mix_areas2() routine to your architecture...
+static void mix_areas2(unsigned int size,
+		       volatile signed int *dst, signed int *src,
+		       volatile signed int *sum, size_t dst_step,
+		       size_t src_step, size_t sum_step)
+{
+	register signed int sample, old_sample;
+
+	for (;;) {
+		sample = *src / 256;
+		old_sample = *sum;
+		if (*dst == 0)
+			sample -= old_sample;
+		*sum += sample;
+		do {
+			old_sample = *sum;
+			if (old_sample > 0x7fffff)
+				sample = 0x7fffffff;
+			else if (old_sample < -0x800000)
+				sample = -0x80000000;
+			else
+				sample = old_sample * 256;
+			*dst = sample;
+		} while (*sum != old_sample);
+		if (!--size)
+			return;
+		((char *)src) += src_step;
+		((char *)dst) += dst_step;
+		((char *)sum) += sum_step;
+	}
+}
+
+static void mix_select_callbacks(snd_pcm_direct_t *dmix)
+{
+	dmix->u.dmix.mix_areas1 = mix_areas1;
+	dmix->u.dmix.mix_areas2 = mix_areas2;
+}
 #endif
 
 static void mix_areas(snd_pcm_direct_t *dmix,
@@ -158,234 +296,102 @@ static void mix_areas(snd_pcm_direct_t *dmix,
 		      snd_pcm_uframes_t dst_ofs,
 		      snd_pcm_uframes_t size)
 {
+	volatile signed int *sum;
 	unsigned int src_step, dst_step;
-	unsigned int chn, dchn, channels, sample_size;
-	mix_areas_t *do_mix_areas;
+	unsigned int chn, dchn, channels;
 	
 	channels = dmix->channels;
-	switch (dmix->shmptr->s.format) {
-	case SND_PCM_FORMAT_S16_LE:
-	case SND_PCM_FORMAT_S16_BE:
-		sample_size = 2;
-		do_mix_areas = (mix_areas_t *)dmix->u.dmix.mix_areas_16;
-		break;
-	case SND_PCM_FORMAT_S32_LE:
-	case SND_PCM_FORMAT_S32_BE:
-		sample_size = 4;
-		do_mix_areas = (mix_areas_t *)dmix->u.dmix.mix_areas_32;
-		break;
-	case SND_PCM_FORMAT_S24_LE:
-		sample_size = 4;
-		do_mix_areas = (mix_areas_t *)dmix->u.dmix.mix_areas_24;
-		break;
-	case SND_PCM_FORMAT_S24_3LE:
-		sample_size = 3;
-		do_mix_areas = (mix_areas_t *)dmix->u.dmix.mix_areas_24;
-		break;
-	case SND_PCM_FORMAT_U8:
-		sample_size = 1;
-		do_mix_areas = (mix_areas_t *)dmix->u.dmix.mix_areas_u8;
-		break;
-	default:
-		return;
-	}
-	if (dmix->interleaved) {
-		/*
-		 * process all areas in one loop
-		 * it optimizes the memory accesses for this case
-		 */
-		do_mix_areas(size * channels,
-			     (unsigned char *)dst_areas[0].addr + sample_size * dst_ofs * channels,
-			     (unsigned char *)src_areas[0].addr + sample_size * src_ofs * channels,
-			     dmix->u.dmix.sum_buffer + dst_ofs * channels,
-			     sample_size,
-			     sample_size,
-			     sizeof(signed int));
-		return;
-	}
-	for (chn = 0; chn < channels; chn++) {
-		dchn = dmix->bindings ? dmix->bindings[chn] : chn;
-		if (dchn >= dmix->shmptr->s.channels)
-			continue;
-		src_step = src_areas[chn].step / 8;
-		dst_step = dst_areas[dchn].step / 8;
-		do_mix_areas(size,
-			     ((unsigned char *)dst_areas[dchn].addr + dst_areas[dchn].first / 8) + dst_ofs * dst_step,
-			     ((unsigned char *)src_areas[chn].addr + src_areas[chn].first / 8) + src_ofs * src_step,
-			     dmix->u.dmix.sum_buffer + channels * dst_ofs + chn,
-			     dst_step,
-			     src_step,
-			     channels * sizeof(signed int));
-	}
-}
-
-static void remix_areas(snd_pcm_direct_t *dmix,
-			const snd_pcm_channel_area_t *src_areas,
-			const snd_pcm_channel_area_t *dst_areas,
-			snd_pcm_uframes_t src_ofs,
-			snd_pcm_uframes_t dst_ofs,
-			snd_pcm_uframes_t size)
-{
-	unsigned int src_step, dst_step;
-	unsigned int chn, dchn, channels, sample_size;
-	mix_areas_t *do_remix_areas;
-	
-	channels = dmix->channels;
-	switch (dmix->shmptr->s.format) {
-	case SND_PCM_FORMAT_S16_LE:
-	case SND_PCM_FORMAT_S16_BE:
-		sample_size = 2;
-		do_remix_areas = (mix_areas_t *)dmix->u.dmix.remix_areas_16;
-		break;
-	case SND_PCM_FORMAT_S32_LE:
-	case SND_PCM_FORMAT_S32_BE:
-		sample_size = 4;
-		do_remix_areas = (mix_areas_t *)dmix->u.dmix.remix_areas_32;
-		break;
-	case SND_PCM_FORMAT_S24_LE:
-		sample_size = 4;
-		do_remix_areas = (mix_areas_t *)dmix->u.dmix.remix_areas_24;
-		break;
-	case SND_PCM_FORMAT_S24_3LE:
-		sample_size = 3;
-		do_remix_areas = (mix_areas_t *)dmix->u.dmix.remix_areas_24;
-		break;
-	case SND_PCM_FORMAT_U8:
-		sample_size = 1;
-		do_remix_areas = (mix_areas_t *)dmix->u.dmix.remix_areas_u8;
-		break;
-	default:
-		return;
-	}
-	if (dmix->interleaved) {
-		/*
-		 * process all areas in one loop
-		 * it optimizes the memory accesses for this case
-		 */
-		do_remix_areas(size * channels,
-			       (unsigned char *)dst_areas[0].addr + sample_size * dst_ofs * channels,
-			       (unsigned char *)src_areas[0].addr + sample_size * src_ofs * channels,
-			       dmix->u.dmix.sum_buffer + dst_ofs * channels,
-			       sample_size,
-			       sample_size,
-			       sizeof(signed int));
-		return;
-	}
-	for (chn = 0; chn < channels; chn++) {
-		dchn = dmix->bindings ? dmix->bindings[chn] : chn;
-		if (dchn >= dmix->shmptr->s.channels)
-			continue;
-		src_step = src_areas[chn].step / 8;
-		dst_step = dst_areas[dchn].step / 8;
-		do_remix_areas(size,
-			       ((unsigned char *)dst_areas[dchn].addr + dst_areas[dchn].first / 8) + dst_ofs * dst_step,
-			       ((unsigned char *)src_areas[chn].addr + src_areas[chn].first / 8) + src_ofs * src_step,
-			       dmix->u.dmix.sum_buffer + channels * dst_ofs + chn,
-			       dst_step,
-			       src_step,
-			       channels * sizeof(signed int));
+	if (dmix->shmptr->s.format == SND_PCM_FORMAT_S16) {
+		signed short *src;
+		volatile signed short *dst;
+		if (dmix->interleaved) {
+			/*
+			 * process all areas in one loop
+			 * it optimizes the memory accesses for this case
+			 */
+			dmix->u.dmix.mix_areas1(size * channels,
+					 ((signed short *)dst_areas[0].addr) + (dst_ofs * channels),
+					 ((signed short *)src_areas[0].addr) + (src_ofs * channels),
+					 dmix->u.dmix.sum_buffer + (dst_ofs * channels),
+					 sizeof(signed short),
+					 sizeof(signed short),
+					 sizeof(signed int));
+			return;
+		}
+		for (chn = 0; chn < channels; chn++) {
+			dchn = dmix->bindings ? dmix->bindings[chn] : chn;
+			if (dchn >= dmix->shmptr->s.channels)
+				continue;
+			src_step = src_areas[chn].step / 8;
+			dst_step = dst_areas[dchn].step / 8;
+			src = (signed short *)(((char *)src_areas[chn].addr + src_areas[chn].first / 8) + (src_ofs * src_step));
+			dst = (signed short *)(((char *)dst_areas[dchn].addr + dst_areas[dchn].first / 8) + (dst_ofs * dst_step));
+			sum = dmix->u.dmix.sum_buffer + channels * dst_ofs + chn;
+			dmix->u.dmix.mix_areas1(size, dst, src, sum, dst_step, src_step, channels * sizeof(signed int));
+		}
+	} else {
+		signed int *src;
+		volatile signed int *dst;
+		if (dmix->interleaved) {
+			/*
+			 * process all areas in one loop
+			 * it optimizes the memory accesses for this case
+			 */
+			dmix->u.dmix.mix_areas2(size * channels,
+					 ((signed int *)dst_areas[0].addr) + (dst_ofs * channels),
+					 ((signed int *)src_areas[0].addr) + (src_ofs * channels),
+					 dmix->u.dmix.sum_buffer + (dst_ofs * channels),
+					 sizeof(signed int),
+					 sizeof(signed int),
+					 sizeof(signed int));
+			return;
+		}
+		for (chn = 0; chn < channels; chn++) {
+			dchn = dmix->bindings ? dmix->bindings[chn] : chn;
+			if (dchn >= dmix->shmptr->s.channels)
+				continue;
+			src_step = src_areas[chn].step / 8;
+			dst_step = dst_areas[dchn].step / 8;
+			src = (signed int *)(((char *)src_areas[chn].addr + src_areas[chn].first / 8) + (src_ofs * src_step));
+			dst = (signed int *)(((char *)dst_areas[dchn].addr + dst_areas[dchn].first / 8) + (dst_ofs * dst_step));
+			sum = dmix->u.dmix.sum_buffer + channels * dst_ofs + chn;
+			dmix->u.dmix.mix_areas2(size, dst, src, sum, dst_step, src_step, channels * sizeof(signed int));
+		}
 	}
 }
-
-/*
- * if no concurrent access is allowed in the mixing routines, we need to protect
- * the area via semaphore
- */
-#ifndef DOC_HIDDEN
-#ifdef NO_CONCURRENT_ACCESS
-#define dmix_down_sem(dmix) snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT)
-#define dmix_up_sem(dmix) snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT)
-#else
-#define dmix_down_sem(dmix)
-#define dmix_up_sem(dmix)
-#endif
-#endif
 
 /*
  *  synchronize shm ring buffer with hardware
  */
-static void snd_pcm_dmix_sync_area(snd_pcm_t *pcm)
+static void snd_pcm_dmix_sync_area(snd_pcm_t *pcm, snd_pcm_uframes_t size)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_uframes_t slave_hw_ptr, slave_appl_ptr, slave_size;
-	snd_pcm_uframes_t appl_ptr, size, transfer;
+	snd_pcm_uframes_t appl_ptr, slave_appl_ptr, transfer;
 	const snd_pcm_channel_area_t *src_areas, *dst_areas;
 	
-	/* calculate the size to transfer */
-	/* check the available size in the local buffer
-	 * last_appl_ptr keeps the last updated position
-	 */
-	size = dmix->appl_ptr - dmix->last_appl_ptr;
-	if (! size)
-		return;
-	if (size >= pcm->boundary / 2)
-		size = pcm->boundary - size;
-
-	/* the slave_app_ptr can be far behind the slave_hw_ptr */
-	/* reduce mixing and errors here - just skip not catched writes */
-	if (dmix->slave_hw_ptr <= dmix->slave_appl_ptr)
-		slave_size = dmix->slave_appl_ptr - dmix->slave_hw_ptr;
-	else
-		slave_size = dmix->slave_appl_ptr + (dmix->slave_boundary - dmix->slave_hw_ptr);
-	if (slave_size > dmix->slave_buffer_size) {
-		transfer = dmix->slave_buffer_size - slave_size;
-		if (transfer > size)
-			transfer = size;
-		dmix->last_appl_ptr += transfer;
-		dmix->last_appl_ptr %= pcm->boundary;
-		dmix->slave_appl_ptr += transfer;
-		dmix->slave_appl_ptr %= dmix->slave_boundary;
-		size = dmix->appl_ptr - dmix->last_appl_ptr;
-		if (! size)
-			return;
-		if (size >= pcm->boundary / 2)
-			size = pcm->boundary - size;
-	}
-
-	/* check the available size in the slave PCM buffer */
-	slave_hw_ptr = dmix->slave_hw_ptr;
-	/* don't write on the last active period - this area may be cleared
-	 * by the driver during mix operation...
-	 */
-	slave_hw_ptr -= slave_hw_ptr % dmix->slave_period_size;
-	slave_hw_ptr += dmix->slave_buffer_size;
-	if (slave_hw_ptr >= dmix->slave_boundary)
-		slave_hw_ptr -= dmix->slave_boundary;
-	if (slave_hw_ptr < dmix->slave_appl_ptr)
-		slave_size = slave_hw_ptr + (dmix->slave_boundary - dmix->slave_appl_ptr);
-	else
-		slave_size = slave_hw_ptr - dmix->slave_appl_ptr;
-	if (slave_size < size)
-		size = slave_size;
-	if (! size)
-		return;
-
+	/* get the start of update area */
+	appl_ptr = dmix->appl_ptr - size;
+	if (appl_ptr > pcm->boundary)
+		appl_ptr += pcm->boundary;
+	appl_ptr %= pcm->buffer_size;
 	/* add sample areas here */
 	src_areas = snd_pcm_mmap_areas(pcm);
 	dst_areas = snd_pcm_mmap_areas(dmix->spcm);
-	appl_ptr = dmix->last_appl_ptr % pcm->buffer_size;
-	dmix->last_appl_ptr += size;
-	dmix->last_appl_ptr %= pcm->boundary;
-	slave_appl_ptr = dmix->slave_appl_ptr % dmix->slave_buffer_size;
+	slave_appl_ptr = dmix->slave_appl_ptr % dmix->shmptr->s.buffer_size;
 	dmix->slave_appl_ptr += size;
-	dmix->slave_appl_ptr %= dmix->slave_boundary;
-	dmix_down_sem(dmix);
-	for (;;) {
-		transfer = size;
-		if (appl_ptr + transfer > pcm->buffer_size)
-			transfer = pcm->buffer_size - appl_ptr;
-		if (slave_appl_ptr + transfer > dmix->slave_buffer_size)
-			transfer = dmix->slave_buffer_size - slave_appl_ptr;
+	dmix->slave_appl_ptr %= dmix->shmptr->s.boundary;
+	while (size > 0) {
+		transfer = appl_ptr + size > pcm->buffer_size ? pcm->buffer_size - appl_ptr : size;
+		if ((transfer = slave_appl_ptr + transfer > dmix->shmptr->s.buffer_size ? dmix->shmptr->s.buffer_size - slave_appl_ptr : transfer))
 		mix_areas(dmix, src_areas, dst_areas, appl_ptr, slave_appl_ptr, transfer);
+		if (transfer >= size)
+			return;
 		size -= transfer;
-		if (! size)
-			break;
 		slave_appl_ptr += transfer;
-		slave_appl_ptr %= dmix->slave_buffer_size;
+		slave_appl_ptr %= dmix->shmptr->s.buffer_size;
 		appl_ptr += transfer;
 		appl_ptr %= pcm->buffer_size;
 	}
-	dmix_up_sem(dmix);
 }
 
 /*
@@ -399,8 +405,8 @@ static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
 	
 	switch (snd_pcm_state(dmix->spcm)) {
 	case SND_PCM_STATE_DISCONNECTED:
-		dmix->state = SND_PCM_STATE_DISCONNECTED;
-		return -ENODEV;
+		dmix->state = -ENOTTY;
+		return -ENOTTY;
 	default:
 		break;
 	}
@@ -411,32 +417,25 @@ static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
 	diff = slave_hw_ptr - old_slave_hw_ptr;
 	if (diff == 0)		/* fast path */
 		return 0;
-	if (dmix->state != SND_PCM_STATE_RUNNING &&
-	    dmix->state != SND_PCM_STATE_DRAINING)
-		/* not really started yet - don't update hw_ptr */
-		return 0;
 	if (diff < 0) {
-		slave_hw_ptr += dmix->slave_boundary;
+		slave_hw_ptr += dmix->shmptr->s.boundary;
 		diff = slave_hw_ptr - old_slave_hw_ptr;
 	}
 	dmix->hw_ptr += diff;
 	dmix->hw_ptr %= pcm->boundary;
 	if (pcm->stop_threshold >= pcm->boundary)	/* don't care */
 		return 0;
-	avail = snd_pcm_mmap_playback_avail(pcm);
+	if ((avail = snd_pcm_mmap_playback_avail(pcm)) >= pcm->stop_threshold) {
+		struct timeval tv;
+		gettimeofday(&tv, 0);
+		dmix->trigger_tstamp.tv_sec = tv.tv_sec;
+		dmix->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+		dmix->state = SND_PCM_STATE_XRUN;
+		dmix->avail_max = avail;
+		return -EPIPE;
+	}
 	if (avail > dmix->avail_max)
 		dmix->avail_max = avail;
-	if (avail >= pcm->stop_threshold) {
-		snd_timer_stop(dmix->timer);
-		gettimestamp(&dmix->trigger_tstamp, pcm->tstamp_type);
-		if (dmix->state == SND_PCM_STATE_RUNNING) {
-			dmix->state = SND_PCM_STATE_XRUN;
-			return -EPIPE;
-		}
-		dmix->state = SND_PCM_STATE_SETUP;
-		/* clear queue to remove pending poll events */
-		snd_pcm_direct_clear_timer_queue(dmix);
-	}
 	return 0;
 }
 
@@ -444,28 +443,10 @@ static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
  *  plugin implementation
  */
 
-static snd_pcm_state_t snd_pcm_dmix_state(snd_pcm_t *pcm)
-{
-	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_state_t state;
-	state = snd_pcm_state(dmix->spcm);
-	switch (state) {
-	case SND_PCM_STATE_XRUN:
-	case SND_PCM_STATE_SUSPENDED:
-	case SND_PCM_STATE_DISCONNECTED:
-		dmix->state = state;
-		return state;
-	default:
-		break;
-	}
-	if (dmix->state == STATE_RUN_PENDING)
-		return SNDRV_PCM_STATE_RUNNING;
-	return dmix->state;
-}
-
 static int snd_pcm_dmix_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
+	snd_pcm_state_t state;
 
 	switch (dmix->state) {
 	case SNDRV_PCM_STATE_DRAINING:
@@ -476,14 +457,29 @@ static int snd_pcm_dmix_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 		break;
 	}
 	memset(status, 0, sizeof(*status));
-	snd_pcm_status(dmix->spcm, status);
-	status->state = snd_pcm_dmix_state(pcm);
+	state = snd_pcm_state(dmix->spcm);
+	status->state = state == SNDRV_PCM_STATE_RUNNING ? dmix->state : state;
 	status->trigger_tstamp = dmix->trigger_tstamp;
+	status->tstamp = snd_pcm_hw_fast_tstamp(dmix->spcm);
 	status->avail = snd_pcm_mmap_playback_avail(pcm);
 	status->avail_max = status->avail > dmix->avail_max ? status->avail : dmix->avail_max;
 	dmix->avail_max = 0;
-	status->delay = snd_pcm_mmap_playback_delay(pcm);
 	return 0;
+}
+
+static snd_pcm_state_t snd_pcm_dmix_state(snd_pcm_t *pcm)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+	switch (snd_pcm_state(dmix->spcm)) {
+	case SND_PCM_STATE_SUSPENDED:
+		return -ESTRPIPE;
+	case SND_PCM_STATE_DISCONNECTED:
+		dmix->state = -ENOTTY;
+		return -ENOTTY;
+	default:
+		break;
+	}
+	return dmix->state;
 }
 
 static int snd_pcm_dmix_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
@@ -497,16 +493,14 @@ static int snd_pcm_dmix_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
 		err = snd_pcm_dmix_sync_ptr(pcm);
 		if (err < 0)
 			return err;
-		/* fallthru */
 	case SNDRV_PCM_STATE_PREPARED:
 	case SNDRV_PCM_STATE_SUSPENDED:
-	case STATE_RUN_PENDING:
 		*delayp = snd_pcm_mmap_playback_hw_avail(pcm);
 		return 0;
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_DISCONNECTED:
-		return -ENODEV;
+		return -ENOTTY;
 	default:
 		return -EBADFD;
 	}
@@ -519,53 +513,37 @@ static int snd_pcm_dmix_hwsync(snd_pcm_t *pcm)
 	switch(dmix->state) {
 	case SNDRV_PCM_STATE_DRAINING:
 	case SNDRV_PCM_STATE_RUNNING:
-		/* sync slave PCM */
 		return snd_pcm_dmix_sync_ptr(pcm);
 	case SNDRV_PCM_STATE_PREPARED:
 	case SNDRV_PCM_STATE_SUSPENDED:
-	case STATE_RUN_PENDING:
 		return 0;
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_DISCONNECTED:
-		return -ENODEV;
+		return -ENOTTY;
 	default:
 		return -EBADFD;
 	}
 }
 
-static void reset_slave_ptr(snd_pcm_t *pcm, snd_pcm_direct_t *dmix)
+static int snd_pcm_dmix_prepare(snd_pcm_t *pcm)
 {
-	dmix->slave_appl_ptr = dmix->slave_hw_ptr = *dmix->spcm->hw.ptr;
-	if (pcm->buffer_size > pcm->period_size * 2)
-		return;
-	/* If we have too litte periods, better to align the start position
-	 * to the period boundary so that the interrupt can be handled properly
-	 * at the right time.
-	 */
-	dmix->slave_appl_ptr = ((dmix->slave_appl_ptr + dmix->slave_period_size - 1)
-				/ dmix->slave_period_size) * dmix->slave_period_size;
+	snd_pcm_direct_t *dmix = pcm->private_data;
+
+	snd_pcm_direct_check_interleave(dmix, pcm);
+	// assert(pcm->boundary == dmix->shmptr->s.boundary);	/* for sure */
+	dmix->state = SND_PCM_STATE_PREPARED;
+	dmix->appl_ptr = 0;
+	dmix->hw_ptr = 0;
+	return 0;
 }
 
 static int snd_pcm_dmix_reset(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
 	dmix->hw_ptr %= pcm->period_size;
-	dmix->appl_ptr = dmix->last_appl_ptr = dmix->hw_ptr;
-	reset_slave_ptr(pcm, dmix);
-	return 0;
-}
-
-static int snd_pcm_dmix_start_timer(snd_pcm_t *pcm, snd_pcm_direct_t *dmix)
-{
-	int err;
-
-	snd_pcm_hwsync(dmix->spcm);
-	reset_slave_ptr(pcm, dmix);
-	err = snd_timer_start(dmix->timer);
-	if (err < 0)
-		return err;
-	dmix->state = SND_PCM_STATE_RUNNING;
+	dmix->appl_ptr = dmix->hw_ptr;
+	dmix->slave_appl_ptr = dmix->slave_hw_ptr = *dmix->spcm->hw.ptr;
 	return 0;
 }
 
@@ -573,21 +551,26 @@ static int snd_pcm_dmix_start(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
 	snd_pcm_sframes_t avail;
+	struct timeval tv;
 	int err;
 	
 	if (dmix->state != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
+	err = snd_timer_start(dmix->timer);
+	if (err < 0)
+		return err;
+	dmix->state = SND_PCM_STATE_RUNNING;
+	snd_pcm_hwsync(dmix->spcm);
+	dmix->slave_appl_ptr = dmix->slave_hw_ptr = *dmix->spcm->hw.ptr;
 	avail = snd_pcm_mmap_playback_hw_avail(pcm);
-	if (avail == 0)
-		dmix->state = STATE_RUN_PENDING;
-	else if (avail < 0)
+	if (avail < 0)
 		return 0;
-	else {
-		if ((err = snd_pcm_dmix_start_timer(pcm, dmix)) < 0)
-			return err;
-		snd_pcm_dmix_sync_area(pcm);
-	}
-	gettimestamp(&dmix->trigger_tstamp, pcm->tstamp_type);
+	if (avail > (snd_pcm_sframes_t)pcm->buffer_size)
+		avail = pcm->buffer_size;
+	snd_pcm_dmix_sync_area(pcm, avail);
+	gettimeofday(&tv, 0);
+	dmix->trigger_tstamp.tv_sec = tv.tv_sec;
+	dmix->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
 	return 0;
 }
 
@@ -596,8 +579,8 @@ static int snd_pcm_dmix_drop(snd_pcm_t *pcm)
 	snd_pcm_direct_t *dmix = pcm->private_data;
 	if (dmix->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
+	snd_timer_stop(dmix->timer);
 	dmix->state = SND_PCM_STATE_SETUP;
-	snd_pcm_direct_timer_stop(dmix);
 	return 0;
 }
 
@@ -607,160 +590,69 @@ static int snd_pcm_dmix_drain(snd_pcm_t *pcm)
 	snd_pcm_uframes_t stop_threshold;
 	int err;
 
-	switch (snd_pcm_state(dmix->spcm)) {
-	case SND_PCM_STATE_SUSPENDED:
-		return -ESTRPIPE;
-	default:
-		break;
-	}
-
 	if (dmix->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
-	if (pcm->mode & SND_PCM_NONBLOCK)
-		return -EAGAIN;
-	if (dmix->state == SND_PCM_STATE_PREPARED) {
-		if (snd_pcm_mmap_playback_hw_avail(pcm) > 0)
-			snd_pcm_dmix_start(pcm);
-		else {
-			snd_pcm_dmix_drop(pcm);
-			return 0;
-		}
-	}
-
-	if (dmix->state == SND_PCM_STATE_XRUN) {
-		snd_pcm_dmix_drop(pcm);
-		return 0;
-	}
-
 	stop_threshold = pcm->stop_threshold;
 	if (pcm->stop_threshold > pcm->buffer_size)
 		pcm->stop_threshold = pcm->buffer_size;
-	dmix->state = SND_PCM_STATE_DRAINING;
-	do {
+	while (dmix->state == SND_PCM_STATE_RUNNING) {
 		err = snd_pcm_dmix_sync_ptr(pcm);
-		if (err < 0) {
-			snd_pcm_dmix_drop(pcm);
-			return err;
-		}
-		if (dmix->state == SND_PCM_STATE_DRAINING) {
-			snd_pcm_dmix_sync_area(pcm);
-			snd_pcm_wait_nocheck(pcm, -1);
-			snd_pcm_direct_clear_timer_queue(dmix); /* force poll to wait */
-
-			switch (snd_pcm_state(dmix->spcm)) {
-			case SND_PCM_STATE_SUSPENDED:
-				return -ESTRPIPE;
-			default:
-				break;
-			}
-		}
-	} while (dmix->state == SND_PCM_STATE_DRAINING);
+		if (err < 0)
+			break;
+		if (pcm->mode & SND_PCM_NONBLOCK)
+			return -EAGAIN;
+		snd_pcm_wait(pcm, -1);
+	}
 	pcm->stop_threshold = stop_threshold;
+	return snd_pcm_dmix_drop(pcm);
+}
+
+static int snd_pcm_dmix_pause(snd_pcm_t *pcm, int enable)
+{
+	snd_pcm_direct_t *dmix = pcm->private_data;
+        if (enable) {
+		if (dmix->state != SND_PCM_STATE_RUNNING)
+			return -EBADFD;
+		dmix->state = SND_PCM_STATE_PAUSED;
+		snd_timer_stop(dmix->timer);
+	} else {
+		if (dmix->state != SND_PCM_STATE_PAUSED)
+			return -EBADFD;
+                dmix->state = SND_PCM_STATE_RUNNING;
+                snd_timer_start(dmix->timer);
+	}
 	return 0;
-}
-
-static int snd_pcm_dmix_pause(snd_pcm_t *pcm ATTRIBUTE_UNUSED, int enable ATTRIBUTE_UNUSED)
-{
-	return -EIO;
-}
-
-static snd_pcm_sframes_t snd_pcm_dmix_rewindable(snd_pcm_t *pcm)
-{
-	return snd_pcm_mmap_playback_hw_rewindable(pcm);
 }
 
 static snd_pcm_sframes_t snd_pcm_dmix_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
-	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_uframes_t slave_appl_ptr, slave_size;
-	snd_pcm_uframes_t appl_ptr, size, transfer, result;
-	int err;
-	const snd_pcm_channel_area_t *src_areas, *dst_areas;
-
-	if (dmix->state == SND_PCM_STATE_RUNNING ||
-	    dmix->state == SND_PCM_STATE_DRAINING) {
-		err = snd_pcm_dmix_hwsync(pcm);
-		if (err < 0)
-			return err;
-	}
-
-	if (dmix->last_appl_ptr < dmix->appl_ptr)
-		size = dmix->appl_ptr - dmix->last_appl_ptr;
-	else
-		size = dmix->appl_ptr + (pcm->boundary - dmix->last_appl_ptr);
-	if (frames < size)
-		size = frames;
-	snd_pcm_mmap_appl_backward(pcm, size);
-	frames -= size;
-	if (!frames)
-		return size;
-	result = size;
-
-	if (dmix->hw_ptr < dmix->appl_ptr)
-		size = dmix->appl_ptr - dmix->hw_ptr;
-	else
-		size = dmix->appl_ptr + (pcm->boundary - dmix->hw_ptr);
-	if (size > frames)
-		size = frames;
-	if (dmix->slave_hw_ptr < dmix->slave_appl_ptr)
-		slave_size = dmix->slave_appl_ptr - dmix->slave_hw_ptr;
-	else
-		slave_size = dmix->slave_appl_ptr + (pcm->boundary - dmix->slave_hw_ptr);
-	if (slave_size < size)
-		size = slave_size;
-	frames -= size;
-	result += size;
-		
-	/* add sample areas here */
-	src_areas = snd_pcm_mmap_areas(pcm);
-	dst_areas = snd_pcm_mmap_areas(dmix->spcm);
-	dmix->last_appl_ptr -= size;
-	dmix->last_appl_ptr %= pcm->boundary;
-	appl_ptr = dmix->last_appl_ptr % pcm->buffer_size;
-	dmix->slave_appl_ptr -= size;
-	dmix->slave_appl_ptr %= dmix->slave_boundary;
-	slave_appl_ptr = dmix->slave_appl_ptr % dmix->slave_buffer_size;
-	dmix_down_sem(dmix);
-	for (;;) {
-		transfer = size;
-		if (appl_ptr + transfer > pcm->buffer_size)
-			transfer = pcm->buffer_size - appl_ptr;
-		if (slave_appl_ptr + transfer > dmix->slave_buffer_size)
-			transfer = dmix->slave_buffer_size - slave_appl_ptr;
-		remix_areas(dmix, src_areas, dst_areas, appl_ptr, slave_appl_ptr, transfer);
-		size -= transfer;
-		if (! size)
-			break;
-		slave_appl_ptr += transfer;
-		slave_appl_ptr %= dmix->slave_buffer_size;
-		appl_ptr += transfer;
-		appl_ptr %= pcm->buffer_size;
-	}
-	dmix->last_appl_ptr -= frames;
-	dmix->last_appl_ptr %= pcm->boundary;
-	dmix->slave_appl_ptr -= frames;
-	dmix->slave_appl_ptr %= dmix->slave_boundary;
-	dmix_up_sem(dmix);
-
+#if 0
+	/* FIXME: substract samples from the mix ring buffer, too? */
 	snd_pcm_mmap_appl_backward(pcm, frames);
-
-	return result + frames;
-}
-
-static snd_pcm_sframes_t snd_pcm_dmix_forwardable(snd_pcm_t *pcm)
-{
-	return snd_pcm_mmap_avail(pcm);
+	return frames;
+#else
+	return -EIO;
+#endif
 }
 
 static snd_pcm_sframes_t snd_pcm_dmix_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_sframes_t avail;
 
-	avail = snd_pcm_dmix_forwardable(pcm);
+	avail = snd_pcm_mmap_playback_avail(pcm);
+	if (avail < 0)
+		return 0;
 	if (frames > (snd_pcm_uframes_t)avail)
 		frames = avail;
 	snd_pcm_mmap_appl_forward(pcm, frames);
 	return frames;
+}
+
+static int snd_pcm_dmix_resume(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+{
+	// snd_pcm_direct_t *dmix = pcm->private_data;
+	// FIXME
+	return 0;
 }
 
 static snd_pcm_sframes_t snd_pcm_dmix_readi(snd_pcm_t *pcm ATTRIBUTE_UNUSED, void *buffer ATTRIBUTE_UNUSED, snd_pcm_uframes_t size ATTRIBUTE_UNUSED)
@@ -786,12 +678,14 @@ static int snd_pcm_dmix_close(snd_pcm_t *pcm)
  	if (dmix->client)
  		snd_pcm_direct_client_discard(dmix);
  	shm_sum_discard(dmix);
-	if (snd_pcm_direct_shm_discard(dmix)) {
-		if (snd_pcm_direct_semaphore_discard(dmix))
-			snd_pcm_direct_semaphore_final(dmix, DIRECT_IPC_SEM_CLIENT);
-	} else
-		snd_pcm_direct_semaphore_final(dmix, DIRECT_IPC_SEM_CLIENT);
-	free(dmix->bindings);
+ 	if (snd_pcm_direct_shm_discard(dmix) > 0) {
+ 		if (snd_pcm_direct_semaphore_discard(dmix) < 0)
+ 			snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
+ 	} else {
+		snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
+	}
+	if (dmix->bindings)
+		free(dmix->bindings);
 	pcm->private_data = NULL;
 	free(dmix);
 	return 0;
@@ -804,75 +698,30 @@ static snd_pcm_sframes_t snd_pcm_dmix_mmap_commit(snd_pcm_t *pcm,
 	snd_pcm_direct_t *dmix = pcm->private_data;
 	int err;
 
-	switch (snd_pcm_state(dmix->spcm)) {
-	case SND_PCM_STATE_XRUN:
-		return -EPIPE;
-	case SND_PCM_STATE_SUSPENDED:
-		return -ESTRPIPE;
-	default:
-		break;
-	}
-	if (! size)
-		return 0;
 	snd_pcm_mmap_appl_forward(pcm, size);
-	if (dmix->state == STATE_RUN_PENDING) {
-		if ((err = snd_pcm_dmix_start_timer(pcm, dmix)) < 0)
+	if (dmix->state == SND_PCM_STATE_RUNNING) {
+		err = snd_pcm_dmix_sync_ptr(pcm);
+		if (err < 0)
 			return err;
-	} else if (dmix->state == SND_PCM_STATE_RUNNING ||
-		   dmix->state == SND_PCM_STATE_DRAINING)
-		snd_pcm_dmix_sync_ptr(pcm);
-	if (dmix->state == SND_PCM_STATE_RUNNING ||
-	    dmix->state == SND_PCM_STATE_DRAINING) {
 		/* ok, we commit the changes after the validation of area */
 		/* it's intended, although the result might be crappy */
-		snd_pcm_dmix_sync_area(pcm);
-		/* clear timer queue to avoid a bogus return from poll */
-		if (snd_pcm_mmap_playback_avail(pcm) < pcm->avail_min)
-			snd_pcm_direct_clear_timer_queue(dmix);
+		snd_pcm_dmix_sync_area(pcm, size);
 	}
 	return size;
 }
 
-static snd_pcm_sframes_t snd_pcm_dmix_avail_update(snd_pcm_t *pcm)
+static snd_pcm_sframes_t snd_pcm_dmix_avail_update(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
+	int err;
 	
-	if (dmix->state == SND_PCM_STATE_RUNNING ||
-	    dmix->state == SND_PCM_STATE_DRAINING)
-		snd_pcm_dmix_sync_ptr(pcm);
+	if (dmix->state == SND_PCM_STATE_RUNNING) {
+		err = snd_pcm_dmix_sync_ptr(pcm);
+		if (err < 0)
+			return err;
+	}
 	return snd_pcm_mmap_playback_avail(pcm);
 }
-
-static int snd_pcm_dmix_htimestamp(snd_pcm_t *pcm,
-				   snd_pcm_uframes_t *avail,
-				   snd_htimestamp_t *tstamp)
-{
-	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_uframes_t avail1;
-	int ok = 0;
-	
-	while (1) {
-		if (dmix->state == SND_PCM_STATE_RUNNING ||
-		    dmix->state == SND_PCM_STATE_DRAINING)
-			snd_pcm_dmix_sync_ptr(pcm);
-		avail1 = snd_pcm_mmap_playback_avail(pcm);
-		if (ok && *avail == avail1)
-			break;
-		*avail = avail1;
-		*tstamp = snd_pcm_hw_fast_tstamp(dmix->spcm);
-		ok = 1;
-	}
-	return 0;
-}
-
-static int snd_pcm_dmix_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
-{
-	snd_pcm_direct_t *dmix = pcm->private_data;
-	if (dmix->state == SND_PCM_STATE_RUNNING)
-		snd_pcm_dmix_sync_area(pcm);
-	return snd_pcm_direct_poll_revents(pcm, pfds, nfds, revents);
-}
-
 
 static void snd_pcm_dmix_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
@@ -880,14 +729,14 @@ static void snd_pcm_dmix_dump(snd_pcm_t *pcm, snd_output_t *out)
 
 	snd_output_printf(out, "Direct Stream Mixing PCM\n");
 	if (pcm->setup) {
-		snd_output_printf(out, "Its setup is:\n");
+		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 	if (dmix->spcm)
 		snd_pcm_dump(dmix->spcm, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_dmix_ops = {
+static snd_pcm_ops_t snd_pcm_dmix_ops = {
 	.close = snd_pcm_dmix_close,
 	.info = snd_pcm_direct_info,
 	.hw_refine = snd_pcm_direct_hw_refine,
@@ -898,50 +747,43 @@ static const snd_pcm_ops_t snd_pcm_dmix_ops = {
 	.dump = snd_pcm_dmix_dump,
 	.nonblock = snd_pcm_direct_nonblock,
 	.async = snd_pcm_direct_async,
+	.poll_revents = snd_pcm_direct_poll_revents,
 	.mmap = snd_pcm_direct_mmap,
 	.munmap = snd_pcm_direct_munmap,
-	.query_chmaps = snd_pcm_direct_query_chmaps,
-	.get_chmap = snd_pcm_direct_get_chmap,
-	.set_chmap = snd_pcm_direct_set_chmap,
 };
 
-static const snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
+static snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
 	.status = snd_pcm_dmix_status,
 	.state = snd_pcm_dmix_state,
 	.hwsync = snd_pcm_dmix_hwsync,
 	.delay = snd_pcm_dmix_delay,
-	.prepare = snd_pcm_direct_prepare,
+	.prepare = snd_pcm_dmix_prepare,
 	.reset = snd_pcm_dmix_reset,
 	.start = snd_pcm_dmix_start,
 	.drop = snd_pcm_dmix_drop,
 	.drain = snd_pcm_dmix_drain,
 	.pause = snd_pcm_dmix_pause,
-	.rewindable = snd_pcm_dmix_rewindable,
 	.rewind = snd_pcm_dmix_rewind,
-	.forwardable = snd_pcm_dmix_forwardable,
 	.forward = snd_pcm_dmix_forward,
-	.resume = snd_pcm_direct_resume,
-	.link = NULL,
-	.link_slaves = NULL,
-	.unlink = NULL,
+	.resume = snd_pcm_dmix_resume,
+	.poll_ask = NULL,
 	.writei = snd_pcm_mmap_writei,
 	.writen = snd_pcm_mmap_writen,
 	.readi = snd_pcm_dmix_readi,
 	.readn = snd_pcm_dmix_readn,
 	.avail_update = snd_pcm_dmix_avail_update,
 	.mmap_commit = snd_pcm_dmix_mmap_commit,
-	.htimestamp = snd_pcm_dmix_htimestamp,
-	.poll_descriptors = NULL,
-	.poll_descriptors_count = NULL,
-	.poll_revents = snd_pcm_dmix_poll_revents,
 };
 
 /**
  * \brief Creates a new dmix PCM
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
- * \param opts Direct PCM configurations
+ * \param ipc_key IPC key for semaphore and shared memory
+ * \param ipc_perm IPC permissions for semaphore and shared memory
  * \param params Parameters for slave
+ * \param bindings Channel bindings
+ * \param slowptr Slow but more precise pointer updates
  * \param root Configuration root
  * \param sconf Slave configuration
  * \param stream PCM Direction (stream)
@@ -952,8 +794,10 @@ static const snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
-		      struct snd_pcm_direct_open_conf *opts,
+		      key_t ipc_key, mode_t ipc_perm,
 		      struct slave_params *params,
+		      snd_config_t *bindings,
+		      int slowptr,
 		      snd_config_t *root, snd_config_t *sconf,
 		      snd_pcm_stream_t stream, int mode)
 {
@@ -972,16 +816,15 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	dmix = calloc(1, sizeof(snd_pcm_direct_t));
 	if (!dmix) {
 		ret = -ENOMEM;
-		goto _err_nosem;
+		goto _err;
 	}
 	
-	ret = snd_pcm_direct_parse_bindings(dmix, params, opts->bindings);
+	ret = snd_pcm_direct_parse_bindings(dmix, bindings);
 	if (ret < 0)
-		goto _err_nosem;
+		goto _err;
 	
-	dmix->ipc_key = opts->ipc_key;
-	dmix->ipc_perm = opts->ipc_perm;
-	dmix->ipc_gid = opts->ipc_gid;
+	dmix->ipc_key = ipc_key;
+	dmix->ipc_perm = ipc_perm;
 	dmix->semid = -1;
 	dmix->shmid = -1;
 
@@ -994,13 +837,13 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 		ret = snd_pcm_direct_semaphore_create_or_connect(dmix);
 		if (ret < 0) {
 			SNDERR("unable to create IPC semaphore");
-			goto _err_nosem;
+			goto _err;
 		}
 		ret = snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT);
 		if (ret < 0) {
 			snd_pcm_direct_semaphore_discard(dmix);
 			if (--fail_sem_loop <= 0)
-				goto _err_nosem;
+				goto _err;
 			continue;
 		}
 		break;
@@ -1016,15 +859,11 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	pcm->fast_ops = &snd_pcm_dmix_fast_ops;
 	pcm->private_data = dmix;
 	dmix->state = SND_PCM_STATE_OPEN;
-	dmix->slowptr = opts->slowptr;
-	dmix->max_periods = opts->max_periods;
+	dmix->slowptr = slowptr;
 	dmix->sync_ptr = snd_pcm_dmix_sync_ptr;
 
 	if (first_instance) {
-		/* recursion is already checked in
-		   snd_pcm_direct_get_slave_ipc_offset() */
-		ret = snd_pcm_open_slave(&spcm, root, sconf, stream,
-					 mode | SND_PCM_NONBLOCK, NULL);
+		ret = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 		if (ret < 0) {
 			SNDERR("unable to open slave");
 			goto _err;
@@ -1032,7 +871,6 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	
 		if (snd_pcm_type(spcm) != SND_PCM_TYPE_HW) {
 			SNDERR("dmix plugin can be only connected to hw plugin");
-			ret = -EINVAL;
 			goto _err;
 		}
 		
@@ -1044,54 +882,41 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 
 		dmix->spcm = spcm;
 
-		if (dmix->shmptr->use_server) {
-			dmix->server_free = dmix_server_free;
+		dmix->server_free = dmix_server_free;
 		
-			ret = snd_pcm_direct_server_create(dmix);
-			if (ret < 0) {
-				SNDERR("unable to create server");
-				goto _err;
-			}
+		ret = snd_pcm_direct_server_create(dmix);
+		if (ret < 0) {
+			SNDERR("unable to create server");
+			goto _err;
 		}
 
 		dmix->shmptr->type = spcm->type;
 	} else {
-		if (dmix->shmptr->use_server) {
-			/* up semaphore to avoid deadlock */
-			snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
-			ret = snd_pcm_direct_client_connect(dmix);
-			if (ret < 0) {
-				SNDERR("unable to connect client");
-				goto _err_nosem;
-			}
-			
-			snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT);
-			ret = snd_pcm_direct_open_secondary_client(&spcm, dmix, "dmix_client");
-			if (ret < 0)
-				goto _err;
-		} else {
-
-			ret = snd_pcm_open_slave(&spcm, root, sconf, stream,
-						 mode | SND_PCM_NONBLOCK |
-						 SND_PCM_APPEND,
-						 NULL);
-			if (ret < 0) {
-				SNDERR("unable to open slave");
-				goto _err;
-			}
-			if (snd_pcm_type(spcm) != SND_PCM_TYPE_HW) {
-				SNDERR("dmix plugin can be only connected to hw plugin");
-				ret = -EINVAL;
-				goto _err;
-			}
-		
-			ret = snd_pcm_direct_initialize_secondary_slave(dmix, spcm, params);
-			if (ret < 0) {
-				SNDERR("unable to initialize slave");
-				goto _err;
-			}
+		ret = snd_pcm_direct_client_connect(dmix);
+		if (ret < 0) {
+			SNDERR("unable to connect client");
+			return ret;
 		}
-
+			
+		ret = snd_pcm_hw_open_fd(&spcm, "dmix_client", dmix->hw_fd, 0, 0);
+		if (ret < 0) {
+			SNDERR("unable to open hardware");
+			goto _err;
+		}
+		
+		spcm->donot_close = 1;
+		spcm->setup = 1;
+		spcm->buffer_size = dmix->shmptr->s.buffer_size;
+		spcm->sample_bits = dmix->shmptr->s.sample_bits;
+		spcm->channels = dmix->shmptr->s.channels;
+		spcm->format = dmix->shmptr->s.format;
+		spcm->boundary = dmix->shmptr->s.boundary;
+		spcm->info = dmix->shmptr->s.info;
+		ret = snd_pcm_mmap(spcm);
+		if (ret < 0) {
+			SNDERR("unable to mmap channels");
+			goto _err;
+		}
 		dmix->spcm = spcm;
 	}
 
@@ -1111,7 +936,7 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 		
 	pcm->poll_fd = dmix->poll_fd;
 	pcm->poll_events = POLLIN;	/* it's different than other plugins */
-	pcm->tstamp_type = spcm->tstamp_type;
+		
 	pcm->mmap_rw = 1;
 	snd_pcm_set_hw_ptr(pcm, &dmix->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &dmix->appl_ptr, -1, 0);
@@ -1125,23 +950,27 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	return 0;
 	
  _err:
-	if (dmix->timer)
-		snd_timer_close(dmix->timer);
-	if (dmix->server)
-		snd_pcm_direct_server_discard(dmix);
-	if (dmix->client)
-		snd_pcm_direct_client_discard(dmix);
-	if (spcm)
-		snd_pcm_close(spcm);
-	if (dmix->u.dmix.shmid_sum >= 0)
-		shm_sum_discard(dmix);
-	if (dmix->shmid >= 0)
-		snd_pcm_direct_shm_discard(dmix);
-	if (snd_pcm_direct_semaphore_discard(dmix) < 0)
-		snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
- _err_nosem:
 	if (dmix) {
-		free(dmix->bindings);
+	 	if (dmix->timer)
+ 			snd_timer_close(dmix->timer);
+ 		if (dmix->server)
+ 			snd_pcm_direct_server_discard(dmix);
+ 		if (dmix->client)
+ 			snd_pcm_direct_client_discard(dmix);
+ 		if (spcm)
+ 			snd_pcm_close(spcm);
+	 	if (dmix->u.dmix.shmid_sum >= 0)
+ 			shm_sum_discard(dmix);
+ 		if (dmix->shmid >= 0) {
+ 			if (snd_pcm_direct_shm_discard(dmix) > 0) {
+			 	if (dmix->semid >= 0) {
+ 					if (snd_pcm_direct_semaphore_discard(dmix) < 0)
+ 						snd_pcm_direct_semaphore_up(dmix, DIRECT_IPC_SEM_CLIENT);
+ 				}
+ 			}
+ 		}
+ 		if (dmix->bindings)
+ 			free(dmix->bindings);
 		free(dmix);
 	}
 	if (pcm)
@@ -1280,27 +1109,109 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 		       snd_config_t *root, snd_config_t *conf,
 		       snd_pcm_stream_t stream, int mode)
 {
-	snd_config_t *sconf;
+	snd_config_iterator_t i, next;
+	snd_config_t *slave = NULL, *bindings = NULL, *sconf;
 	struct slave_params params;
-	struct snd_pcm_direct_open_conf dopen;
-	int bsize, psize;
+	int bsize, psize, ipc_key_add_uid = 0, slowptr = 0;
+	key_t ipc_key = 0;
+	mode_t ipc_perm = 0600;
 	int err;
-
-	err = snd_pcm_direct_parse_open_conf(root, conf, stream, &dopen);
-	if (err < 0)
-		return err;
-
+	snd_config_for_each(i, next, conf) {
+		snd_config_t *n = snd_config_iterator_entry(i);
+		const char *id;
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+		if (snd_pcm_conf_generic_id(id))
+			continue;
+		if (strcmp(id, "ipc_key") == 0) {
+			long key;
+			err = snd_config_get_integer(n, &key);
+			if (err < 0) {
+				SNDERR("The field ipc_key must be an integer type");
+				return err;
+			}
+			ipc_key = key;
+			continue;
+		}
+		if (strcmp(id, "ipc_perm") == 0) {
+			char *perm;
+			char *endp;
+			err = snd_config_get_ascii(n, &perm);
+			if (err < 0) {
+				SNDERR("The field ipc_perm must be a valid file permission");
+				return err;
+			}
+			if (isdigit(*perm) == 0) {
+				SNDERR("The field ipc_perm must be a valid file permission");
+				return -EINVAL;
+			}
+			ipc_perm = strtol(perm, &endp, 8);
+			continue;
+		}
+		if (strcmp(id, "ipc_key_add_uid") == 0) {
+			char *tmp;
+			err = snd_config_get_ascii(n, &tmp);
+			if (err < 0) {
+				SNDERR("The field ipc_key_add_uid must be a boolean type");
+				return err;
+			}
+			err = snd_config_get_bool_ascii(tmp);
+			free(tmp);
+			if (err < 0) {
+				SNDERR("The field ipc_key_add_uid must be a boolean type");
+				return err;
+			}
+			ipc_key_add_uid = err;
+			continue;
+		}
+		if (strcmp(id, "slave") == 0) {
+			slave = n;
+			continue;
+		}
+		if (strcmp(id, "bindings") == 0) {
+			bindings = n;
+			continue;
+		}
+		if (strcmp(id, "slowptr") == 0) {
+			char *tmp;
+			err = snd_config_get_ascii(n, &tmp);
+			if (err < 0) {
+				SNDERR("The field slowptr must be a boolean type");
+				return err;
+			}
+			err = snd_config_get_bool_ascii(tmp);
+			free(tmp);
+			if (err < 0) {
+				SNDERR("The field slowptr must be a boolean type");
+				return err;
+			}
+			slowptr = err;
+			continue;
+		}
+		SNDERR("Unknown field %s", id);
+		return -EINVAL;
+	}
+	if (!slave) {
+		SNDERR("slave is not defined");
+		return -EINVAL;
+	}
+	if (ipc_key_add_uid)
+		ipc_key += getuid();
+	if (!ipc_key) {
+		SNDERR("Unique IPC key is not defined");
+		return -EINVAL;
+	}
 	/* the default settings, it might be invalid for some hardware */
 	params.format = SND_PCM_FORMAT_S16;
 	params.rate = 48000;
 	params.channels = 2;
-	params.period_time = -1;
+	params.period_time = 125000;	/* 0.125 seconds */
 	params.buffer_time = -1;
 	bsize = psize = -1;
 	params.periods = 3;
 
-	err = snd_pcm_slave_conf(root, dopen.slave, &sconf, 8,
-				 SND_PCM_HW_PARAM_FORMAT, SCONF_UNCHANGED, &params.format,
+	err = snd_pcm_slave_conf(root, slave, &sconf, 8,
+				 SND_PCM_HW_PARAM_FORMAT, 0, &params.format,
 				 SND_PCM_HW_PARAM_RATE, 0, &params.rate,
 				 SND_PCM_HW_PARAM_CHANNELS, 0, &params.channels,
 				 SND_PCM_HW_PARAM_PERIOD_TIME, 0, &params.period_time,
@@ -1311,15 +1222,10 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	if (err < 0)
 		return err;
 
-	/* set a reasonable default */  
-	if (psize == -1 && params.period_time == -1)
-		params.period_time = 125000;    /* 0.125 seconds */
-
-	if (params.format == -2)
-		params.format = SND_PCM_FORMAT_UNKNOWN;
-	else if (!(dmix_supported_format & (1ULL << params.format))) {
-		/* sorry, limited features */
-		SNDERR("Unsupported format");
+	/* sorry, limited features */
+        if (params.format != SND_PCM_FORMAT_S16 &&
+            params.format != SND_PCM_FORMAT_S32) {
+		SNDERR("invalid format, specify s16 or s32");
 		snd_config_delete(sconf);
 		return -EINVAL;
 	}
@@ -1327,9 +1233,9 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	params.period_size = psize;
 	params.buffer_size = bsize;
 
-	err = snd_pcm_dmix_open(pcmp, name, &dopen, &params,
-				root, sconf, stream, mode);
-	snd_config_delete(sconf);
+	err = snd_pcm_dmix_open(pcmp, name, ipc_key, ipc_perm, &params, bindings, slowptr, root, sconf, stream, mode);
+	if (err < 0)
+		snd_config_delete(sconf);
 	return err;
 }
 #ifndef DOC_HIDDEN

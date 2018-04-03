@@ -1,6 +1,6 @@
 /*
  *  ALSA lisp implementation
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
  *
  *  Based on work of Sandro Sigala (slisp-1.2)
  *
@@ -30,6 +30,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <err.h>
+#include <wordexp.h>
 
 #define alisp_seq_iterator alisp_object
 
@@ -164,7 +165,8 @@ static void free_object(struct alisp_object * p)
 	switch (alisp_get_type(p)) {
 	case ALISP_OBJ_STRING:
 	case ALISP_OBJ_IDENTIFIER:
-		free(p->value.s);
+		if (p->value.s)
+			free(p->value.s);
 		alisp_set_type(p, ALISP_OBJ_INTEGER);
 		break;
 	default:
@@ -233,9 +235,6 @@ static struct alisp_object * incref_tree(struct alisp_instance *instance, struct
 	return incref_object(instance, p);
 }
 
-/* Function not used yet. Leave it commented out until we actually use it to
- * avoid compiler complaints */
-#if 0
 static struct alisp_object * incref_tree_explicit(struct alisp_instance *instance, struct alisp_object * p, struct alisp_object * e)
 {
 	if (p == NULL)
@@ -253,7 +252,6 @@ static struct alisp_object * incref_tree_explicit(struct alisp_instance *instanc
 		return incref_object(instance, p);
 	return p;
 }
-#endif
 
 static void free_objects(struct alisp_instance *instance)
 {
@@ -525,7 +523,8 @@ static int init_lex(struct alisp_instance *instance)
 
 static void done_lex(struct alisp_instance *instance)
 {
-	free(instance->token_buffer);
+	if (instance->token_buffer)
+		free(instance->token_buffer);
 }
 
 static char * extend_buf(struct alisp_instance *instance, char *p)
@@ -989,7 +988,7 @@ static void dump_objects(struct alisp_instance *instance, const char *fname)
 	else
 		err = snd_output_stdio_open(&out, fname, "w+");
 	if (err < 0) {
-		SNDERR("alisp: cannot open file '%s' for writing (%s)", fname, snd_strerror(errno));
+		SNDERR("alisp: cannot open file '%s' for writting (%s)", fname, snd_strerror(errno));
 		return;
 	}
 
@@ -1062,7 +1061,7 @@ static void dump_obj_lists(struct alisp_instance *instance, const char *fname)
 	else
 		err = snd_output_stdio_open(&out, fname, "w+");
 	if (err < 0) {
-		SNDERR("alisp: cannot open file '%s' for writing (%s)", fname, snd_strerror(errno));
+		SNDERR("alisp: cannot open file '%s' for writting (%s)", fname, snd_strerror(errno));
 		return;
 	}
 
@@ -1185,7 +1184,8 @@ static struct alisp_object * F_concat(struct alisp_instance *instance, struct al
 			str1 = realloc(str, (str ? strlen(str) : 0) + strlen(p1->value.s) + 1);
 			if (str1 == NULL) {
 				nomem();
-				free(str);
+				if (str)
+					free(str);
 				return NULL;
 			}
 			if (str == NULL)
@@ -1712,7 +1712,7 @@ static struct alisp_object * F_princ(struct alisp_instance *instance, struct ali
 			delete_tree(instance, p1);
 		p1 = eval(instance, car(p));
 		if (alisp_compare_type(p1, ALISP_OBJ_STRING))
-			snd_output_printf(instance->out, "%s", p1->value.s);
+			snd_output_printf(instance->out, p1->value.s);
 		else
 			princ_object(instance->out, p1);
 		n = cdr(p);
@@ -2366,7 +2366,8 @@ static struct alisp_object * eval_func(struct alisp_instance *instance, struct a
 		}
 
                _end:
-		free(eval_objs);
+		if (eval_objs)
+			free(eval_objs);
 
 		return p4;
 	} else {
@@ -2399,7 +2400,7 @@ struct alisp_object * F_path(struct alisp_instance *instance, struct alisp_objec
 	}
 	if (!strcmp(p1->value.s, "data")) {
 		delete_tree(instance, p1);
-		return new_string(instance, ALSA_CONFIG_DIR);
+		return new_string(instance, DATADIR);
 	}
 	delete_tree(instance, p1);
 	return &alsa_lisp_nil;
@@ -2924,12 +2925,12 @@ static struct alisp_object * F_stat_memory(struct alisp_instance *instance, stru
 {
 	snd_output_printf(instance->out, "*** Memory stats\n");
 	snd_output_printf(instance->out, "  used_objs = %li, free_objs = %li, max_objs = %li, obj_size = %i (total bytes = %li, max bytes = %li)\n",
-			  instance->used_objs,
-			  instance->free_objs,
-			  instance->max_objs,
-			  (int)sizeof(struct alisp_object),
-			  (long)((instance->used_objs + instance->free_objs) * sizeof(struct alisp_object)),
-			  (long)(instance->max_objs * sizeof(struct alisp_object)));
+		instance->used_objs,
+		instance->free_objs,
+		instance->max_objs,
+		sizeof(struct alisp_object),
+		(instance->used_objs + instance->free_objs) * sizeof(struct alisp_object),
+		instance->max_objs * sizeof(struct alisp_object));
 	delete_tree(instance, args);
 	return &alsa_lisp_nil;
 }
@@ -2969,7 +2970,7 @@ struct intrinsic {
 	struct alisp_object * (*func)(struct alisp_instance *instance, struct alisp_object * args);
 };
 
-static const struct intrinsic intrinsics[] = {
+static struct intrinsic intrinsics[] = {
 	{ "!=", F_numneq },
 	{ "%", F_mod },
 	{ "&check-memory", F_check_memory },
@@ -3202,11 +3203,12 @@ int alsa_lisp(struct alisp_cfg *cfg, struct alisp_instance **_instance)
 	struct alisp_object *p, *p1;
 	int i, j, retval = 0;
 	
-	instance = (struct alisp_instance *)calloc(1, sizeof(struct alisp_instance));
+	instance = (struct alisp_instance *)malloc(sizeof(struct alisp_instance));
 	if (instance == NULL) {
 		nomem();
 		return -ENOMEM;
 	}
+	memset(instance, 0, sizeof(struct alisp_instance));
 	instance->verbose = cfg->verbose && cfg->vout;
 	instance->warning = cfg->warning && cfg->wout;
 	instance->debug = cfg->debug && cfg->dout;
@@ -3255,7 +3257,7 @@ int alsa_lisp(struct alisp_cfg *cfg, struct alisp_instance **_instance)
 	else
 		alsa_lisp_free(instance); 
 	
-	return retval;
+	return 0;
 }
 
 void alsa_lisp_free(struct alisp_instance *instance)

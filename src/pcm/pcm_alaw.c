@@ -30,8 +30,6 @@
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
-#include "plugin_ops.h"
-
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_alaw = "";
@@ -299,7 +297,7 @@ static int snd_pcm_alaw_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 				       snd_pcm_alaw_hw_refine_cchange,
 				       snd_pcm_alaw_hw_refine_sprepare,
 				       snd_pcm_alaw_hw_refine_schange,
-				       snd_pcm_generic_hw_refine);
+				       snd_pcm_plugin_hw_refine_slave);
 }
 
 static int snd_pcm_alaw_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
@@ -310,7 +308,7 @@ static int snd_pcm_alaw_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 					  snd_pcm_alaw_hw_refine_cchange,
 					  snd_pcm_alaw_hw_refine_sprepare,
 					  snd_pcm_alaw_hw_refine_schange,
-					  snd_pcm_generic_hw_params);
+					  snd_pcm_plugin_hw_params_slave);
 	if (err < 0)
 		return err;
 
@@ -388,25 +386,23 @@ static void snd_pcm_alaw_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(alaw->plug.gen.slave, out);
+	snd_pcm_dump(alaw->plug.slave, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_alaw_ops = {
-	.close = snd_pcm_generic_close,
-	.info = snd_pcm_generic_info,
+static snd_pcm_ops_t snd_pcm_alaw_ops = {
+	.close = snd_pcm_plugin_close,
+	.info = snd_pcm_plugin_info,
 	.hw_refine = snd_pcm_alaw_hw_refine,
 	.hw_params = snd_pcm_alaw_hw_params,
-	.hw_free = snd_pcm_generic_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
-	.channel_info = snd_pcm_generic_channel_info,
+	.hw_free = snd_pcm_plugin_hw_free,
+	.sw_params = snd_pcm_plugin_sw_params,
+	.channel_info = snd_pcm_plugin_channel_info,
 	.dump = snd_pcm_alaw_dump,
-	.nonblock = snd_pcm_generic_nonblock,
-	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_generic_mmap,
-	.munmap = snd_pcm_generic_munmap,
-	.query_chmaps = snd_pcm_generic_query_chmaps,
-	.get_chmap = snd_pcm_generic_get_chmap,
-	.set_chmap = snd_pcm_generic_set_chmap,
+	.nonblock = snd_pcm_plugin_nonblock,
+	.async = snd_pcm_plugin_async,
+	.poll_revents = snd_pcm_plugin_poll_revents,
+	.mmap = snd_pcm_plugin_mmap,
+	.munmap = snd_pcm_plugin_munmap,
 };
 
 /**
@@ -440,8 +436,8 @@ int snd_pcm_alaw_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sform
 	alaw->plug.write = snd_pcm_alaw_write_areas;
 	alaw->plug.undo_read = snd_pcm_plugin_undo_read_generic;
 	alaw->plug.undo_write = snd_pcm_plugin_undo_write_generic;
-	alaw->plug.gen.slave = slave;
-	alaw->plug.gen.close_slave = close_slave;
+	alaw->plug.slave = slave;
+	alaw->plug.close_slave = close_slave;
 
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_ALAW, name, slave->stream, slave->mode);
 	if (err < 0) {
@@ -453,7 +449,6 @@ int snd_pcm_alaw_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sform
 	pcm->private_data = alaw;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
-	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_set_hw_ptr(pcm, &alaw->plug.hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &alaw->plug.appl_ptr, -1, 0);
 	*pcmp = pcm;
@@ -542,7 +537,7 @@ int _snd_pcm_alaw_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("invalid slave format");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

@@ -3,7 +3,7 @@
  * \ingroup Configuration
  * \brief Configuration helper functions
  * \author Abramo Bagnara <abramo@alsa-project.org>
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2000-2001
  *
  * Tree based, full nesting configuration functions.
@@ -13,7 +13,7 @@
 /*
  *  Configuration helper functions
  *  Copyright (c) 2000 by Abramo Bagnara <abramo@alsa-project.org>,
- *			  Jaroslav Kysela <perex@perex.cz>
+ *			  Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -290,7 +290,7 @@ syntax.<P>
 
 \section confarg_define Defining arguments
 
-Arguments are defined using the id (key) \c \@args and array values containing
+Arguments are defined using the id (key) \c @args and array values containing
 the string names of the arguments:
 
 \code
@@ -300,7 +300,7 @@ the string names of the arguments:
 
 \section confarg_type Defining argument types and default values
 
-An argument's type is specified with the id (key) \c \@args and the argument
+An argument's type is specified with the id (key) \c @args and the argument
 name. The type and the default value are specified in the compound block:
 
 \code
@@ -362,9 +362,9 @@ pcm.demo {
 <P>The ALSA library can modify the configuration at runtime.
 Several built-in functions are available.</P>
 
-<P>A function is defined with the id \c \@func and the function name. All other
+<P>A function is defined with the id \c @func and the function name. All other
 values in the current compound are used as configuration for the function.
-If the compound func.\<function_name\> is defined in the root node, then the
+If the compound func.<function_name> is defined in the root node, then the
 library and function from this compound configuration are used, otherwise
 'snd_func_' is prefixed to the string and code from the ALSA library is used.
 The definition of a function looks like:</P> 
@@ -382,7 +382,7 @@ func.remove_first_char {
 
 <P>The hook extension in the ALSA library allows expansion of configuration
 nodes at run-time. The existence of a hook is determined by the
-presence of a \@hooks compound node.</P>
+presence of a @hooks compound node.</P>
 
 <P>This example defines a hook which loads two configuration files at the
 beginning:</P>
@@ -414,22 +414,15 @@ beginning:</P>
 */
 
 
-#include "local.h"
 #include <stdarg.h>
+#include <wordexp.h>
+#include <dlfcn.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <dirent.h>
-#include <locale.h>
-#ifdef HAVE_LIBPTHREAD
 #include <pthread.h>
-#endif
+#include "local.h"
 
 #ifndef DOC_HIDDEN
-
-#ifdef HAVE_LIBPTHREAD
-static pthread_mutex_t snd_config_update_mutex;
-static pthread_once_t snd_config_update_mutex_once = PTHREAD_ONCE_INIT;
-#endif
 
 struct _snd_config {
 	char *id;
@@ -446,8 +439,7 @@ struct _snd_config {
 		} compound;
 	} u;
 	struct list_head list;
-	snd_config_t *parent;
-	int hop;
+	snd_config_t *father;
 };
 
 struct filedesc {
@@ -470,36 +462,6 @@ typedef struct {
 	int ch;
 } input_t;
 
-#ifdef HAVE_LIBPTHREAD
-
-static void snd_config_init_mutex(void)
-{
-	pthread_mutexattr_t attr;
-
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-	pthread_mutex_init(&snd_config_update_mutex, &attr);
-	pthread_mutexattr_destroy(&attr);
-}
-
-static inline void snd_config_lock(void)
-{
-	pthread_once(&snd_config_update_mutex_once, snd_config_init_mutex);
-	pthread_mutex_lock(&snd_config_update_mutex);
-}
-
-static inline void snd_config_unlock(void)
-{
-	pthread_mutex_unlock(&snd_config_update_mutex);
-}
-
-#else
-
-static inline void snd_config_lock(void) { }
-static inline void snd_config_unlock(void) { }
-
-#endif
-
 static int safe_strtoll(const char *str, long long *val)
 {
 	long long v;
@@ -507,7 +469,7 @@ static int safe_strtoll(const char *str, long long *val)
 	if (!*str)
 		return -EINVAL;
 	errno = 0;
-	if (sscanf(str, "%lli%n", &v, &endidx) < 1)
+	if (sscanf(str, "%Ld%n", &v, &endidx) < 1)
 		return -EINVAL;
 	if (str[endidx])
 		return -EINVAL;
@@ -535,40 +497,12 @@ static int safe_strtod(const char *str, double *val)
 {
 	char *end;
 	double v;
-#ifdef HAVE_USELOCALE
-	locale_t saved_locale, c_locale;
-#else
-	char *saved_locale;
-	char locstr[64]; /* enough? */
-#endif
-	int err;
-
 	if (!*str)
 		return -EINVAL;
-#ifdef HAVE_USELOCALE
-	c_locale = newlocale(LC_NUMERIC_MASK, "C", 0);
-	saved_locale = uselocale(c_locale);
-#else
-	saved_locale = setlocale(LC_NUMERIC, NULL);
-	if (saved_locale) {
-		snprintf(locstr, sizeof(locstr), "%s", saved_locale);
-		setlocale(LC_NUMERIC, "C");
-	}
-#endif
 	errno = 0;
 	v = strtod(str, &end);
-	err = -errno;
-#ifdef HAVE_USELOCALE
-	if (c_locale != (locale_t)0) {
-		uselocale(saved_locale);
-		freelocale(c_locale);
-	}
-#else
-	if (saved_locale)
-		setlocale(LC_NUMERIC, locstr);
-#endif
-	if (err)
-		return err;
+	if (errno)
+		return -errno;
 	if (*end)
 		return -EINVAL;
 	*val = v;
@@ -632,18 +566,17 @@ static int get_char_skip_comments(input_t *input)
 			if (err < 0)
 				return err;
 			if (!strncmp(str, "confdir:", 8)) {
-				char *tmp = malloc(strlen(ALSA_CONFIG_DIR) + 1 + strlen(str + 8) + 1);
+				char *tmp = malloc(strlen(DATADIR "/alsa") + 1 + strlen(str + 8) + 1);
 				if (tmp == NULL) {
 					free(str);
 					return -ENOMEM;
 				}
-				sprintf(tmp, ALSA_CONFIG_DIR "/%s", str + 8);
+				sprintf(tmp, DATADIR "/alsa/%s", str + 8);
 				free(str);
 				str = tmp;
 			}
 			err = snd_input_stdio_open(&in, str, "r");
 			if (err < 0) {
-				SNDERR("Cannot access file %s", str);
 				free(str);
 				return err;
 			}
@@ -730,75 +663,29 @@ static int get_quotedchar(input_t *input)
 	}
 }
 
-#define LOCAL_STR_BUFSIZE	64
-struct local_string {
-	char *buf;
-	size_t alloc;
-	size_t idx;
-	char tmpbuf[LOCAL_STR_BUFSIZE];
-};
-
-static void init_local_string(struct local_string *s)
-{
-	memset(s, 0, sizeof(*s));
-	s->buf = s->tmpbuf;
-	s->alloc = LOCAL_STR_BUFSIZE;
-}
-
-static void free_local_string(struct local_string *s)
-{
-	if (s->buf != s->tmpbuf)
-		free(s->buf);
-}
-
-static int add_char_local_string(struct local_string *s, int c)
-{
-	if (s->idx >= s->alloc) {
-		size_t nalloc = s->alloc * 2;
-		if (s->buf == s->tmpbuf) {
-			s->buf = malloc(nalloc);
-			if (s->buf == NULL)
-				return -ENOMEM;
-			memcpy(s->buf, s->tmpbuf, s->alloc);
-		} else {
-			char *ptr = realloc(s->buf, nalloc);
-			if (ptr == NULL)
-				return -ENOMEM;
-			s->buf = ptr;
-		}
-		s->alloc = nalloc;
-	}
-	s->buf[s->idx++] = c;
-	return 0;
-}
-
-static char *copy_local_string(struct local_string *s)
-{
-	char *dst = malloc(s->idx + 1);
-	if (dst) {
-		memcpy(dst, s->buf, s->idx);
-		dst[s->idx] = '\0';
-	}
-	return dst;
-}
-
 static int get_freestring(char **string, int id, input_t *input)
 {
-	struct local_string str;
+	const size_t bufsize = 64;
+	char _buf[bufsize];
+	char *buf = _buf;
+	size_t alloc = bufsize;
+	size_t idx = 0;
 	int c;
-
-	init_local_string(&str);
 	while (1) {
 		c = get_char(input);
 		if (c < 0) {
 			if (c == LOCAL_UNEXPECTED_EOF) {
-				*string = copy_local_string(&str);
-				if (! *string)
-					c = -ENOMEM;
-				else
-					c = 0;
+				char *s = malloc(idx + 1);
+				if (!s)
+					return -ENOMEM;
+				memcpy(s, buf, idx);
+				s[idx] = '\0';
+				*string = s;
+				c = 0;
 			}
-			break;
+			if (alloc > bufsize)
+				free(buf);
+			return c;
 		}
 		switch (c) {
 		case '.':
@@ -820,58 +707,95 @@ static int get_freestring(char **string, int id, input_t *input)
 		case '"':
 		case '\\':
 		case '#':
-			*string = copy_local_string(&str);
-			if (! *string)
-				c = -ENOMEM;
-			else {
-				unget_char(c, input);
-				c = 0;
-			}
-			goto _out;
+		{
+			char *s = malloc(idx + 1);
+			if (!s)
+				return -ENOMEM;
+			unget_char(c, input);
+			memcpy(s, buf, idx);
+			s[idx] = '\0';
+			*string = s;
+			if (alloc > bufsize)
+				free(buf);
+			return 0;
+		}
 		default:
 			break;
 		}
-		if (add_char_local_string(&str, c) < 0) {
-			c = -ENOMEM;
-			break;
+		if (idx >= alloc) {
+			size_t old_alloc = alloc;
+			alloc *= 2;
+			if (old_alloc == bufsize) {
+				buf = malloc(alloc);
+				if (buf == NULL)
+					return -ENOMEM;
+				memcpy(buf, _buf, old_alloc);
+			} else {
+				char *ptr = realloc(buf, alloc);
+				if (ptr == NULL) {
+					free(buf);
+					return -ENOMEM;
+				}
+				buf = ptr;
+			}
 		}
+		buf[idx++] = c;
 	}
- _out:
-	free_local_string(&str);
-	return c;
+	return 0;
 }
 			
 static int get_delimstring(char **string, int delim, input_t *input)
 {
-	struct local_string str;
+	const size_t bufsize = 64;
+	char _buf[bufsize];
+	char *buf = _buf;
+	size_t alloc = bufsize;
+	size_t idx = 0;
 	int c;
-
-	init_local_string(&str);
 	while (1) {
 		c = get_char(input);
 		if (c < 0)
-			break;
-		if (c == '\\') {
+			return c;
+		switch (c) {
+		case '\\':
 			c = get_quotedchar(input);
 			if (c < 0)
-				break;
+				return c;
 			if (c == '\n')
 				continue;
-		} else if (c == delim) {
-			*string = copy_local_string(&str);
-			if (! *string)
-				c = -ENOMEM;
-			else
-				c = 0;
 			break;
+		default:
+			if (c == delim) {
+				char *s = malloc(idx + 1);
+				if (!s)
+					return -ENOMEM;
+				memcpy(s, buf, idx);
+				s[idx] = '\0';
+				*string = s;
+				if (alloc > bufsize)
+					free(buf);
+				return 0;
+			}
 		}
-		if (add_char_local_string(&str, c) < 0) {
-			c = -ENOMEM;
-			break;
+		if (idx >= alloc) {
+			size_t old_alloc = alloc;
+			alloc *= 2;
+			if (old_alloc == bufsize) {
+				buf = malloc(alloc);
+				if (buf == NULL)
+					return -ENOMEM;
+				memcpy(buf, _buf, old_alloc);
+			} else {
+				char *ptr = realloc(buf, alloc);
+				if (ptr == NULL) {
+					free(buf);
+					return -ENOMEM;
+				}
+				buf = ptr;
+			}
 		}
+		buf[idx++] = c;
 	}
-	 free_local_string(&str);
-	 return c;
 }
 
 /* Return 0 for free string, 1 for delimited string */
@@ -889,7 +813,6 @@ static int get_string(char **string, int id, input_t *input)
 	case '}':
 	case '[':
 	case ']':
-	case '\\':
 		return LOCAL_UNEXPECTED_CHAR;
 	case '\'':
 	case '"':
@@ -931,16 +854,16 @@ static int _snd_config_make(snd_config_t **config, char **id, snd_config_type_t 
 	
 
 static int _snd_config_make_add(snd_config_t **config, char **id,
-				snd_config_type_t type, snd_config_t *parent)
+				snd_config_type_t type, snd_config_t *father)
 {
 	snd_config_t *n;
 	int err;
-	assert(parent->type == SND_CONFIG_TYPE_COMPOUND);
+	assert(father->type == SND_CONFIG_TYPE_COMPOUND);
 	err = _snd_config_make(&n, id, type);
 	if (err < 0)
 		return err;
-	n->parent = parent;
-	list_add_tail(&n->list, &parent->u.compound.fields);
+	n->father = father;
+	list_add_tail(&n->list, &father->u.compound.fields);
 	*config = n;
 	return 0;
 }
@@ -964,7 +887,7 @@ static int _snd_config_search(snd_config_t *config,
 	return -ENOENT;
 }
 
-static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, char **id, int skip)
+static int parse_value(snd_config_t **_n, snd_config_t *father, input_t *input, char **id, int skip)
 {
 	snd_config_t *n = *_n;
 	char *s;
@@ -992,7 +915,7 @@ static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, 
 						return -EINVAL;
 					}
 				} else {
-					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_REAL, parent);
+					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_REAL, father);
 					if (err < 0)
 						return err;
 				}
@@ -1009,9 +932,9 @@ static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, 
 				}
 			} else {
 				if (i <= INT_MAX) 
-					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_INTEGER, parent);
+					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_INTEGER, father);
 				else
-					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_INTEGER64, parent);
+					err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_INTEGER64, father);
 				if (err < 0)
 					return err;
 			}
@@ -1030,29 +953,30 @@ static int parse_value(snd_config_t **_n, snd_config_t *parent, input_t *input, 
 			return -EINVAL;
 		}
 	} else {
-		err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_STRING, parent);
+		err = _snd_config_make_add(&n, id, SND_CONFIG_TYPE_STRING, father);
 		if (err < 0)
 			return err;
 	}
-	free(n->u.string);
+	if (n->u.string)
+		free(n->u.string);
 	n->u.string = s;
 	*_n = n;
 	return 0;
 }
 
-static int parse_defs(snd_config_t *parent, input_t *input, int skip, int override);
+static int parse_defs(snd_config_t *father, input_t *input, int skip, int override);
 static int parse_array_defs(snd_config_t *farther, input_t *input, int skip, int override);
 
-static int parse_array_def(snd_config_t *parent, input_t *input, int idx, int skip, int override)
+static int parse_array_def(snd_config_t *father, input_t *input, int idx, int skip, int override)
 {
-	char *id = NULL;
+	char static_id[12], *id = NULL;
 	int c;
 	int err;
 	snd_config_t *n = NULL;
 
 	if (!skip) {
-		char static_id[12];
 		snprintf(static_id, sizeof(static_id), "%i", idx);
+		static_id[sizeof(static_id)-1] = '\0';
 		id = strdup(static_id);
 		if (id == NULL)
 			return -ENOMEM;
@@ -1075,7 +999,7 @@ static int parse_array_def(snd_config_t *parent, input_t *input, int idx, int sk
 					goto __end;
 				}
 			} else {
-				err = _snd_config_make_add(&n, &id, SND_CONFIG_TYPE_COMPOUND, parent);
+				err = _snd_config_make_add(&n, &id, SND_CONFIG_TYPE_COMPOUND, father);
 				if (err < 0)
 					goto __end;
 			}
@@ -1102,18 +1026,19 @@ static int parse_array_def(snd_config_t *parent, input_t *input, int idx, int sk
 	}
 	default:
 		unget_char(c, input);
-		err = parse_value(&n, parent, input, &id, skip);
+		err = parse_value(&n, father, input, &id, skip);
 		if (err < 0)
 			goto __end;
 		break;
 	}
 	err = 0;
       __end:
-	free(id);
+      	if (id)
+      		free(id);
       	return err;
 }
 
-static int parse_array_defs(snd_config_t *parent, input_t *input, int skip, int override)
+static int parse_array_defs(snd_config_t *father, input_t *input, int skip, int override)
 {
 	int idx = 0;
 	while (1) {
@@ -1123,14 +1048,14 @@ static int parse_array_defs(snd_config_t *parent, input_t *input, int skip, int 
 		unget_char(c, input);
 		if (c == ']')
 			return 0;
-		err = parse_array_def(parent, input, idx++, skip, override);
+		err = parse_array_def(father, input, idx++, skip, override);
 		if (err < 0)
 			return err;
 	}
 	return 0;
 }
 
-static int parse_def(snd_config_t *parent, input_t *input, int skip, int override)
+static int parse_def(snd_config_t *father, input_t *input, int skip, int override)
 {
 	char *id = NULL;
 	int c;
@@ -1168,7 +1093,7 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 			free(id);
 			continue;
 		}
-		if (_snd_config_search(parent, id, -1, &n) == 0) {
+		if (_snd_config_search(father, id, -1, &n) == 0) {
 			if (mode == DONT_OVERRIDE) {
 				skip = 1;
 				free(id);
@@ -1180,7 +1105,7 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 					return -EINVAL;
 				}
 				n->u.compound.join = 1;
-				parent = n;
+				father = n;
 				free(id);
 				continue;
 			}
@@ -1191,11 +1116,11 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 			err = -ENOENT;
 			goto __end;
 		}
-		err = _snd_config_make_add(&n, &id, SND_CONFIG_TYPE_COMPOUND, parent);
+		err = _snd_config_make_add(&n, &id, SND_CONFIG_TYPE_COMPOUND, father);
 		if (err < 0)
 			goto __end;
 		n->u.compound.join = 1;
-		parent = n;
+		father = n;
 	}
 	if (c == '=') {
 		c = get_nonwhite(input);
@@ -1203,7 +1128,7 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 			return c;
 	}
 	if (!skip) {
-		if (_snd_config_search(parent, id, -1, &n) == 0) {
+		if (_snd_config_search(father, id, -1, &n) == 0) {
 			if (mode == DONT_OVERRIDE) {
 				skip = 1;
 				n = NULL;
@@ -1233,7 +1158,7 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 					goto __end;
 				}
 			} else {
-				err = _snd_config_make_add(&n, &id, SND_CONFIG_TYPE_COMPOUND, parent);
+				err = _snd_config_make_add(&n, &id, SND_CONFIG_TYPE_COMPOUND, father);
 				if (err < 0)
 					goto __end;
 			}
@@ -1256,7 +1181,7 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 	}
 	default:
 		unget_char(c, input);
-		err = parse_value(&n, parent, input, &id, skip);
+		err = parse_value(&n, father, input, &id, skip);
 		if (err < 0)
 			goto __end;
 		break;
@@ -1270,11 +1195,12 @@ static int parse_def(snd_config_t *parent, input_t *input, int skip, int overrid
 		unget_char(c, input);
 	}
       __end:
-	free(id);
+      	if (id)
+	      	free(id);
 	return err;
 }
 		
-static int parse_defs(snd_config_t *parent, input_t *input, int skip, int override)
+static int parse_defs(snd_config_t *father, input_t *input, int skip, int override)
 {
 	int c, err;
 	while (1) {
@@ -1284,7 +1210,7 @@ static int parse_defs(snd_config_t *parent, input_t *input, int skip, int overri
 		unget_char(c, input);
 		if (c == '}')
 			return 0;
-		err = parse_def(parent, input, skip, override);
+		err = parse_def(father, input, skip, override);
 		if (err < 0)
 			return err;
 	}
@@ -1293,17 +1219,20 @@ static int parse_defs(snd_config_t *parent, input_t *input, int skip, int overri
 
 static void string_print(char *str, int id, snd_output_t *out)
 {
-	unsigned char *p = (unsigned char *)str;
-	if (!p || !*p) {
-		snd_output_puts(out, "''");
-		return;
-	}
+	unsigned char *p = str;
 	if (!id) {
 		switch (*p) {
+		case 0:
+			assert(0);
+			break;
 		case '0' ... '9':
 		case '-':
 			goto quoted;
 		}
+	}
+	if (!*p) {
+		snd_output_puts(out, "''");
+		return;
 	}
  loop:
 	switch (*p) {
@@ -1330,7 +1259,7 @@ static void string_print(char *str, int id, snd_output_t *out)
 	return;
  quoted:
 	snd_output_putc(out, '\'');
-	p = (unsigned char *)str;
+	p = str;
 	while (*p) {
 		int c;
 		c = *p;
@@ -1376,11 +1305,10 @@ static void string_print(char *str, int id, snd_output_t *out)
 	snd_output_putc(out, '\'');
 }
 
-static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
-				     unsigned int level, unsigned int joins);
+static int _snd_config_save_leaves(snd_config_t *config, snd_output_t *out, unsigned int level, unsigned int joins);
 
-static int _snd_config_save_node_value(snd_config_t *n, snd_output_t *out,
-				       unsigned int level)
+static int _snd_config_save_leaf(snd_config_t *n, snd_output_t *out, 
+				 unsigned int level)
 {
 	int err;
 	unsigned int k;
@@ -1389,7 +1317,7 @@ static int _snd_config_save_node_value(snd_config_t *n, snd_output_t *out,
 		snd_output_printf(out, "%ld", n->u.integer);
 		break;
 	case SND_CONFIG_TYPE_INTEGER64:
-		snd_output_printf(out, "%lld", n->u.integer64);
+		snd_output_printf(out, "%Ld", n->u.integer64);
 		break;
 	case SND_CONFIG_TYPE_REAL:
 		snd_output_printf(out, "%-16g", n->u.real);
@@ -1403,7 +1331,7 @@ static int _snd_config_save_node_value(snd_config_t *n, snd_output_t *out,
 	case SND_CONFIG_TYPE_COMPOUND:
 		snd_output_putc(out, '{');
 		snd_output_putc(out, '\n');
-		err = _snd_config_save_children(n, out, level + 1, 0);
+		err = _snd_config_save_leaves(n, out, level + 1, 0);
 		if (err < 0)
 			return err;
 		for (k = 0; k < level; ++k) {
@@ -1418,15 +1346,14 @@ static int _snd_config_save_node_value(snd_config_t *n, snd_output_t *out,
 static void id_print(snd_config_t *n, snd_output_t *out, unsigned int joins)
 {
 	if (joins > 0) {
-		assert(n->parent);
-		id_print(n->parent, out, joins - 1);
+		assert(n->father);
+		id_print(n->father, out, joins - 1);
 		snd_output_putc(out, '.');
 	}
 	string_print(n->id, 1, out);
 }
 
-static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
-				     unsigned int level, unsigned int joins)
+static int _snd_config_save_leaves(snd_config_t *config, snd_output_t *out, unsigned int level, unsigned int joins)
 {
 	unsigned int k;
 	int err;
@@ -1436,7 +1363,7 @@ static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
 		snd_config_t *n = snd_config_iterator_entry(i);
 		if (n->type == SND_CONFIG_TYPE_COMPOUND &&
 		    n->u.compound.join) {
-			err = _snd_config_save_children(n, out, level, joins + 1);
+			err = _snd_config_save_leaves(n, out, level, joins + 1);
 			if (err < 0)
 				return err;
 			continue;
@@ -1450,7 +1377,7 @@ static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
 		snd_output_putc(out, '=');
 #endif
 		snd_output_putc(out, ' ');
-		err = _snd_config_save_node_value(n, out, level);
+		err = _snd_config_save_leaf(n, out, level);
 		if (err < 0)
 			return err;
 #if 0
@@ -1466,7 +1393,7 @@ static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
 /**
  * \brief Substitutes one configuration node to another.
  * \param dst Handle to the destination node.
- * \param src Handle to the source node. Must not be the same as \a dst.
+ * \param src Handle to the source node. Must not be the same as \p dst.
  * \return Zero if successful, otherwise a negative error code.
  *
  * If both nodes are compounds, the source compound node members are
@@ -1476,11 +1403,7 @@ static int _snd_config_save_children(snd_config_t *config, snd_output_t *out,
  * an ordinary type, the compound members are deleted (including
  * their contents).
  *
- * Otherwise, the source node's value replaces the destination node's
- * value.
- *
- * In any case, a successful call to this function frees the source
- * node.
+ * A successful call to this function invalidates the source node.
  */
 int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 {
@@ -1490,7 +1413,7 @@ int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 		snd_config_iterator_t i, next;
 		snd_config_for_each(i, next, src) {
 			snd_config_t *n = snd_config_iterator_entry(i);
-			n->parent = dst;
+			n->father = dst;
 		}
 		src->u.compound.fields.next->prev = &dst->u.compound.fields;
 		src->u.compound.fields.prev->next = &dst->u.compound.fields;
@@ -1500,7 +1423,8 @@ int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 		if (err < 0)
 			return err;
 	}
-	free(dst->id);
+	if (dst->id)
+		free(dst->id);
 	dst->id = src->id;
 	dst->type = src->type;
 	dst->u = src->u;
@@ -1510,23 +1434,10 @@ int snd_config_substitute(snd_config_t *dst, snd_config_t *src)
 
 /**
  * \brief Converts an ASCII string to a configuration node type.
- * \param[in] ascii A string containing a configuration node type.
- * \param[out] type The node type corresponding to \a ascii.
- * \return Zero if successful, otherwise a negative error code.
- *
- * This function recognizes at least the following node types:
- * <dl>
- * <dt>integer<dt>#SND_CONFIG_TYPE_INTEGER
- * <dt>integer64<dt>#SND_CONFIG_TYPE_INTEGER64
- * <dt>real<dt>#SND_CONFIG_TYPE_REAL
- * <dt>string<dt>#SND_CONFIG_TYPE_STRING
- * <dt>compound<dt>#SND_CONFIG_TYPE_COMPOUND
- * </dl>
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>Unknown note type in \a type.
- * </dl>
+ * \param ascii A string containing a configuration node type.
+ * \param type The function puts the node type at the address specified
+ *             by \p type.
+ * \return Zero if successgul, otherwise a negative error code.
  */
 int snd_config_get_type_ascii(const char *ascii, snd_config_type_t *type)
 {
@@ -1558,9 +1469,6 @@ int snd_config_get_type_ascii(const char *ascii, snd_config_type_t *type)
  * \brief Returns the type of a configuration node.
  * \param config Handle to the configuration node.
  * \return The node's type.
- *
- * \par Conforming to:
- * LSB 3.2
  */
 snd_config_type_t snd_config_get_type(const snd_config_t *config)
 {
@@ -1569,19 +1477,13 @@ snd_config_type_t snd_config_get_type(const snd_config_t *config)
 
 /**
  * \brief Returns the id of a configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] id The function puts the pointer to the id string at the
- *                address specified by \a id.
+ * \param config Handle to the configuration node.
+ * \param id The function puts the pointer to the id string at the address
+ *           specified by \p id.
  * \return Zero if successful, otherwise a negative error code.
  *
  * The returned string is owned by the configuration node; the application
- * must not modify or delete it, and the string becomes invalid when the
- * node's id changes or when the node is freed.
- *
- * If the node does not have an id, \a *id is set to \c NULL.
- *
- * \par Conforming to:
- * LSB 3.2
+ * must not modify or delete it.
  */
 int snd_config_get_id(const snd_config_t *config, const char **id)
 {
@@ -1593,59 +1495,29 @@ int snd_config_get_id(const snd_config_t *config, const char **id)
 /**
  * \brief Sets the id of a configuration node.
  * \param config Handle to the configuration node.
- * \param id The new node id, must not be \c NULL.
+ * \param id The new node id.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function stores a copy of \a id in the node.
- *
- * \par Errors:
- * <dl>
- * <dt>-EEXIST<dd>One of \a config's siblings already has the id \a id.
- * <dt>-EINVAL<dd>The id of a node with a parent cannot be set to \c NULL.
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
  */
 int snd_config_set_id(snd_config_t *config, const char *id)
 {
-	snd_config_iterator_t i, next;
 	char *new_id;
-	assert(config);
-	if (id) {
-		if (config->parent) {
-			snd_config_for_each(i, next, config->parent) {
-				snd_config_t *n = snd_config_iterator_entry(i);
-				if (n != config && strcmp(id, n->id) == 0)
-					return -EEXIST;
-			}
-		}
-		new_id = strdup(id);
-		if (!new_id)
-			return -ENOMEM;
-	} else {
-		if (config->parent)
-			return -EINVAL;
-		new_id = NULL;
-	}
-	free(config->id);
+	assert(config && id);
+	new_id = strdup(id);
+	if (!new_id)
+		return -ENOMEM;
+	if (config->id)
+		free(config->id);
 	config->id = new_id;
 	return 0;
 }
 
 /**
  * \brief Creates a top level configuration node.
- * \param[out] config Handle to the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
  * \return Zero if successful, otherwise a negative error code.
  *
- * The returned node is an empty compound node without a parent and
- * without an id.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
+ * The returned node is a compound node.
  */
 int snd_config_top(snd_config_t **config)
 {
@@ -1676,19 +1548,15 @@ static int snd_config_load1(snd_config_t *config, snd_input_t *in, int override)
 		switch (err) {
 		case LOCAL_UNTERMINATED_STRING:
 			str = "Unterminated string";
-			err = -EINVAL;
 			break;
 		case LOCAL_UNTERMINATED_QUOTE:
 			str = "Unterminated quote";
-			err = -EINVAL;
 			break;
 		case LOCAL_UNEXPECTED_CHAR:
 			str = "Unexpected char";
-			err = -EINVAL;
 			break;
 		case LOCAL_UNEXPECTED_EOF:
 			str = "Unexpected end of file";
-			err = -EINVAL;
 			break;
 		default:
 			str = strerror(-err);
@@ -1719,16 +1587,6 @@ static int snd_config_load1(snd_config_t *config, snd_input_t *in, int override)
  * \param config Handle to a top level configuration node.
  * \param in Input handle to read the configuration from.
  * \return Zero if successful, otherwise a negative error code.
- *
- * The definitions loaded from the input are added to \a config, which
- * must be a compound node.
- *
- * \par Errors:
- * Any errors encountered when parsing the input or returned by hooks or
- * functions.
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_load(snd_config_t *config, snd_input_t *in)
 {
@@ -1740,10 +1598,6 @@ int snd_config_load(snd_config_t *config, snd_input_t *in)
  * \param config Handle to a top level configuration node.
  * \param in Input handle to read the configuration from.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function loads definitions from \a in into \a config like
- * #snd_config_load, but the default mode for input nodes is 'override'
- * (!) instead of 'merge+create' (+).
  */
 int snd_config_load_override(snd_config_t *config, snd_input_t *in)
 {
@@ -1752,41 +1606,21 @@ int snd_config_load_override(snd_config_t *config, snd_input_t *in)
 
 /**
  * \brief Adds a child to a compound configuration node.
- * \param parent Handle to a compound configuration node.
- * \param child Handle to the configuration node to be added.
+ * \param father Handle to the compound configuration node.
+ * \param leaf Handle to the configuration node to be added to \p father.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function makes the node \a child a child of the node \a parent.
- *
- * The parent node then owns the child node, i.e., the child node gets
- * deleted together with its parent.
- *
- * \a child must have an id.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a child does not have an id.
- * <dt>-EINVAL<dd>\a child already has a parent.
- * <dt>-EEXIST<dd>\a parent already contains a child node with the same
- *                id as \a child.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
-int snd_config_add(snd_config_t *parent, snd_config_t *child)
+int snd_config_add(snd_config_t *father, snd_config_t *leaf)
 {
 	snd_config_iterator_t i, next;
-	assert(parent && child);
-	if (!child->id || child->parent)
-		return -EINVAL;
-	snd_config_for_each(i, next, parent) {
+	assert(father && leaf);
+	snd_config_for_each(i, next, father) {
 		snd_config_t *n = snd_config_iterator_entry(i);
-		if (strcmp(child->id, n->id) == 0)
+		if (strcmp(leaf->id, n->id) == 0)
 			return -EEXIST;
 	}
-	child->parent = parent;
-	list_add_tail(&child->list, &parent->u.compound.fields);
+	leaf->father = father;
+	list_add_tail(&leaf->list, &father->u.compound.fields);
 	return 0;
 }
 
@@ -1795,40 +1629,25 @@ int snd_config_add(snd_config_t *parent, snd_config_t *child)
  * \param config Handle to the configuration node to be removed.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function makes \a config a top-level node, i.e., if \a config
- * has a parent, then \a config is removed from the list of the parent's
- * children.
- *
- * This functions does \e not free the removed node.
- *
- * \sa snd_config_delete
+ * This functions does \e not delete the removed node.
  */
 int snd_config_remove(snd_config_t *config)
 {
 	assert(config);
-	if (config->parent)
+	if (config->father)
 		list_del(&config->list);
-	config->parent = NULL;
+	config->father = NULL;
 	return 0;
 }
 
 /**
- * \brief Frees a configuration node.
+ * \brief Deletes a configuration node (freeing all its related resources).
  * \param config Handle to the configuration node to be deleted.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function frees a configuration node and all its resources.
- *
  * If the node is a child node, it is removed from the tree before being
- * deleted.
- *
- * If the node is a compound node, its descendants (the whole subtree)
- * are deleted recursively.
- *
- * \par Conforming to:
- * LSB 3.2
- *
- * \sa snd_config_remove
+ * deleted. If the node is a compound node, all children are deleted
+ * recursively.
  */
 int snd_config_delete(snd_config_t *config)
 {
@@ -1841,8 +1660,8 @@ int snd_config_delete(snd_config_t *config)
 		i = config->u.compound.fields.next;
 		while (i != &config->u.compound.fields) {
 			struct list_head *nexti = i->next;
-			snd_config_t *child = snd_config_iterator_entry(i);
-			err = snd_config_delete(child);
+			snd_config_t *leaf = snd_config_iterator_entry(i);
+			err = snd_config_delete(leaf);
 			if (err < 0)
 				return err;
 			i = nexti;
@@ -1850,35 +1669,26 @@ int snd_config_delete(snd_config_t *config)
 		break;
 	}
 	case SND_CONFIG_TYPE_STRING:
-		free(config->u.string);
+		if (config->u.string)
+			free(config->u.string);
 		break;
 	default:
 		break;
 	}
-	if (config->parent)
+	if (config->father)
 		list_del(&config->list);
-	free(config->id);
+	if (config->id)
+		free(config->id);
 	free(config);
 	return 0;
 }
 
 /**
- * \brief Deletes the children of a node.
+ * \brief Deletes the children of a compound configuration node (freeing all its related resources)
  * \param config Handle to the compound configuration node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function removes and frees all children of a configuration node.
- *
- * Any compound nodes among the children of \a config are deleted
- * recursively.
- *
- * After a successful call to this function, \a config is an empty
- * compound node.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a compound node.
- * </dl>
+ * Any compound nodes among the children of \p config are deleted recursively.
  */
 int snd_config_delete_compound_members(const snd_config_t *config)
 {
@@ -1891,8 +1701,8 @@ int snd_config_delete_compound_members(const snd_config_t *config)
 	i = config->u.compound.fields.next;
 	while (i != &config->u.compound.fields) {
 		struct list_head *nexti = i->next;
-		snd_config_t *child = snd_config_iterator_entry(i);
-		err = snd_config_delete(child);
+		snd_config_t *leaf = snd_config_iterator_entry(i);
+		err = snd_config_delete(leaf);
 		if (err < 0)
 			return err;
 		i = nexti;
@@ -1902,22 +1712,11 @@ int snd_config_delete_compound_members(const snd_config_t *config)
 
 /**
  * \brief Creates a configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] type The type of the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param type The type of the new node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This functions creates a new node of the specified type.
- * The new node has id \a id, which may be \c NULL.
- *
- * The value of the new node is zero (for numbers), or \c NULL (for
- * strings and pointers), or empty (for compound nodes).
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
  */
 int snd_config_make(snd_config_t **config, const char *id,
 		    snd_config_type_t type)
@@ -1935,23 +1734,12 @@ int snd_config_make(snd_config_t **config, const char *id,
 
 /**
  * \brief Creates an integer configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function creates a new node of type #SND_CONFIG_TYPE_INTEGER and
- * with value \c 0.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
- *
- * \sa snd_config_imake_integer
+ * The value of the new node is 0.
  */
 int snd_config_make_integer(snd_config_t **config, const char *id)
 {
@@ -1959,24 +1747,13 @@ int snd_config_make_integer(snd_config_t **config, const char *id)
 }
 
 /**
- * \brief Creates a 64-bit-integer configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
+ * \brief Creates an integer64 configuration node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function creates a new node of type #SND_CONFIG_TYPE_INTEGER64
- * and with value \c 0.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
- *
- * \sa snd_config_imake_integer64
+ * The value of the new node is 0.
  */
 int snd_config_make_integer64(snd_config_t **config, const char *id)
 {
@@ -1984,21 +1761,13 @@ int snd_config_make_integer64(snd_config_t **config, const char *id)
 }
 
 /**
- * \brief Creates a real number configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
+ * \brief Creates a real configuration node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function creates a new node of type #SND_CONFIG_TYPE_REAL and
- * with value \c 0.0.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \sa snd_config_imake_real
+ * The value of the new node is 0.0.
  */
 int snd_config_make_real(snd_config_t **config, const char *id)
 {
@@ -2007,23 +1776,12 @@ int snd_config_make_real(snd_config_t **config, const char *id)
 
 /**
  * \brief Creates a string configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function creates a new node of type #SND_CONFIG_TYPE_STRING and
- * with value \c NULL.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
- *
- * \sa snd_config_imake_string
+ * The value of the new node is \c NULL.
  */
 int snd_config_make_string(snd_config_t **config, const char *id)
 {
@@ -2032,20 +1790,12 @@ int snd_config_make_string(snd_config_t **config, const char *id)
 
 /**
  * \brief Creates a pointer configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function creates a new node of type #SND_CONFIG_TYPE_POINTER and
- * with value \c NULL.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \sa snd_config_imake_pointer
+ * The value of the new node is \c NULL.
  */
 int snd_config_make_pointer(snd_config_t **config, const char *id)
 {
@@ -2054,41 +1804,12 @@ int snd_config_make_pointer(snd_config_t **config, const char *id)
 
 /**
  * \brief Creates an empty compound configuration node.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] join Join flag.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param join Join flag.
+ *             This is checked in #snd_config_save to change look. (Huh?)
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function creates a new empty node of type
- * #SND_CONFIG_TYPE_COMPOUND.
- *
- * \a join determines how the compound node's id is printed when the
- * configuration is saved to a text file.  For example, if the join flag
- * of compound node \c a is zero, the output will look as follows:
- * \code
- * a {
- *     b "hello"
- *     c 42
- * }
- * \endcode
- * If, however, the join flag of \c a is nonzero, its id will be joined
- * with its children's ids, like this:
- * \code
- * a.b "hello"
- * a.c 42
- * \endcode
- * An \e empty compound node with its join flag set would result in no
- * output, i.e., after saving and reloading the configuration file, that
- * compound node would be lost.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_make_compound(snd_config_t **config, const char *id,
 			     int join)
@@ -2103,22 +1824,11 @@ int snd_config_make_compound(snd_config_t **config, const char *id,
 
 /**
  * \brief Creates an integer configuration node with the given initial value.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] value The initial value of the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param value The initial value of the new node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function creates a new node of type #SND_CONFIG_TYPE_INTEGER and
- * with value \a value.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_imake_integer(snd_config_t **config, const char *id, const long value)
 {
@@ -2132,23 +1842,12 @@ int snd_config_imake_integer(snd_config_t **config, const char *id, const long v
 }
 
 /**
- * \brief Creates a 64-bit-integer configuration node with the given initial value.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] value The initial value of the new node.
+ * \brief Creates an integer configuration node with the given initial value.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param value The initial value of the new node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function creates a new node of type #SND_CONFIG_TYPE_INTEGER64
- * and with value \a value.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_imake_integer64(snd_config_t **config, const char *id, const long long value)
 {
@@ -2162,20 +1861,12 @@ int snd_config_imake_integer64(snd_config_t **config, const char *id, const long
 }
 
 /**
- * \brief Creates a real number configuration node with the given initial value.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] value The initial value of the new node.
+ * \brief Creates a real configuration node with the given initial value.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param value The initial value of the new node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function creates a new node of type #SND_CONFIG_TYPE_REAL and
- * with value \a value.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
  */
 int snd_config_imake_real(snd_config_t **config, const char *id, const double value)
 {
@@ -2190,22 +1881,13 @@ int snd_config_imake_real(snd_config_t **config, const char *id, const double va
 
 /**
  * \brief Creates a string configuration node with the given initial value.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] value The initial value of the new node.  May be \c NULL.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param value The initial value of the new node. May be \c NULL.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function creates a new node of type #SND_CONFIG_TYPE_STRING and
- * with a copy of the string \c value.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
+ * This function creates the new node with its own copy of the passed string.
  */
 int snd_config_imake_string(snd_config_t **config, const char *id, const char *value)
 {
@@ -2228,53 +1910,13 @@ int snd_config_imake_string(snd_config_t **config, const char *id, const char *v
 	return 0;
 }
 
-int snd_config_imake_safe_string(snd_config_t **config, const char *id, const char *value)
-{
-	int err;
-	snd_config_t *tmp;
-	char *c;
-
-	err = snd_config_make(&tmp, id, SND_CONFIG_TYPE_STRING);
-	if (err < 0)
-		return err;
-	if (value) {
-		tmp->u.string = strdup(value);
-		if (!tmp->u.string) {
-			snd_config_delete(tmp);
-			return -ENOMEM;
-		}
-
-		for (c = tmp->u.string; *c; c++) {
-			if (*c == ' ' || *c == '-' || *c == '_' ||
-				(*c >= '0' && *c <= '9') ||
-				(*c >= 'a' && *c <= 'z') ||
-				(*c >= 'A' && *c <= 'Z'))
-					continue;
-			*c = '_';
-		}
-	} else {
-		tmp->u.string = NULL;
-	}
-	*config = tmp;
-	return 0;
-}
-
-
 /**
  * \brief Creates a pointer configuration node with the given initial value.
- * \param[out] config The function puts the handle to the new node at
- *                    the address specified by \a config.
- * \param[in] id The id of the new node.
- * \param[in] value The initial value of the new node.
+ * \param config The function puts the handle to the new node at the address
+ *               specified by \p config.
+ * \param id The id of the new node.
+ * \param value The initial value of the new node. May be \c NULL.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function creates a new node of type #SND_CONFIG_TYPE_POINTER and
- * with value \c value.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
  */
 int snd_config_imake_pointer(snd_config_t **config, const char *id, const void *value)
 {
@@ -2292,14 +1934,6 @@ int snd_config_imake_pointer(snd_config_t **config, const char *id, const void *
  * \param config Handle to the configuration node.
  * \param value The new value for the node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not an integer node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_set_integer(snd_config_t *config, long value)
 {
@@ -2311,18 +1945,10 @@ int snd_config_set_integer(snd_config_t *config, long value)
 }
 
 /**
- * \brief Changes the value of a 64-bit-integer configuration node.
+ * \brief Changes the value of an integer64 configuration node.
  * \param config Handle to the configuration node.
  * \param value The new value for the node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a 64-bit-integer node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_set_integer64(snd_config_t *config, long long value)
 {
@@ -2334,15 +1960,10 @@ int snd_config_set_integer64(snd_config_t *config, long long value)
 }
 
 /**
- * \brief Changes the value of a real-number configuration node.
+ * \brief Changes the value of a real configuration node.
  * \param config Handle to the configuration node.
  * \param value The new value for the node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a real-number node.
- * </dl>
  */
 int snd_config_set_real(snd_config_t *config, double value)
 {
@@ -2356,19 +1977,11 @@ int snd_config_set_real(snd_config_t *config, double value)
 /**
  * \brief Changes the value of a string configuration node.
  * \param config Handle to the configuration node.
- * \param value The new value for the node.  May be \c NULL.
+ * \param value The new value for the node. May be \c NULL.
  * \return Zero if successful, otherwise a negative error code.
  *
  * This function deletes the old string in the node and stores a copy of
- * \a value string in the node.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a string node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
+ * the passed string in the node.
  */
 int snd_config_set_string(snd_config_t *config, const char *value)
 {
@@ -2383,7 +1996,8 @@ int snd_config_set_string(snd_config_t *config, const char *value)
 	} else {
 		new_string = NULL;
 	}
-	free(config->u.string);
+	if (config->u.string)
+		free(config->u.string);
 	config->u.string = new_string;
 	return 0;
 }
@@ -2391,15 +2005,10 @@ int snd_config_set_string(snd_config_t *config, const char *value)
 /**
  * \brief Changes the value of a pointer configuration node.
  * \param config Handle to the configuration node.
- * \param value The new value for the node.  May be \c NULL.
+ * \param value The new value for the node. May be \c NULL.
  * \return Zero if successful, otherwise a negative error code.
  *
  * This function does not free the old pointer in the node.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a pointer node.
- * </dl>
  */
 int snd_config_set_pointer(snd_config_t *config, const void *value)
 {
@@ -2413,27 +2022,11 @@ int snd_config_set_pointer(snd_config_t *config, const void *value)
 /**
  * \brief Changes the value of a configuration node.
  * \param config Handle to the configuration node.
- * \param ascii The new value for the node, as an ASCII string.
+ * \param ascii The new value for the node as an ASCII string. \p ascii must
+ *              not be \c NULL, not even for a string node.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function changes the node's value to a new value that is parsed
- * from the string \a ascii.  \a ascii must not be \c NULL, not even for
- * a string node.
- *
- * The node's type does not change, i.e., the string must contain a
- * valid value with the same type as the node's type.  For a string
- * node, the node's new value is a copy of \a ascii.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a number or string node.
- * <dt>-EINVAL<dd>The value in \a ascii cannot be parsed.
- * <dt>-ERANGE<dd>The value in \a ascii is too big for the node's type.
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
+ * The node must have a simple type, and the new value must have the same type.
  */
 int snd_config_set_ascii(snd_config_t *config, const char *ascii)
 {
@@ -2471,7 +2064,8 @@ int snd_config_set_ascii(snd_config_t *config, const char *ascii)
 			char *ptr = strdup(ascii);
 			if (ptr == NULL)
 				return -ENOMEM;
-			free(config->u.string);
+			if (config->u.string)
+				free(config->u.string);
 			config->u.string = ptr;
 		}
 		break;
@@ -2483,17 +2077,10 @@ int snd_config_set_ascii(snd_config_t *config, const char *ascii)
 
 /**
  * \brief Returns the value of an integer configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] ptr The node's value.
+ * \param config Handle to the configuration node.
+ * \param ptr The function puts the node's value at the address specified
+ *            by \p ptr.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not an integer node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_get_integer(const snd_config_t *config, long *ptr)
 {
@@ -2505,18 +2092,11 @@ int snd_config_get_integer(const snd_config_t *config, long *ptr)
 }
 
 /**
- * \brief Returns the value of a 64-bit-integer configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] ptr The node's value.
+ * \brief Returns the value of an integer64 configuration node.
+ * \param config Handle to the configuration node.
+ * \param ptr The function puts the node's value at the address specified
+ *            by \p ptr.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a 64-bit-integer node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_get_integer64(const snd_config_t *config, long long *ptr)
 {
@@ -2528,15 +2108,11 @@ int snd_config_get_integer64(const snd_config_t *config, long long *ptr)
 }
 
 /**
- * \brief Returns the value of a real-number configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] ptr The node's value.
+ * \brief Returns the value of a real configuration node.
+ * \param config Handle to the configuration node.
+ * \param ptr The function puts the node's value at the address specified
+ *            by \p ptr.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a real-number node.
- * </dl>
  */
 int snd_config_get_real(const snd_config_t *config, double *ptr)
 {
@@ -2549,17 +2125,13 @@ int snd_config_get_real(const snd_config_t *config, double *ptr)
 
 /**
  * \brief Returns the value of a real or integer configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] ptr The node's value.
+ * \param config Handle to the configuration node.
+ * \param ptr The function puts the node's value at the address specified
+ *            by \p ptr.
  * \return Zero if successful, otherwise a negative error code.
  *
  * If the node's type is integer or integer64, the value is converted
  * to the \c double type on the fly.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a number node.
- * </dl>
  */
 int snd_config_get_ireal(const snd_config_t *config, double *ptr)
 {
@@ -2577,24 +2149,13 @@ int snd_config_get_ireal(const snd_config_t *config, double *ptr)
 
 /**
  * \brief Returns the value of a string configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] ptr The function puts the node's value at the address
- *                 specified by \a ptr.
+ * \param config Handle to the configuration node.
+ * \param ptr The function puts the node's value at the address specified
+ *            by \p ptr.
  * \return Zero if successful, otherwise a negative error code.
  *
- * The returned string is owned by the configuration node; the
- * application must not modify or delete it, and the string becomes
- * invalid when the node's value changes or when the node is freed.
- *
- * The string may be \c NULL.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a string node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
+ * The returned string is owned by the configuration node; the application
+ * must not modify or delete it.
  */
 int snd_config_get_string(const snd_config_t *config, const char **ptr)
 {
@@ -2607,15 +2168,10 @@ int snd_config_get_string(const snd_config_t *config, const char **ptr)
 
 /**
  * \brief Returns the value of a pointer configuration node.
- * \param[in] config Handle to the configuration node.
- * \param[out] ptr The function puts the node's value at the address
- *                 specified by \a ptr.
+ * \param config Handle to the configuration node.
+ * \param ptr The function puts the node's value at the address specified
+ *            by \p ptr.
  * \return Zero if successful, otherwise a negative error code.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a string node.
- * </dl>
  */
 int snd_config_get_pointer(const snd_config_t *config, const void **ptr)
 {
@@ -2628,30 +2184,13 @@ int snd_config_get_pointer(const snd_config_t *config, const void **ptr)
 
 /**
  * \brief Returns the value of a configuration node as a string.
- * \param[in] config Handle to the configuration node.
- * \param[out] ascii The function puts the pointer to the returned
- *                   string at the address specified by \a ascii.
+ * \param config Handle to the configuration node.
+ * \param ascii The function puts the pointer to the returned string at the
+ *              address specified by \p ascii.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This function dynamically allocates the returned string.  The
- * application is responsible for deleting it with \c free() when it is
- * no longer used.
- *
- * For a string node with \c NULL value, the returned string is \c NULL.
- *
- * Supported node types are #SND_CONFIG_TYPE_INTEGER,
- * #SND_CONFIG_TYPE_INTEGER64, #SND_CONFIG_TYPE_REAL, and
- * #SND_CONFIG_TYPE_STRING.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>\a config is not a (64-bit) integer or real number or
- *                string node.
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
+ * This function dynamically allocates the returned string. The application
+ * is responsible for deleting it with \c free() when it is no longer used.
  */
 int snd_config_get_ascii(const snd_config_t *config, char **ascii)
 {
@@ -2673,7 +2212,7 @@ int snd_config_get_ascii(const snd_config_t *config, char **ascii)
 		{
 			char res[32];
 			int err;
-			err = snprintf(res, sizeof(res), "%lli", config->u.integer64);
+			err = snprintf(res, sizeof(res), "%Li", config->u.integer64);
 			if (err < 0 || err == sizeof(res)) {
 				assert(0);
 				return -ENOMEM;
@@ -2722,18 +2261,12 @@ int snd_config_get_ascii(const snd_config_t *config, char **ascii)
  * \brief Compares the id of a configuration node to a given string.
  * \param config Handle to the configuration node.
  * \param id ASCII id.
- * \return The same value as the result of the \c strcmp function, i.e.,
- *         less than zero if \a config's id is lexicographically less
- *         than \a id, zero if \a config's id is equal to id, greater
- *         than zero otherwise.
+ * \return The same value as the result of the \c strcmp function.
  */
 int snd_config_test_id(const snd_config_t *config, const char *id)
 {
 	assert(config && id);
-	if (config->id)
-		return strcmp(config->id, id);
-	else
-		return -1;
+	return strcmp(config->id, id);
 }
 
 /**
@@ -2741,26 +2274,14 @@ int snd_config_test_id(const snd_config_t *config, const char *id)
  * \param config Handle to the (root) configuration node.
  * \param out Output handle.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function writes a textual representation of \a config's value to
- * the output \a out.
- *
- * \par Errors:
- * <dl>
- * <dt>-EINVAL<dd>A node in the tree has a type that cannot be printed,
- *                i.e., #SND_CONFIG_TYPE_POINTER.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_save(snd_config_t *config, snd_output_t *out)
 {
 	assert(config && out);
 	if (config->type == SND_CONFIG_TYPE_COMPOUND)
-		return _snd_config_save_children(config, out, 0, 0);
+		return _snd_config_save_leaves(config, out, 0, 0);
 	else
-		return _snd_config_save_node_value(config, out, 0);
+		return _snd_config_save_leaf(config, out, 0);
 }
 
 /*
@@ -2865,16 +2386,9 @@ int snd_config_save(snd_config_t *config, snd_output_t *out)
 #define SND_CONFIG_SEARCH_ALIAS(config, base, key, result, fcn1, fcn2) \
 { \
 	snd_config_t *res = NULL; \
-	char *old_key; \
-	int err, first = 1, maxloop = 1000; \
+	int err, first = 1; \
 	assert(config && key); \
-	while (1) { \
-		old_key = strdup(key); \
-		if (old_key == NULL) { \
-			err = -ENOMEM; \
-			res = NULL; \
-			break; \
-		} \
+	do { \
 		err = first && base ? -EIO : fcn1(config, config, key, &res); \
 		if (err < 0) { \
 			if (!base) \
@@ -2883,23 +2397,8 @@ int snd_config_save(snd_config_t *config, snd_output_t *out)
 			if (err < 0) \
 				break; \
 		} \
-		if (snd_config_get_string(res, &key) < 0) \
-			break; \
-		assert(key); \
-		if (!first && (strcmp(key, old_key) == 0 || maxloop <= 0)) { \
-			if (maxloop == 0) \
-				SNDERR("maximum loop count reached (circular configuration?)"); \
-			else \
-				SNDERR("key %s refers to itself", key); \
-			err = -EINVAL; \
-			res = NULL; \
-			break; \
-		} \
-		free(old_key); \
 		first = 0; \
-		maxloop--; \
-	} \
-	free(old_key); \
+	} while (snd_config_get_string(res, &key) >= 0); \
 	if (!res) \
 		return err; \
 	if (result) \
@@ -2911,43 +2410,11 @@ int snd_config_save(snd_config_t *config, snd_output_t *out)
 
 /**
  * \brief Searches for a node in a configuration tree.
- * \param[in] config Handle to the root of the configuration (sub)tree to search.
- * \param[in] key Search key: one or more node ids, separated with dots.
- * \param[out] result When \a result != \c NULL, the function puts the
- *                    handle to the node found at the address specified
- *                    by \a result.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param key Search key: one or more node keys, separated with dots.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function searches for a child node of \a config that is
- * identified by \a key, which contains either the id of a direct child
- * node of \a config, or a series of ids, separated with dots, where
- * each id specifies a node that is contained in the previous compound
- * node.
- *
- * In the following example, the comment after each node shows the
- * search key to find that node, assuming that \a config is a handle to
- * the compound node with id \c config:
- * \code
- * config {
- *     a 42               # "a"
- *     b {                # "b"
- *         c "cee"        # "b.c"
- *         d {            # "b.d"
- *             e 2.71828  # "b.d.e"
- *         }
- *     }
- * }
- * \endcode
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_search(snd_config_t *config, const char *key, snd_config_t **result)
 {
@@ -2956,53 +2423,13 @@ int snd_config_search(snd_config_t *config, const char *key, snd_config_t **resu
 
 /**
  * \brief Searches for a node in a configuration tree, expanding aliases.
- * \param[in] root Handle to the root configuration node containing
- *                 alias definitions.
- * \param[in] config Handle to the root of the configuration (sub)tree to search.
- * \param[in] key Search key: one or more node keys, separated with dots.
- * \param[out] result When \a result != \c NULL, the function puts the
- *                    handle to the node found at the address specified
- *                    by \a result.
+ * \param root Handle to the root configuration node containing alias
+ *             definitions.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param key Search key: one or more node keys, separated with dots.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This functions searches for a child node of \a config like
- * #snd_config_search.  However, any compound node can also be
- * identified by an alias, which is a string node whose value is taken
- * as the id of a compound node below \a root.
- *
- * \a root must be a compound node.
- * \a root and \a config may be the same node.
- *
- * For example, with the following configuration, the call
- * \code
- * snd_config_searcha(root, config, "a.b.c.d", &result);
- * \endcode
- * would return the node with id \c d:
- * \code
- * config {
- *     a {
- *         b bb
- *     }
- * }
- * root {
- *     bb {
- *         c cc
- *     }
- *     cc ccc
- *     ccc {
- *         d {
- *             x "icks"
- *         }
- *     }
- * }
- * \endcode
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key or an alias id does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound or string node.
- * </dl>
  */
 int snd_config_searcha(snd_config_t *root, snd_config_t *config, const char *key, snd_config_t **result)
 {
@@ -3011,34 +2438,11 @@ int snd_config_searcha(snd_config_t *root, snd_config_t *config, const char *key
 
 /**
  * \brief Searches for a node in a configuration tree.
- * \param[in] config Handle to the root of the configuration (sub)tree to search.
- * \param[out] result When \a result != \c NULL, the function puts the
- *                    handle to the node found at the address specified
- *                    by \a result.
- * \param[in] ... One or more concatenated dot-separated search keys,
- *                terminated with \c NULL.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
+ * \param ... One or more concatenated dot separated search keys, terminated with \c NULL.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This functions searches for a child node of \a config like
- * #snd_config_search, but the search key is the concatenation of all
- * passed search key strings.  For example, the call
- * \code
- * snd_config_searchv(cfg, &res, "a", "b.c", "d.e", NULL);
- * \endcode
- * is equivalent to the call
- * \code
- * snd_config_search(cfg, "a.b.c.d.e", &res);
- * \endcode
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in a search key does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_searchv(snd_config_t *config, snd_config_t **result, ...)
 {
@@ -3047,27 +2451,13 @@ int snd_config_searchv(snd_config_t *config, snd_config_t **result, ...)
 
 /**
  * \brief Searches for a node in a configuration tree, expanding aliases.
- * \param[in] root Handle to the root configuration node containing
- *                 alias definitions.
- * \param[in] config Handle to the root of the configuration (sub)tree to search.
- * \param[out] result When \a result != \c NULL, the function puts the
- *                    handle to the node found at the address specified
- *                    by \a result.
- * \param[in] ... One or more concatenated dot separated search keys,
- *                terminated with \c NULL.
+ * \param root Handle to the root configuration node containing alias
+ *             definitions.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
+ * \param ... One or more concatenated dot separated search keys, terminated with \c NULL.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function searches for a child node of \a config, allowing
- * aliases, like #snd_config_searcha, but the search key is the
- * concatenation of all passed seach key strings, like with
- * #snd_config_searchv.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in a search key does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound or string node.
- * </dl>
  */
 int snd_config_searchva(snd_config_t *root, snd_config_t *config, snd_config_t **result, ...)
 {
@@ -3075,30 +2465,17 @@ int snd_config_searchva(snd_config_t *root, snd_config_t *config, snd_config_t *
 }
 
 /**
- * \brief Searches for a node in a configuration tree, expanding aliases.
- * \param[in] config Handle to the root of the configuration (sub)tree to search.
- * \param[in] base Search key base, or \c NULL.
- * \param[in] key Search key suffix.
- * \param[out] result When \a result != \c NULL, the function puts the
- *                    handle to the node found at the address specified
- *                    by \a result.
+ * \brief Searches for a node in a configuration tree, using an alias.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param base Search key base, or \c NULL.
+ * \param key Search key suffix.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This functions searches for a child node of \a config, allowing
- * aliases, like #snd_config_searcha.  However, alias definitions are
- * searched below \a config (there is no separate \a root parameter),
- * and \a base specifies a seach key that identifies a compound node
- * that is used to search for an alias definitions that is not found
- * directly below \a config and that does not contain a period.  In
- * other words, when \c "id" is not found in \a config, this function
- * also tries \c "base.id".
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key or an alias id does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound or string node.
- * </dl>
+ * First \c key is tried, then, if nothing is found, \c base.key is tried.
+ * If the value found is a string, this is recursively tried in the
+ * same way.
  */
 int snd_config_search_alias(snd_config_t *config,
 			    const char *base, const char *key,
@@ -3108,32 +2485,17 @@ int snd_config_search_alias(snd_config_t *config,
 				snd_config_searcha, snd_config_searchva);
 }
 
-static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data);
-
 /**
  * \brief Searches for a node in a configuration tree and expands hooks.
- * \param[in,out] config Handle to the root of the configuration
- *                       (sub)tree to search.
- * \param[in] key Search key: one or more node keys, separated with dots.
- * \param[out] result The function puts the handle to the node found at
- *                    the address specified by \a result.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param key Search key: one or more node keys, separated with dots.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This functions searches for a child node of \a config like
- * #snd_config_search, but any compound nodes to be searched that
- * contain hooks are modified by the respective hook functions.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- * Additionally, any errors encountered when parsing the hook
- * definitions or returned by the hook functions.
  */
 int snd_config_search_hooks(snd_config_t *config, const char *key, snd_config_t **result)
 {
+	static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data);
 	SND_CONFIG_SEARCH(config, key, result, \
 					err = snd_config_hooks(config, NULL); \
 					if (err < 0) \
@@ -3143,30 +2505,17 @@ int snd_config_search_hooks(snd_config_t *config, const char *key, snd_config_t 
 
 /**
  * \brief Searches for a node in a configuration tree, expanding aliases and hooks.
- * \param[in] root Handle to the root configuration node containing
- *                 alias definitions.
- * \param[in,out] config Handle to the root of the configuration
- *                       (sub)tree to search.
- * \param[in] key Search key: one or more node keys, separated with dots.
- * \param[out] result The function puts the handle to the node found at
- *                    the address specified by \a result.
+ * \param root Handle to the root configuration node containing alias
+ *             definitions.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param key Search key: one or more node keys, separated with dots.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function searches for a child node of \a config, allowing
- * aliases, like #snd_config_searcha, and expanding hooks, like
- * #snd_config_search_hooks.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key or an alias id does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- * Additionally, any errors encountered when parsing the hook
- * definitions or returned by the hook functions.
  */
 int snd_config_searcha_hooks(snd_config_t *root, snd_config_t *config, const char *key, snd_config_t **result)
 {
+	static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data);
 	SND_CONFIG_SEARCHA(root, config, key, result,
 					snd_config_searcha_hooks,
 					err = snd_config_hooks(config, NULL); \
@@ -3177,29 +2526,13 @@ int snd_config_searcha_hooks(snd_config_t *root, snd_config_t *config, const cha
 
 /**
  * \brief Searches for a node in a configuration tree, expanding aliases and hooks.
- * \param[in] root Handle to the root configuration node containing
- *                 alias definitions.
- * \param[in,out] config Handle to the root of the configuration
- *                       (sub)tree to search.
- * \param[out] result The function puts the handle to the node found at
- *                    the address specified by \a result.
- * \param[in] ... One or more concatenated dot separated search keys,
- *                terminated with \c NULL.
+ * \param root Handle to the root configuration node containing alias
+ *             definitions.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
+ * \param ... One or more concatenated dot separated search keys, terminated with \c NULL.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function searches for a child node of \a config, allowing
- * aliases and expanding hooks like #snd_config_searcha_hooks, but the
- * search key is the concatenation of all passed seach key strings, like
- * with #snd_config_searchv.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key or an alias id does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- * Additionally, any errors encountered when parsing the hook
- * definitions or returned by the hook functions.
  */
 int snd_config_searchva_hooks(snd_config_t *root, snd_config_t *config,
 			      snd_config_t **result, ...)
@@ -3209,26 +2542,16 @@ int snd_config_searchva_hooks(snd_config_t *root, snd_config_t *config,
 
 /**
  * \brief Searches for a node in a configuration tree, using an alias and expanding hooks.
- * \param[in] config Handle to the root of the configuration (sub)tree
- *                   to search.
- * \param[in] base Search key base, or \c NULL.
- * \param[in] key Search key suffix.
- * \param[out] result The function puts the handle to the node found at
- *                    the address specified by \a result.
+ * \param config Handle to the root of the configuration (sub)tree to search.
+ * \param base Search key base, or \c NULL.
+ * \param key Search key suffix.
+ * \param result The function puts the handle to the node found at the address
+ *               specified by \p result.
  * \return Zero if successful, otherwise a negative error code.
  *
- * This functions searches for a child node of \a config, allowing
- * aliases, like #snd_config_search_alias, and expanding hooks, like
- * #snd_config_search_hooks.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key or an alias id does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- * Additionally, any errors encountered when parsing the hook
- * definitions or returned by the hook functions.
+ * First \c key is tried, then, if nothing is found, \c base.key is tried.
+ * If the value found is a string, this is recursively tried in the
+ * same way.
  */
 int snd_config_search_alias_hooks(snd_config_t *config,
 				  const char *base, const char *key,
@@ -3243,34 +2566,14 @@ int snd_config_search_alias_hooks(snd_config_t *config,
 #define ALSA_CONFIG_PATH_VAR "ALSA_CONFIG_PATH"
 
 /** The name of the default files used by #snd_config_update. */
-#define ALSA_CONFIG_PATH_DEFAULT ALSA_CONFIG_DIR "/alsa.conf"
+#define ALSA_CONFIG_PATH_DEFAULT DATADIR "/alsa/alsa.conf"
 
 /**
  * \ingroup Config
- * \brief Configuration top-level node (the global configuration).
- *
- * This variable contains a handle to the top-level configuration node,
- * as loaded from global configuration file.
- *
- * This variable is initialized or updated by #snd_config_update.
- * Functions like #snd_pcm_open (that use a device name from the global
- * configuration) automatically call #snd_config_update.  Before the
- * first call to #snd_config_update, this variable is \c NULL.
- *
- * The global configuration files are specified in the environment
- * variable \c ALSA_CONFIG_PATH.  If this is not set, the default value
- * is "/usr/share/alsa/alsa.conf".
- *
- * \warning Whenever the configuration tree is updated, all string
- * pointers and configuration node handles previously obtained from this
- * variable may become invalid.
- *
- * \par Conforming to:
- * LSB 3.2
+ * Configuration top level node (the global configuration).
  */
 snd_config_t *snd_config = NULL;
 
-#ifndef DOC_HIDDEN
 struct finfo {
 	char *name;
 	dev_t dev;
@@ -3282,7 +2585,6 @@ struct _snd_config_update {
 	unsigned int count;
 	struct finfo *finfo;
 };
-#endif /* DOC_HIDDEN */
 
 static snd_config_update_t *snd_config_global_update = NULL;
 
@@ -3306,13 +2608,11 @@ static int snd_config_hooks_call(snd_config_t *root, snd_config_t *config, snd_c
 		SNDERR("Invalid type for field func");
 		return err;
 	}
-	assert(str);
 	err = snd_config_search_definition(root, "hook_func", str, &func_conf);
 	if (err >= 0) {
 		snd_config_iterator_t i, next;
 		if (snd_config_get_type(func_conf) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for func %s definition", str);
-			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, func_conf) {
@@ -3373,7 +2673,8 @@ static int snd_config_hooks_call(snd_config_t *root, snd_config_t *config, snd_c
 		if (err >= 0 && nroot)
 			err = snd_config_substitute(root, nroot);
 	}
-	free(buf);
+	if (buf)
+		free(buf);
 	if (err < 0)
 		return err;
 	return 0;
@@ -3387,7 +2688,6 @@ static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data)
 
 	if ((err = snd_config_search(config, "@hooks", &n)) < 0)
 		return 0;
-	snd_config_lock();
 	snd_config_remove(n);
 	do {
 		hit = 0;
@@ -3404,7 +2704,7 @@ static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data)
 			if (i == idx) {
 				err = snd_config_hooks_call(config, n, private_data);
 				if (err < 0)
-					goto _err;
+					return err;
 				idx++;
 				hit = 1;
 			}
@@ -3413,57 +2713,17 @@ static int snd_config_hooks(snd_config_t *config, snd_config_t *private_data)
 	err = 0;
        _err:
 	snd_config_delete(n);
-	snd_config_unlock();
-	return err;
-}
-
-static int config_filename_filter(const struct dirent *dirent)
-{
-	size_t flen;
-
-	if (dirent == NULL)
-		return 0;
-	if (dirent->d_type == DT_DIR)
-		return 0;
-
-	flen = strlen(dirent->d_name);
-	if (flen <= 5)
-		return 0;
-
-	if (strncmp(&dirent->d_name[flen-5], ".conf", 5) == 0)
-		return 1;
-
-	return 0;
-}
-
-static int config_file_open(snd_config_t *root, const char *filename)
-{
-	snd_input_t *in;
-	int err;
-
-	err = snd_input_stdio_open(&in, filename, "r");
-	if (err >= 0) {
-		err = snd_config_load(root, in);
-		snd_input_close(in);
-		if (err < 0)
-			SNDERR("%s may be old or corrupted: consider to remove or fix it", filename);
-	} else
-		SNDERR("cannot access file %s", filename);
-
 	return err;
 }
 
 /**
  * \brief Loads and parses the given configurations files.
- * \param[in] root Handle to the root configuration node.
- * \param[in] config Handle to the configuration node for this hook.
- * \param[out] dst The function puts the handle to the configuration
- *                 node loaded from the file(s) at the address specified
- *                 by \a dst.
- * \param[in] private_data Handle to the private data configuration node.
+ * \param root Handle to the root configuration node.
+ * \param config Handle to the configuration node for this hook.
+ * \param dst The function puts the handle to the configuration node loaded
+ *            from the file(s) at the address specified by \p dst.
+ * \param private_data Handle to the private data configuration node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * See \ref confhooks for an example.
  */
 int snd_config_hook_load(snd_config_t *root, snd_config_t *config, snd_config_t **dst, snd_config_t *private_data)
 {
@@ -3528,63 +2788,37 @@ int snd_config_hook_load(snd_config_t *root, snd_config_t *config, snd_config_t 
 				if ((err = snd_config_get_ascii(n, &name)) < 0)
 					goto _err;
 				if ((err = snd_user_file(name, &fi[idx].name)) < 0)
-					fi[idx].name = name;
-				else
-					free(name);
+					goto _err;
+				free(name);
 				idx++;
 				hit = 1;
 			}
 		}
 	} while (hit);
 	for (idx = 0; idx < fi_count; idx++) {
-		struct stat st;
+		snd_input_t *in;
 		if (!errors && access(fi[idx].name, R_OK) < 0)
 			continue;
-		if (stat(fi[idx].name, &st) < 0) {
-			SNDERR("cannot stat file/directory %s", fi[idx].name);
-			continue;
-		}
-		if (S_ISDIR(st.st_mode)) {
-			struct dirent **namelist;
-			int n;
-
-#ifndef DOC_HIDDEN
-#ifdef _GNU_SOURCE
-#define SORTFUNC	versionsort
-#else
-#define SORTFUNC	alphasort
-#endif
-#endif
-			n = scandir(fi[idx].name, &namelist, config_filename_filter, SORTFUNC);
-			if (n > 0) {
-				int j;
-				err = 0;
-				for (j = 0; j < n; ++j) {
-					if (err >= 0) {
-						int sl = strlen(fi[idx].name) + strlen(namelist[j]->d_name) + 2;
-						char *filename = malloc(sl);
-						snprintf(filename, sl, "%s/%s", fi[idx].name, namelist[j]->d_name);
-						filename[sl-1] = '\0';
-
-						err = config_file_open(root, filename);
-						free(filename);
-					}
-					free(namelist[j]);
-				}
-				free(namelist);
-				if (err < 0)
-					goto _err;
+		err = snd_input_stdio_open(&in, fi[idx].name, "r");
+		if (err >= 0) {
+			err = snd_config_load(root, in);
+			snd_input_close(in);
+			if (err < 0) {
+				SNDERR("%s may be old or corrupted: consider to remove or fix it", fi[idx].name);
+				goto _err;
 			}
-		} else if ((err = config_file_open(root, fi[idx].name)) < 0)
-			goto _err;
+		} else {
+			SNDERR("cannot access file %s", fi[idx].name);
+		}
 	}
 	*dst = NULL;
 	err = 0;
        _err:
-	if (fi)
-		for (idx = 0; idx < fi_count; idx++)
-			free(fi[idx].name);
-	free(fi);
+	for (idx = 0; idx < fi_count; idx++)
+       		if (fi[idx].name)
+       			free(fi[idx].name);
+       	if (fi)
+       		free(fi);
 	snd_config_delete(n);
 	return err;
 }
@@ -3597,19 +2831,13 @@ int snd_determine_driver(int card, char **driver);
 #endif
 
 /**
- * \brief Loads and parses the given configurations files for each
- *        installed sound card.
- * \param[in] root Handle to the root configuration node.
- * \param[in] config Handle to the configuration node for this hook.
- * \param[out] dst The function puts the handle to the configuration
- *                 node loaded from the file(s) at the address specified
- *                 by \a dst.
- * \param[in] private_data Handle to the private data configuration node.
+ * \brief Loads and parses the given configurations files for each installed sound card.
+ * \param root Handle to the root configuration node.
+ * \param config Handle to the configuration node for this hook.
+ * \param dst The function puts the handle to the configuration node loaded
+ *            from the file(s) at the address specified by \p dst.
+ * \param private_data Handle to the private data configuration node.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This function works like #snd_config_hook_load, but the files are
- * loaded once for each sound card.  The driver name is available with
- * the \c private_string function to customize the file name.
  */
 int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config, snd_config_t **dst, snd_config_t *private_data ATTRIBUTE_UNUSED)
 {
@@ -3628,8 +2856,7 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 				return err;
 			if (snd_config_search(root, fdriver, &n) >= 0) {
 				if (snd_config_get_string(n, &driver) < 0)
-					goto __err;
-				assert(driver);
+					continue;
 				while (1) {
 					char *s = strchr(driver, '.');
 					if (s == NULL)
@@ -3637,7 +2864,7 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 					driver = s + 1;
 				}
 				if (snd_config_search(root, driver, &n) >= 0)
-					goto __err;
+					continue;
 			} else {
 				driver = fdriver;
 			}
@@ -3648,7 +2875,8 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 		      __err:
 			if (private_data)
 				snd_config_delete(private_data);
-			free(fdriver);
+			if (fdriver)
+				free(fdriver);
 			if (err < 0)
 				return err;
 		}
@@ -3662,30 +2890,20 @@ SND_DLSYM_BUILD_VERSION(snd_config_hook_load_for_all_cards, SND_CONFIG_DLSYM_VER
 
 /** 
  * \brief Updates a configuration tree by rereading the configuration files (if needed).
- * \param[in,out] _top Address of the handle to the top-level node.
- * \param[in,out] _update Address of a pointer to private update information.
- * \param[in] cfgs A list of configuration file names, delimited with ':'.
- *                 If \p cfgs is \c NULL, the default global
- *                 configuration file is used.
- * \return 0 if \a _top was up to date, 1 if the configuration files
- *         have been reread, otherwise a negative error code.
- *
- * The variables pointed to by \a _top and \a _update can be initialized
- * to \c NULL before the first call to this function.  The private
- * update information holds information about all used configuration
- * files that allows this function to detects changes to them; this data
- * can be freed with #snd_config_update_free.
+ * \param top Address of the handle to the top level node.
+ * \param update Address of a pointer to private update information.
+ * \param cfgs A list of configuration file names, delimited with ':'.
+ *             If \p cfgs is set to \c NULL, the default global configuration
+ *             file is used ("/usr/share/alsa/alsa.conf").
+ * \return A non-negative value if successful, otherwise a negative error code.
+ * \retval 0 No action is needed.
+ * \retval 1 The configuration tree has been rebuilt.
  *
  * The global configuration files are specified in the environment variable
  * \c ALSA_CONFIG_PATH.
  *
  * \warning If the configuration tree is reread, all string pointers and
- * configuration node handles previously obtained from this tree become
- * invalid.
- *
- * \par Errors:
- * Any errors encountered when parsing the input or returned by hooks or
- * functions.
+ * configuration node handles previously obtained from this tree become invalid.
  */
 int snd_config_update_r(snd_config_t **_top, snd_config_update_t **_update, const char *cfgs)
 {
@@ -3703,7 +2921,7 @@ int snd_config_update_r(snd_config_t **_top, snd_config_update_t **_update, cons
 	configs = cfgs;
 	if (!configs) {
 		configs = getenv(ALSA_CONFIG_PATH_VAR);
-		if (!configs || !*configs)
+		if (!configs)
 			configs = ALSA_CONFIG_PATH_DEFAULT;
 	}
 	for (k = 0, c = configs; (l = strcspn(c, ": ")) > 0; ) {
@@ -3747,8 +2965,6 @@ int snd_config_update_r(snd_config_t **_top, snd_config_update_t **_update, cons
 			lf->ino = st.st_ino;
 			lf->mtime = st.st_mtime;
 		} else {
-			SNDERR("Cannot access file %s", lf->name);
-			free(lf->name);
 			memmove(&local->finfo[k], &local->finfo[k+1], sizeof(struct finfo) * (local->count - k - 1));
 			k--;
 			local->count--;
@@ -3825,35 +3041,34 @@ int snd_config_update_r(snd_config_t **_top, snd_config_update_t **_update, cons
 	return 1;
 }
 
+static pthread_mutex_t snd_config_update_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /** 
  * \brief Updates #snd_config by rereading the global configuration files (if needed).
- * \return 0 if #snd_config was up to date, 1 if #snd_config was
- *         updated, otherwise a negative error code.
+ * \return A non-negative value if successful, otherwise a negative error code.
+ * \retval 0 No action is needed.
+ * \retval 1 The configuration tree has been rebuilt.
  *
- * \warning Whenever #snd_config is updated, all string pointers and
- * configuration node handles previously obtained from it may become
- * invalid.
+ * The global configuration files are specified in the environment variable
+ * \c ALSA_CONFIG_PATH. If this is not set, the default value is
+ * "/usr/share/alsa/alsa.conf".
  *
- * \par Errors:
- * Any errors encountered when parsing the input or returned by hooks or
- * functions.
- *
- * \par Conforming to:
- * LSB 3.2
+ * \warning If the configuration tree is reread, all string pointers and
+ * configuration node handles previously obtained from this tree become invalid.
  */
 int snd_config_update(void)
 {
 	int err;
 
-	snd_config_lock();
+	pthread_mutex_lock(&snd_config_update_mutex);
 	err = snd_config_update_r(&snd_config, &snd_config_global_update, NULL);
-	snd_config_unlock();
+	pthread_mutex_unlock(&snd_config_update_mutex);
 	return err;
 }
 
 /** 
  * \brief Frees a private update structure.
- * \param[in] update The private update structure to free.
+ * \param update The private update structure to free.
  * \return Zero if successful, otherwise a negative error code.
  */
 int snd_config_update_free(snd_config_update_t *update)
@@ -3861,9 +3076,11 @@ int snd_config_update_free(snd_config_update_t *update)
 	unsigned int k;
 
 	assert(update);
+	assert(update->count > 0 && update->finfo);
 	for (k = 0; k < update->count; k++)
 		free(update->finfo[k].name);
-	free(update->finfo);
+	if (update->finfo)
+		free(update->finfo);
 	free(update);
 	return 0;
 }
@@ -3871,64 +3088,38 @@ int snd_config_update_free(snd_config_update_t *update)
 /** 
  * \brief Frees the global configuration tree in #snd_config.
  * \return Zero if successful, otherwise a negative error code.
- *
- * This functions releases all resources of the global configuration
- * tree, and sets #snd_config to \c NULL.
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_update_free_global(void)
 {
-	snd_config_lock();
+	pthread_mutex_lock(&snd_config_update_mutex);
 	if (snd_config)
 		snd_config_delete(snd_config);
 	snd_config = NULL;
 	if (snd_config_global_update)
 		snd_config_update_free(snd_config_global_update);
 	snd_config_global_update = NULL;
-	snd_config_unlock();
-	/* FIXME: better to place this in another place... */
-	snd_dlobj_cache_cleanup();
-
+	pthread_mutex_unlock(&snd_config_update_mutex);
 	return 0;
 }
 
 /**
- * \brief Returns an iterator pointing to a node's first child.
- * \param[in] config Handle to a configuration node.
- * \return An iterator pointing to \a config's first child.
- *
- * \a config must be a compound node.
- *
- * The returned iterator is valid if it is not equal to the return value
- * of #snd_config_iterator_end on \a config.
- *
- * Use #snd_config_iterator_entry to get the handle of the node pointed
- * to.
- *
- * \par Conforming to:
- * LSB 3.2
+ * \brief Returns an iterator pointing to the first child of a compound configuration node.
+ * \param node Handle to the compound configuration node.
+ * \return An iterator pointing to the first child.
  */
-snd_config_iterator_t snd_config_iterator_first(const snd_config_t *config)
+snd_config_iterator_t snd_config_iterator_first(const snd_config_t *node)
 {
-	assert(config->type == SND_CONFIG_TYPE_COMPOUND);
-	return config->u.compound.fields.next;
+	assert(node->type == SND_CONFIG_TYPE_COMPOUND);
+	return node->u.compound.fields.next;
 }
 
 /**
  * \brief Returns an iterator pointing to the next sibling.
- * \param[in] iterator An iterator pointing to a child configuration node.
- * \return An iterator pointing to the next sibling of \a iterator.
- *
- * The returned iterator is valid if it is not equal to the return value
- * of #snd_config_iterator_end on the node's parent.
- *
- * Use #snd_config_iterator_entry to get the handle of the node pointed
- * to.
- *
- * \par Conforming to:
- * LSB 3.2
+ * \param iterator An iterator pointing to a child configuration node.
+ * \return An iterator pointing to the next sibling of \p iterator.
+ *         If \p iterator is the last sibling, the returned value is the same
+ *         as the result of calling #snd_config_iterator_end on the father
+ *         of the nodes.
  */
 snd_config_iterator_t snd_config_iterator_next(const snd_config_iterator_t iterator)
 {
@@ -3936,31 +3127,20 @@ snd_config_iterator_t snd_config_iterator_next(const snd_config_iterator_t itera
 }
 
 /**
- * \brief Returns an iterator that ends a node's children list.
- * \param[in] config Handle to a configuration node.
- * \return An iterator that indicates the end of \a config's children list.
- *
- * \a config must be a compound node.
- *
- * The return value can be understood as pointing past the last child of
- * \a config.
- *
- * \par Conforming to:
- * LSB 3.2
+ * \brief Returns an iterator pointing past the last child of a compound configuration node.
+ * \param node Handle to the compound configuration node.
+ * \return An iterator pointing past the last child of \p node.
  */
-snd_config_iterator_t snd_config_iterator_end(const snd_config_t *config)
+snd_config_iterator_t snd_config_iterator_end(const snd_config_t *node)
 {
-	assert(config->type == SND_CONFIG_TYPE_COMPOUND);
-	return (const snd_config_iterator_t)&config->u.compound.fields;
+	assert(node->type == SND_CONFIG_TYPE_COMPOUND);
+	return (const snd_config_iterator_t)&node->u.compound.fields;
 }
 
 /**
  * \brief Returns the configuration node handle pointed to by an iterator.
- * \param[in] iterator A configuration node iterator.
- * \return The configuration node handle pointed to by \a iterator.
- *
- * \par Conforming to:
- * LSB 3.2
+ * \param iterator A configuration node iterator.
+ * \return The configuration node handle pointed to by \p iterator.
  */
 snd_config_t *snd_config_iterator_entry(const snd_config_iterator_t iterator)
 {
@@ -3975,7 +3155,7 @@ typedef enum _snd_config_walk_pass {
 } snd_config_walk_pass_t;
 #endif
 
-/* Return 1 if node needs to be attached to parent */
+/* Return 1 if node needs to be attached to father */
 /* Return 2 if compound is replaced with standard node */
 #ifndef DOC_HIDDEN
 typedef int (*snd_config_walk_callback_t)(snd_config_t *src,
@@ -4093,21 +3273,10 @@ static int _snd_config_copy(snd_config_t *src,
 
 /**
  * \brief Creates a copy of a configuration node.
- * \param[out] dst The function puts the handle to the new configuration
- *                 node at the address specified by \a dst.
- * \param[in] src Handle to the source configuration node.
+ * \param dst The function puts the handle to the new configuration node
+ *            at the address specified by \p dst.
+ * \param src Handle to the source configuration node.
  * \return A non-negative value if successful, otherwise a negative error code.
- *
- * This function creates a deep copy, i.e., if \a src is a compound
- * node, all children are copied recursively.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOMEM<dd>Out of memory.
- * </dl>
- *
- * \par Conforming to:
- * LSB 3.2
  */
 int snd_config_copy(snd_config_t **dst,
 		    snd_config_t *src)
@@ -4127,7 +3296,7 @@ static int _snd_config_expand(snd_config_t *src,
 	switch (pass) {
 	case SND_CONFIG_WALK_PASS_PRE:
 	{
-		if (id && strcmp(id, "@args") == 0)
+		if (strcmp(id, "@args") == 0)
 			return 0;
 		err = snd_config_make_compound(dst, id, src->u.compound.join);
 		if (err < 0)
@@ -4172,7 +3341,7 @@ static int _snd_config_expand(snd_config_t *src,
 			snd_config_t *val;
 			snd_config_t *vars = private_data;
 			snd_config_get_string(src, &s);
-			if (s && *s == '$') {
+			if (*s == '$') {
 				s++;
 				if (snd_config_search(vars, s, &val) < 0)
 					return 0;
@@ -4224,13 +3393,11 @@ static int _snd_config_evaluate(snd_config_t *src,
 			SNDERR("Invalid type for @func");
 			return err;
 		}
-		assert(str);
 		err = snd_config_search_definition(root, "func", str, &func_conf);
 		if (err >= 0) {
 			snd_config_iterator_t i, next;
 			if (snd_config_get_type(func_conf) != SND_CONFIG_TYPE_COMPOUND) {
 				SNDERR("Invalid type for func %s definition", str);
-				err = -EINVAL;
 				goto _err;
 			}
 			snd_config_for_each(i, next, func_conf) {
@@ -4300,7 +3467,8 @@ static int _snd_config_evaluate(snd_config_t *src,
 			}
 		}
 	       _errbuf:
-		free(buf);
+		if (buf)
+			free(buf);
 		if (err < 0)
 			return err;
 		return 0;
@@ -4310,14 +3478,14 @@ static int _snd_config_evaluate(snd_config_t *src,
 
 /**
  * \brief Evaluates a configuration node at runtime.
- * \param[in,out] config Handle to the source configuration node.
- * \param[in] root Handle to the root of the source configuration.
- * \param[in] private_data Handle to the private data node for runtime evaluation.
- * \param result Must be \c NULL.
+ * \param config Handle to the source configuration node.
+ * \param root Handle to the root of the source configuration.
+ * \param private_data Handle to the private data node for runtime evaluation.
+ * \param result The function puts the handle to the result node at the
+ *               address specified by \p result. \p result is \c NULL for
+ *               in-place evaluation.
  * \return A non-negative value if successful, otherwise a negative error code.
- *
- * This function evaluates any functions (\c \@func) in \a config and
- * replaces those nodes with the respective function results.
+ * \note Only in-place evaluation is currently implemented.
  */
 int snd_config_evaluate(snd_config_t *config, snd_config_t *root,
 		        snd_config_t *private_data, snd_config_t **result)
@@ -4606,7 +3774,7 @@ static int parse_args(snd_config_t *subs, const char *str, snd_config_t *defs)
 		snd_config_t *def, *sub, *typ;
 		const char *new = str;
 		const char *tmp;
-		char *val = NULL;
+		char *val;
 		err = parse_arg(&new, &varlen, &val);
 		if (err < 0)
 			goto _err;
@@ -4638,7 +3806,7 @@ static int parse_args(snd_config_t *subs, const char *str, snd_config_t *defs)
 			goto _err;
 		}
 		err = snd_config_get_string(typ, &tmp);
-		if (err < 0 || !tmp)
+		if (err < 0)
 			goto _invalid_type;
 		if (strcmp(tmp, "integer") == 0) {
 			long v;
@@ -4711,21 +3879,14 @@ static int parse_args(snd_config_t *subs, const char *str, snd_config_t *defs)
 }
 
 /**
- * \brief Expands a configuration node, applying arguments and functions.
- * \param[in] config Handle to the configuration node.
- * \param[in] root Handle to the root configuration node.
- * \param[in] args Arguments string, can be \c NULL.
- * \param[in] private_data Handle to the private data node for functions.
- * \param[out] result The function puts the handle to the result
- *                    configuration node at the address specified by
- *                    \a result.
+ * \brief Expands a configuration node applying arguments and functions.
+ * \param config Handle to the configuration node.
+ * \param root Handle to the root configuration node.
+ * \param args Arguments string (optional).
+ * \param private_data Handle to the private data node for functions.
+ * \param result The function puts the handle to the result configuration node
+ *               at the address specified by \p result.
  * \return A non-negative value if successful, otherwise a negative error code.
- *
- * If \a config has arguments (defined by a child with id \c \@args),
- * this function replaces any string node beginning with $ with the
- * respective argument value, or the default argument value, or nothing.
- * Furthermore, any functions are evaluated (see #snd_config_evaluate).
- * The resulting copy of \a config is returned in \a result.
  */
 int snd_config_expand(snd_config_t *config, snd_config_t *root, const char *args,
 		      snd_config_t *private_data, snd_config_t **result)
@@ -4734,10 +3895,6 @@ int snd_config_expand(snd_config_t *config, snd_config_t *root, const char *args
 	snd_config_t *defs, *subs = NULL, *res;
 	err = snd_config_search(config, "@args", &defs);
 	if (err < 0) {
-		if (args != NULL) {
-			SNDERR("Unknown parameters %s", args);
-			return -EINVAL;
-		}
 		err = snd_config_copy(&res, config);
 		if (err < 0)
 			return err;
@@ -4779,35 +3936,22 @@ int snd_config_expand(snd_config_t *config, snd_config_t *root, const char *args
 		snd_config_delete(subs);
 	return err;
 }
-
+	
 /**
- * \brief Searches for a definition in a configuration tree, using
- *        aliases and expanding hooks and arguments.
- * \param[in] config Handle to the configuration (sub)tree to search.
- * \param[in] base Implicit key base, or \c NULL for none.
- * \param[in] name Key suffix, optionally with arguments.
- * \param[out] result The function puts the handle to the expanded found
- *                    node at the address specified by \a result.
- * \return A non-negative value if successful, otherwise a negative error code.
+ * \brief Searches for a definition in a configuration tree, using aliases and expanding hooks and arguments.
+ * \param config Handle to the configuration (sub)tree to search.
+ * \param base Implicit key base, or \c NULL for none.
+ * \param key Key suffix.
+ * \param result The function puts the handle to the expanded found node at
+ *               the address specified by \p result.
+ * \return Zero if successful, otherwise a negative error code.
  *
- * This functions searches for a child node of \a config, allowing
- * aliases and expanding hooks, like #snd_config_search_alias_hooks.
+ * First the key is tried, then, if nothing is found, base.key is tried.
+ * If the value found is a string, this is recursively tried in the
+ * same way.
  *
- * If \a name contains a colon (:), the rest of the string after the
- * colon contains arguments that are expanded as with
- * #snd_config_expand.
- *
- * In any case, \a result is a new node that must be freed by the
- * caller.
- *
- * \par Errors:
- * <dl>
- * <dt>-ENOENT<dd>An id in \a key or an alias id does not exist.
- * <dt>-ENOENT<dd>\a config or one of its child nodes to be searched is
- *                not a compound node.
- * </dl>
- * Additionally, any errors encountered when parsing the hook
- * definitions or arguments, or returned by (hook) functions.
+ * If \p key contains a dot (.), the implicit base is ignored and the key
+ * starts from the root given by \p config.
  */
 int snd_config_search_definition(snd_config_t *config,
 				 const char *base, const char *name,
@@ -4829,35 +3973,12 @@ int snd_config_search_definition(snd_config_t *config,
 	 *  if key contains dot (.), the implicit base is ignored
 	 *  and the key starts from root given by the 'config' parameter
 	 */
-	snd_config_lock();
 	err = snd_config_search_alias_hooks(config, strchr(key, '.') ? NULL : base, key, &conf);
-	if (err < 0) {
-		snd_config_unlock();
+	if (err < 0)
 		return err;
-	}
-	err = snd_config_expand(conf, config, args, NULL, result);
-	snd_config_unlock();
-	return err;
+	return snd_config_expand(conf, config, args, NULL, result);
 }
 
-#ifndef DOC_HIDDEN
-void snd_config_set_hop(snd_config_t *conf, int hop)
-{
-	conf->hop = hop;
-}
-
-int snd_config_check_hop(snd_config_t *conf)
-{
-	if (conf) {
-		if (conf->hop >= SND_CONF_MAX_HOPS) {
-			SYSERR("Too many definition levels (looped?)\n");
-			return -EINVAL;
-		}
-		return conf->hop;
-	}
-	return 0;
-}
-#endif
 
 #if 0
 /* Not strictly needed, but useful to check for memory leaks */
@@ -4876,39 +3997,3 @@ static void _snd_config_end(void)
 	files_info_count = 0;
 }
 #endif
-
-size_t page_size(void)
-{
-	long s = sysconf(_SC_PAGE_SIZE);
-	assert(s > 0);
-	return s;
-}
-
-size_t page_align(size_t size)
-{
-	size_t r;
-	long psz = page_size();
-	r = size % psz;
-	if (r)
-		return size + psz - r;
-	return size;
-}
-
-size_t page_ptr(size_t object_offset, size_t object_size, size_t *offset, size_t *mmap_offset)
-{
-	size_t r;
-	long psz = page_size();
-	assert(offset);
-	assert(mmap_offset);
-	*mmap_offset = object_offset;
-	object_offset %= psz;
-	*mmap_offset -= object_offset;
-	object_size += object_offset;
-	r = object_size % psz;
-	if (r)
-		r = object_size + psz - r;
-	else
-		r = object_size;
-	*offset = object_offset;
-	return r;
-}

@@ -1,7 +1,7 @@
 /**
- * \file include/conf.h
+ * \file <alsa/conf.h>
  * \brief Application interface library for the ALSA driver
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Takashi Iwai <tiwai@suse.de>
  * \date 1998-2001
@@ -44,11 +44,11 @@ extern "C" {
 /** \brief \c dlsym version for the config hook callback. */
 #define SND_CONFIG_DLSYM_VERSION_HOOK		_dlsym_config_hook_001
 
-/** \brief Configuration node type. */
+/** Configuration node type. */
 typedef enum _snd_config_type {
 	/** Integer number. */
         SND_CONFIG_TYPE_INTEGER,
-	/** 64-bit integer number. */
+	/** 64 bit Integer number. */
         SND_CONFIG_TYPE_INTEGER64,
 	/** Real number. */
         SND_CONFIG_TYPE_REAL,
@@ -126,7 +126,6 @@ int snd_config_imake_integer(snd_config_t **config, const char *key, const long 
 int snd_config_imake_integer64(snd_config_t **config, const char *key, const long long value);
 int snd_config_imake_real(snd_config_t **config, const char *key, const double value);
 int snd_config_imake_string(snd_config_t **config, const char *key, const char *ascii);
-int snd_config_imake_safe_string(snd_config_t **config, const char *key, const char *ascii);
 int snd_config_imake_pointer(snd_config_t **config, const char *key, const void *ptr);
 
 snd_config_type_t snd_config_get_type(const snd_config_t *config);
@@ -155,20 +154,11 @@ snd_config_t *snd_config_iterator_entry(const snd_config_iterator_t iterator);
 
 /**
  * \brief Helper macro to iterate over the children of a compound node.
- * \param[in,out] pos Iterator variable for the current node.
- * \param[in,out] next Temporary iterator variable for the next node.
- * \param[in] node Handle to the compound configuration node to iterate over.
+ * \param pos Iterator variable for the current node.
+ * \param next Iterator variable for the next node.
+ * \param node Handle to the compound configuration node to iterate over.
  *
- * Use this macro like a \c for statement, e.g.:
- * \code
- * snd_config_iterator_t pos, next;
- * snd_config_for_each(pos, next, node) {
- *     snd_config_t *entry = snd_config_iterator_entry(pos);
- *     ...
- * }
- * \endcode
- *
- * This macro allows deleting or removing the current node.
+ * This macro is designed to permit the removal of the current node.
  */
 #define snd_config_for_each(pos, next, node) \
 	for (pos = snd_config_iterator_first(node), next = snd_config_iterator_next(pos); pos != snd_config_iterator_end(node); pos = next, next = snd_config_iterator_next(pos))
@@ -180,25 +170,6 @@ int snd_config_get_bool(const snd_config_t *conf);
 int snd_config_get_ctl_iface_ascii(const char *ascii);
 int snd_config_get_ctl_iface(const snd_config_t *conf);
 
-/* Names functions */
-
-/**
- * Device-name list element
- */
-typedef struct snd_devname snd_devname_t;
-
-/**
- * Device-name list element (definition)
- */
-struct snd_devname {
-	char *name;	/**< Device name string */
-	char *comment;	/**< Comments */
-	snd_devname_t *next;	/**< Next pointer */
-};
-
-int snd_names_list(const char *iface, snd_devname_t **list);
-void snd_names_list_free(snd_devname_t *list);
-
 /** \} */
 
 #ifdef __cplusplus
@@ -206,3 +177,4 @@ void snd_names_list_free(snd_devname_t *list);
 #endif
 
 #endif /* __ALSA_CONF_H */
+

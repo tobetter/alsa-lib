@@ -3,7 +3,7 @@
  * \ingroup PCM_Hook
  * \brief PCM Hook Interface
  * \author Abramo Bagnara <abramo@alsa-project.org>
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2000-2001
  */
 /*
@@ -27,8 +27,8 @@
  *
  */
   
+#include <dlfcn.h>
 #include "pcm_local.h"
-#include "pcm_generic.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -43,51 +43,29 @@ struct _snd_pcm_hook {
 	struct list_head list;
 };
 
-struct snd_pcm_hook_dllist {
-	void *dlobj;
-	struct list_head list;
-};
-
 typedef struct {
-	snd_pcm_generic_t gen;
+	snd_pcm_t *slave;
+	int close_slave;
 	struct list_head hooks[SND_PCM_HOOK_TYPE_LAST + 1];
-	struct list_head dllist;
 } snd_pcm_hooks_t;
 #endif
-
-static int hook_add_dlobj(snd_pcm_t *pcm, void *dlobj)
-{
-	snd_pcm_hooks_t *h = pcm->private_data;
-	struct snd_pcm_hook_dllist *dl;
-
-	dl = malloc(sizeof(*dl));
-	if (!dl)
-		return -ENOMEM;
-
-	dl->dlobj = dlobj;
-	list_add_tail(&dl->list, &h->dllist);
-	return 0;
-}
-
-static void hook_remove_dlobj(struct snd_pcm_hook_dllist *dl)
-{
-	list_del(&dl->list);
-	snd_dlclose(dl->dlobj);
-	free(dl);
-}
 
 static int snd_pcm_hooks_close(snd_pcm_t *pcm)
 {
 	snd_pcm_hooks_t *h = pcm->private_data;
 	struct list_head *pos, *next;
 	unsigned int k;
-	int res = 0, err;
-
+	int err;
+	if (h->close_slave) {
+		err = snd_pcm_close(h->slave);
+		if (err < 0)
+			return err;
+	}
 	list_for_each_safe(pos, next, &h->hooks[SND_PCM_HOOK_TYPE_CLOSE]) {
 		snd_pcm_hook_t *hook = list_entry(pos, snd_pcm_hook_t, list);
 		err = hook->func(hook);
 		if (err < 0)
-			res = err;
+			return err;
 	}
 	for (k = 0; k <= SND_PCM_HOOK_TYPE_LAST; ++k) {
 		struct list_head *hooks = &h->hooks[k];
@@ -98,21 +76,169 @@ static int snd_pcm_hooks_close(snd_pcm_t *pcm)
 			snd_pcm_hook_remove(hook);
 		}
 	}
-	while (!list_empty(&h->dllist)) {
-		pos = h->dllist.next;
-		hook_remove_dlobj(list_entry(pos, struct snd_pcm_hook_dllist, list));
-	}
-	err = snd_pcm_generic_close(pcm);
-	if (err < 0)
-		res = err;
-	return res;
+	free(h);
+	return 0;
+}
+
+static int snd_pcm_hooks_nonblock(snd_pcm_t *pcm, int nonblock)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_nonblock(h->slave, nonblock);
+}
+
+static int snd_pcm_hooks_async(snd_pcm_t *pcm, int sig, pid_t pid)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_async(h->slave, sig, pid);
+}
+
+static int snd_pcm_hooks_info(snd_pcm_t *pcm, snd_pcm_info_t *info)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_info(h->slave, info);
+}
+
+static int snd_pcm_hooks_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t * info)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_channel_info(h->slave, info);
+}
+
+static int snd_pcm_hooks_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_status(h->slave, status);
+}
+
+static snd_pcm_state_t snd_pcm_hooks_state(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_state(h->slave);
+}
+
+static int snd_pcm_hooks_hwsync(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_hwsync(h->slave);
+}
+
+static int snd_pcm_hooks_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_delay(h->slave, delayp);
+}
+
+static int snd_pcm_hooks_prepare(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_prepare(h->slave);
+}
+
+static int snd_pcm_hooks_reset(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_reset(h->slave);
+}
+
+static int snd_pcm_hooks_start(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_start(h->slave);
+}
+
+static int snd_pcm_hooks_drop(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_drop(h->slave);
+}
+
+static int snd_pcm_hooks_drain(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_drain(h->slave);
+}
+
+static int snd_pcm_hooks_pause(snd_pcm_t *pcm, int enable)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_pause(h->slave, enable);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_rewind(h->slave, frames);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return INTERNAL(snd_pcm_forward)(h->slave, frames);
+}
+
+static int snd_pcm_hooks_resume(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_resume(h->slave);
+}
+
+static int snd_pcm_hooks_poll_ask(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	if (h->slave->fast_ops->poll_ask)
+		return h->slave->fast_ops->poll_ask(h->slave->fast_op_arg);
+	return 0;
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_uframes_t size)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_writei(h->slave, buffer, size);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_writen(h->slave, bufs, size);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t size)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_readi(h->slave, buffer, size);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_readn(h->slave, bufs, size);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_mmap_commit(snd_pcm_t *pcm,
+						   snd_pcm_uframes_t offset,
+						   snd_pcm_uframes_t size)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_mmap_commit(h->slave, offset, size);
+}
+
+static snd_pcm_sframes_t snd_pcm_hooks_avail_update(snd_pcm_t *pcm)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_avail_update(h->slave);
+}
+
+static int snd_pcm_hooks_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_hw_refine(h->slave, params);
 }
 
 static int snd_pcm_hooks_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 {
 	snd_pcm_hooks_t *h = pcm->private_data;
 	struct list_head *pos, *next;
-	int err = snd_pcm_generic_hw_params(pcm, params);
+	int err = snd_pcm_hw_params(h->slave, params);
 	if (err < 0)
 		return err;
 	list_for_each_safe(pos, next, &h->hooks[SND_PCM_HOOK_TYPE_HW_PARAMS]) {
@@ -128,7 +254,7 @@ static int snd_pcm_hooks_hw_free(snd_pcm_t *pcm)
 {
 	snd_pcm_hooks_t *h = pcm->private_data;
 	struct list_head *pos, *next;
-	int err = snd_pcm_generic_hw_free(pcm);
+	int err = snd_pcm_hw_free(h->slave);
 	if (err < 0)
 		return err;
 	list_for_each_safe(pos, next, &h->hooks[SND_PCM_HOOK_TYPE_HW_FREE]) {
@@ -137,6 +263,22 @@ static int snd_pcm_hooks_hw_free(snd_pcm_t *pcm)
 		if (err < 0)
 			return err;
 	}
+	return 0;
+}
+
+static int snd_pcm_hooks_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
+{
+	snd_pcm_hooks_t *h = pcm->private_data;
+	return snd_pcm_sw_params(h->slave, params);
+}
+
+static int snd_pcm_hooks_mmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+{
+	return 0;
+}
+
+static int snd_pcm_hooks_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+{
 	return 0;
 }
 
@@ -149,57 +291,45 @@ static void snd_pcm_hooks_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(h->gen.slave, out);
+	snd_pcm_dump(h->slave, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_hooks_ops = {
+static snd_pcm_ops_t snd_pcm_hooks_ops = {
 	.close = snd_pcm_hooks_close,
-	.info = snd_pcm_generic_info,
-	.hw_refine = snd_pcm_generic_hw_refine,
+	.info = snd_pcm_hooks_info,
+	.hw_refine = snd_pcm_hooks_hw_refine,
 	.hw_params = snd_pcm_hooks_hw_params,
 	.hw_free = snd_pcm_hooks_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
-	.channel_info = snd_pcm_generic_channel_info,
+	.sw_params = snd_pcm_hooks_sw_params,
+	.channel_info = snd_pcm_hooks_channel_info,
 	.dump = snd_pcm_hooks_dump,
-	.nonblock = snd_pcm_generic_nonblock,
-	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_generic_mmap,
-	.munmap = snd_pcm_generic_munmap,
-	.query_chmaps = snd_pcm_generic_query_chmaps,
-	.get_chmap = snd_pcm_generic_get_chmap,
-	.set_chmap = snd_pcm_generic_set_chmap,
+	.nonblock = snd_pcm_hooks_nonblock,
+	.async = snd_pcm_hooks_async,
+	.mmap = snd_pcm_hooks_mmap,
+	.munmap = snd_pcm_hooks_munmap,
 };
 
-static const snd_pcm_fast_ops_t snd_pcm_hooks_fast_ops = {
-	.status = snd_pcm_generic_status,
-	.state = snd_pcm_generic_state,
-	.hwsync = snd_pcm_generic_hwsync,
-	.delay = snd_pcm_generic_delay,
-	.prepare = snd_pcm_generic_prepare,
-	.reset = snd_pcm_generic_reset,
-	.start = snd_pcm_generic_start,
-	.drop = snd_pcm_generic_drop,
-	.drain = snd_pcm_generic_drain,
-	.pause = snd_pcm_generic_pause,
-	.rewindable = snd_pcm_generic_rewindable,
-	.rewind = snd_pcm_generic_rewind,
-	.forwardable = snd_pcm_generic_forwardable,
-	.forward = snd_pcm_generic_forward,
-	.resume = snd_pcm_generic_resume,
-	.link = snd_pcm_generic_link,
-	.link_slaves = snd_pcm_generic_link_slaves,
-	.unlink = snd_pcm_generic_unlink,
-	.writei = snd_pcm_generic_writei,
-	.writen = snd_pcm_generic_writen,
-	.readi = snd_pcm_generic_readi,
-	.readn = snd_pcm_generic_readn,
-	.avail_update = snd_pcm_generic_avail_update,
-	.mmap_commit = snd_pcm_generic_mmap_commit,
-	.htimestamp = snd_pcm_generic_htimestamp,
-	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
-	.poll_descriptors = snd_pcm_generic_poll_descriptors,
-	.poll_revents = snd_pcm_generic_poll_revents,
-	.may_wait_for_avail_min = snd_pcm_generic_may_wait_for_avail_min,
+static snd_pcm_fast_ops_t snd_pcm_hooks_fast_ops = {
+	.status = snd_pcm_hooks_status,
+	.state = snd_pcm_hooks_state,
+	.hwsync = snd_pcm_hooks_hwsync,
+	.delay = snd_pcm_hooks_delay,
+	.prepare = snd_pcm_hooks_prepare,
+	.reset = snd_pcm_hooks_reset,
+	.start = snd_pcm_hooks_start,
+	.drop = snd_pcm_hooks_drop,
+	.drain = snd_pcm_hooks_drain,
+	.pause = snd_pcm_hooks_pause,
+	.rewind = snd_pcm_hooks_rewind,
+	.forward = snd_pcm_hooks_forward,
+	.resume = snd_pcm_hooks_resume,
+	.poll_ask = snd_pcm_hooks_poll_ask,
+	.writei = snd_pcm_hooks_writei,
+	.writen = snd_pcm_hooks_writen,
+	.readi = snd_pcm_hooks_readi,
+	.readn = snd_pcm_hooks_readn,
+	.avail_update = snd_pcm_hooks_avail_update,
+	.mmap_commit = snd_pcm_hooks_mmap_commit,
 };
 
 /**
@@ -223,12 +353,11 @@ int snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name, snd_pcm_t *slave, int
 	h = calloc(1, sizeof(snd_pcm_hooks_t));
 	if (!h)
 		return -ENOMEM;
-	h->gen.slave = slave;
-	h->gen.close_slave = close_slave;
+	h->slave = slave;
+	h->close_slave = close_slave;
 	for (k = 0; k <= SND_PCM_HOOK_TYPE_LAST; ++k) {
 		INIT_LIST_HEAD(&h->hooks[k]);
 	}
-	INIT_LIST_HEAD(&h->dllist);
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_HOOKS, name, slave->stream, slave->mode);
 	if (err < 0) {
 		free(h);
@@ -239,8 +368,6 @@ int snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name, snd_pcm_t *slave, int
 	pcm->private_data = h;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
-	pcm->mmap_shadow = 1;
-	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_link_hw_ptr(pcm, slave);
 	snd_pcm_link_appl_ptr(pcm, slave);
 	*pcmp = pcm;
@@ -347,8 +474,7 @@ static int snd_pcm_hook_add_conf(snd_pcm_t *pcm, snd_config_t *root, snd_config_
 	snd_config_t *type = NULL, *args = NULL;
 	snd_config_iterator_t i, next;
 	int (*install_func)(snd_pcm_t *pcm, snd_config_t *args) = NULL;
-	void *h = NULL;
-
+	void *h;
 	if (snd_config_get_type(conf) != SND_CONFIG_TYPE_COMPOUND) {
 		SNDERR("Invalid hook definition");
 		return -EINVAL;
@@ -389,7 +515,6 @@ static int snd_pcm_hook_add_conf(snd_pcm_t *pcm, snd_config_t *root, snd_config_
 	if (err >= 0) {
 		if (snd_config_get_type(type) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for PCM type %s definition", str);
-			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, type) {
@@ -428,39 +553,28 @@ static int snd_pcm_hook_add_conf(snd_pcm_t *pcm, snd_config_t *root, snd_config_
 	install_func = h ? snd_dlsym(h, install, SND_DLSYM_VERSION(SND_PCM_DLSYM_VERSION)) : NULL;
 	err = 0;
 	if (!h) {
-		SNDERR("Cannot open shared library %s",
-		       lib ? lib : "[builtin]");
+		SNDERR("Cannot open shared library %s", lib);
 		err = -ENOENT;
 	} else if (!install_func) {
-		SNDERR("symbol %s is not defined inside %s", install,
-		       lib ? lib : "[builtin]");
+		SNDERR("symbol %s is not defined inside %s", install, lib);
 		snd_dlclose(h);
 		err = -ENXIO;
 	}
        _err:
 	if (type)
 		snd_config_delete(type);
-	if (err < 0)
-		return err;
-
-	if (args && snd_config_get_string(args, &str) >= 0) {
+	if (err >= 0 && args && snd_config_get_string(args, &str) >= 0) {
 		err = snd_config_search_definition(root, "hook_args", str, &args);
-		if (err < 0)
+		if (err < 0) {
 			SNDERR("unknown hook_args %s", str);
-		else
+		} else {
 			err = install_func(pcm, args);
-		snd_config_delete(args);
+			snd_config_delete(args);
+		}
 	} else
 		err = install_func(pcm, args);
-
-	if (err >= 0)
-		err = hook_add_dlobj(pcm, h);
-
-	if (err < 0) {
-		if(h)
-			snd_dlclose(h);
+	if (err < 0)
 		return err;
-	}
 	return 0;
 }
 
@@ -515,7 +629,7 @@ int _snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name,
 	err = snd_pcm_slave_conf(root, slave, &sconf, 0);
 	if (err < 0)
 		return err;
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;
@@ -525,7 +639,7 @@ int _snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name,
 		return err;
 	}
 	if (!hooks)
-		goto _done;
+		return 0;
 	snd_config_for_each(i, next, hooks) {
 		snd_config_t *n = snd_config_iterator_entry(i);
 		const char *str;
@@ -544,7 +658,6 @@ int _snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name,
 			return err;
 		}
 	}
- _done:
 	*pcmp = rpcm;
 	return 0;
 }
@@ -708,7 +821,6 @@ int _snd_pcm_hook_ctl_elems_install(snd_pcm_t *pcm, snd_config_t *conf)
 			       snd_pcm_hook_ctl_elems_close, sctl);
 	if (err < 0)
 		goto _err;
-	snd_config_delete(pcm_conf);
 	return 0;
  _err:
 	if (h_hw_params)

@@ -1,6 +1,6 @@
 /*
  *  HwDep interface - local header file
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -39,7 +39,7 @@ struct _snd_hwdep {
 	snd_hwdep_type_t type;
 	int mode;
 	int poll_fd;
-	const snd_hwdep_ops_t *ops;
+	snd_hwdep_ops_t *ops;
 	void *private_data;
 };
 

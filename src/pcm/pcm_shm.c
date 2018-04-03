@@ -288,7 +288,6 @@ static int snd_pcm_shm_hw_params_slave(snd_pcm_t *pcm,
 	snd_pcm_shm_t *shm = pcm->private_data;
 	volatile snd_pcm_shm_ctrl_t *ctrl = shm->ctrl;
 	int err;
-	params->flags |= SND_PCM_HW_PARAMS_EXPORT_BUFFER;
 	ctrl->cmd = SNDRV_PCM_IOCTL_HW_PARAMS;
 	ctrl->u.hw_params = *params;
 	err = snd_pcm_shm_action(pcm);
@@ -441,13 +440,6 @@ static snd_pcm_sframes_t snd_pcm_shm_avail_update(snd_pcm_t *pcm)
 	return err;
 }
 
-static int snd_pcm_shm_htimestamp(snd_pcm_t *pcm ATTRIBUTE_UNUSED,
-				  snd_pcm_uframes_t *avail ATTRIBUTE_UNUSED,
-				  snd_htimestamp_t *tstamp ATTRIBUTE_UNUSED)
-{
-	return -EIO;	/* not implemented yet */
-}
-
 static int snd_pcm_shm_prepare(snd_pcm_t *pcm)
 {
 	snd_pcm_shm_t *shm = pcm->private_data;
@@ -508,11 +500,6 @@ static int snd_pcm_shm_pause(snd_pcm_t *pcm, int enable)
 	return snd_pcm_shm_action(pcm);
 }
 
-static snd_pcm_sframes_t snd_pcm_shm_rewindable(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
-{
-	return 0;	/* FIX ME */
-}
-
 static snd_pcm_sframes_t snd_pcm_shm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_shm_t *shm = pcm->private_data;
@@ -520,11 +507,6 @@ static snd_pcm_sframes_t snd_pcm_shm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t fr
 	ctrl->cmd = SNDRV_PCM_IOCTL_REWIND;
 	ctrl->u.rewind.frames = frames;
 	return snd_pcm_shm_action(pcm);
-}
-
-static snd_pcm_sframes_t snd_pcm_shm_forwardable(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
-{
-	return 0;	/* FIX ME */
 }
 
 static snd_pcm_sframes_t snd_pcm_shm_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
@@ -586,12 +568,12 @@ static void snd_pcm_shm_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_output_printf(out, "Shm PCM\n");
 	if (pcm->setup) {
-		snd_output_printf(out, "Its setup is:\n");
+		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 }
 
-static const snd_pcm_ops_t snd_pcm_shm_ops = {
+static snd_pcm_ops_t snd_pcm_shm_ops = {
 	.close = snd_pcm_shm_close,
 	.info = snd_pcm_shm_info,
 	.hw_refine = snd_pcm_shm_hw_refine,
@@ -606,7 +588,7 @@ static const snd_pcm_ops_t snd_pcm_shm_ops = {
 	.munmap = snd_pcm_shm_munmap,
 };
 
-static const snd_pcm_fast_ops_t snd_pcm_shm_fast_ops = {
+static snd_pcm_fast_ops_t snd_pcm_shm_fast_ops = {
 	.status = snd_pcm_shm_status,
 	.state = snd_pcm_shm_state,
 	.hwsync = snd_pcm_shm_hwsync,
@@ -617,18 +599,16 @@ static const snd_pcm_fast_ops_t snd_pcm_shm_fast_ops = {
 	.drop = snd_pcm_shm_drop,
 	.drain = snd_pcm_shm_drain,
 	.pause = snd_pcm_shm_pause,
-	.rewindable = snd_pcm_shm_rewindable,
 	.rewind = snd_pcm_shm_rewind,
-	.forwardable = snd_pcm_shm_forwardable,
 	.forward = snd_pcm_shm_forward,
 	.resume = snd_pcm_shm_resume,
+	.poll_ask = NULL,
 	.writei = snd_pcm_mmap_writei,
 	.writen = snd_pcm_mmap_writen,
 	.readi = snd_pcm_mmap_readi,
 	.readn = snd_pcm_mmap_readn,
 	.avail_update = snd_pcm_shm_avail_update,
 	.mmap_commit = snd_pcm_shm_mmap_commit,
-	.htimestamp = snd_pcm_shm_htimestamp,
 };
 
 static int make_local_socket(const char *filename)
@@ -653,6 +633,33 @@ static int make_local_socket(const char *filename)
 	}
 	return sock;
 }
+
+#if 0
+static int make_inet_socket(const char *host, int port)
+{
+	struct sockaddr_in addr;
+	int sock;
+	struct hostent *h = gethostbyname(host);
+	if (!h)
+		return -ENOENT;
+
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock < 0) {
+		SYSERR("socket failed");
+		return -errno;
+	}
+	
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	memcpy(&addr.sin_addr, h->h_addr_list[0], sizeof(struct in_addr));
+
+	if (connect(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+		SYSERR("connect failed");
+		return -errno;
+	}
+	return sock;
+}
+#endif
 
 /**
  * \brief Creates a new shared memory PCM
@@ -766,9 +773,61 @@ int snd_pcm_shm_open(snd_pcm_t **pcmp, const char *name,
 	close(sock);
 	if (ctrl)
 		shmdt(ctrl);
-	free(shm);
+	if (shm)
+		free(shm);
 	return result;
 }
+
+#ifndef DOC_HIDDEN
+int snd_is_local(struct hostent *hent)
+{
+	int s;
+	int err;
+	struct ifconf conf;
+	size_t numreqs = 10;
+	size_t i;
+	struct in_addr *haddr = (struct in_addr*) hent->h_addr_list[0];
+	
+	s = socket(PF_INET, SOCK_STREAM, 0);
+	if (s < 0) {
+		SYSERR("socket failed");
+		return -errno;
+	}
+	
+	conf.ifc_len = numreqs * sizeof(struct ifreq);
+	conf.ifc_buf = malloc((unsigned int) conf.ifc_len);
+	if (! conf.ifc_buf)
+		return -ENOMEM;
+	while (1) {
+		err = ioctl(s, SIOCGIFCONF, &conf);
+		if (err < 0) {
+			SYSERR("SIOCGIFCONF failed");
+			return -errno;
+		}
+		if ((size_t)conf.ifc_len < numreqs * sizeof(struct ifreq))
+			break;
+		numreqs *= 2;
+		conf.ifc_len = numreqs * sizeof(struct ifreq);
+		conf.ifc_buf = realloc(conf.ifc_buf, (unsigned int) conf.ifc_len);
+		if (! conf.ifc_buf)
+			return -ENOMEM;
+	}
+	numreqs = conf.ifc_len / sizeof(struct ifreq);
+	for (i = 0; i < numreqs; ++i) {
+		struct ifreq *req = &conf.ifc_req[i];
+		struct sockaddr_in *s_in = (struct sockaddr_in *)&req->ifr_addr;
+		s_in->sin_family = AF_INET;
+		err = ioctl(s, SIOCGIFADDR, req);
+		if (err < 0)
+			continue;
+		if (haddr->s_addr == s_in->sin_addr.s_addr)
+			break;
+	}
+	close(s);
+	free(conf.ifc_buf);
+	return i < numreqs;
+}
+#endif
 
 /*! \page pcm_plugins
 
@@ -815,10 +874,12 @@ int _snd_pcm_shm_open(snd_pcm_t **pcmp, const char *name,
 	const char *server = NULL;
 	const char *pcm_name = NULL;
 	snd_config_t *sconfig;
+	const char *host = NULL;
 	const char *sockname = NULL;
 	long port = -1;
 	int err;
-
+	int local;
+	struct hostent *h;
 	snd_config_for_each(i, next, conf) {
 		snd_config_t *n = snd_config_iterator_entry(i);
 		const char *id;
@@ -869,8 +930,14 @@ int _snd_pcm_shm_open(snd_pcm_t **pcmp, const char *name,
 			continue;
 		if (strcmp(id, "comment") == 0)
 			continue;
-		if (strcmp(id, "host") == 0)
+		if (strcmp(id, "host") == 0) {
+			err = snd_config_get_string(n, &host);
+			if (err < 0) {
+				SNDERR("Invalid type for %s", id);
+				goto _err;
+			}
 			continue;
+		}
 		if (strcmp(id, "socket") == 0) {
 			err = snd_config_get_string(n, &sockname);
 			if (err < 0) {
@@ -893,8 +960,22 @@ int _snd_pcm_shm_open(snd_pcm_t **pcmp, const char *name,
 		goto __error;
 	}
 
+	if (!host) {
+		SNDERR("host is not defined");
+		goto _err;
+	}
 	if (!sockname) {
 		SNDERR("socket is not defined");
+		goto _err;
+	}
+	h = gethostbyname(host);
+	if (!h) {
+		SNDERR("Cannot resolve %s", host);
+		goto _err;
+	}
+	local = snd_is_local(h);
+	if (!local) {
+		SNDERR("%s is not the local host", host);
 		goto _err;
 	}
 	err = snd_pcm_shm_open(pcmp, name, sockname, pcm_name, stream, mode);

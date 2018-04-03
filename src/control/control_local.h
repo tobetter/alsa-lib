@@ -1,6 +1,6 @@
 /*
  *  Control Interface - local header file
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -36,8 +36,6 @@ typedef struct _snd_ctl_ops {
 	int (*element_write)(snd_ctl_t *handle, snd_ctl_elem_value_t *control);
 	int (*element_lock)(snd_ctl_t *handle, snd_ctl_elem_id_t *lock);
 	int (*element_unlock)(snd_ctl_t *handle, snd_ctl_elem_id_t *unlock);
-	int (*element_tlv)(snd_ctl_t *handle, int op_flag, unsigned int numid,
-			   unsigned int *tlv, unsigned int tlv_size);
 	int (*hwdep_next_device)(snd_ctl_t *handle, int *device);
 	int (*hwdep_info)(snd_ctl_t *handle, snd_hwdep_info_t * info);
 	int (*pcm_next_device)(snd_ctl_t *handle, int *device);
@@ -49,17 +47,14 @@ typedef struct _snd_ctl_ops {
 	int (*set_power_state)(snd_ctl_t *handle, unsigned int state);
 	int (*get_power_state)(snd_ctl_t *handle, unsigned int *state);
 	int (*read)(snd_ctl_t *handle, snd_ctl_event_t *event);
-	int (*poll_descriptors_count)(snd_ctl_t *handle);
-	int (*poll_descriptors)(snd_ctl_t *handle, struct pollfd *pfds, unsigned int space);
-	int (*poll_revents)(snd_ctl_t *handle, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
 } snd_ctl_ops_t;
 
 
 struct _snd_ctl {
-	void *open_func;
+	void *dl_handle;
 	char *name;
 	snd_ctl_type_t type;
-	const snd_ctl_ops_t *ops;
+	snd_ctl_ops_t *ops;
 	void *private_data;
 	int nonblock;
 	int poll_fd;
@@ -89,14 +84,9 @@ struct _snd_hctl {
 };
 
 
-/* make local functions really local */
-#define snd_ctl_new	snd1_ctl_new
-
 int snd_ctl_new(snd_ctl_t **ctlp, snd_ctl_type_t type, const char *name);
 int _snd_ctl_poll_descriptor(snd_ctl_t *ctl);
 #define _snd_ctl_async_descriptor _snd_ctl_poll_descriptor
 int snd_ctl_hw_open(snd_ctl_t **handle, const char *name, int card, int mode);
 int snd_ctl_shm_open(snd_ctl_t **handlep, const char *name, const char *sockname, const char *sname, int mode);
 int snd_ctl_async(snd_ctl_t *ctl, int sig, pid_t pid);
-
-#define CTLINABORT(x) ((x)->nonblock == 2)

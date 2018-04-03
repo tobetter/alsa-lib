@@ -1,7 +1,7 @@
 /*
  *  Old PCM API compilation test
  *
- *     Author: Jaroslav Kysela <perex@perex.cz>
+ *     Author: Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@
 
 typedef void (myfcn)(void *);
 
-int main(int argc ATTRIBUTE_UNUSED, char *argv[] ATTRIBUTE_UNUSED)
+int main(int argc, char *argv[])
 {
 	myfcn *fcn;
 	snd_pcm_hw_params_get_access(NULL);

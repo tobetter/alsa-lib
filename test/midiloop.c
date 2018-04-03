@@ -51,9 +51,8 @@ int writepattern(snd_rawmidi_t *handle_out, unsigned char *obuf)
 		obuf[patsize++] = 0x80 + i;
 		obuf[patsize++] = 0x23;
 		obuf[patsize++] = 0x24;
-		obuf[patsize++] = 0xf0;
-		obuf[patsize++] = i;
-		obuf[patsize++] = 0xf7;
+		obuf[patsize++] = 0x25;
+		obuf[patsize++] = 0x26;
 	}
 	i = snd_rawmidi_write(handle_out, obuf, patsize);
 	if (i != patsize) {
@@ -133,8 +132,6 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 
-	snd_rawmidi_nonblock(handle_in, 0);
-
 	patsize = writepattern(handle_out, obuf);
 	gettimeofday(&start, NULL);
 	patsize = writepattern(handle_out, obuf);
@@ -169,13 +166,13 @@ int main(int argc, char** argv)
 	err = snd_rawmidi_status(handle_out, ostat);
 	if (err < 0)
 		fprintf(stderr, "output stream status error: %d\n", err);
-	printf("input.status.avail = %zi\n", snd_rawmidi_status_get_avail(istat));
-	printf("input.status.xruns = %zi\n", snd_rawmidi_status_get_xruns(istat));
-	printf("output.status.avail = %zi\n", snd_rawmidi_status_get_avail(ostat));
-	printf("output.status.xruns = %zi\n", snd_rawmidi_status_get_xruns(ostat));
+	printf("input.status.avail = %i\n", snd_rawmidi_status_get_avail(istat));
+	printf("input.status.xruns = %i\n", snd_rawmidi_status_get_xruns(istat));
+	printf("output.status.avail = %i\n", snd_rawmidi_status_get_avail(ostat));
+	printf("output.status.xruns = %i\n", snd_rawmidi_status_get_xruns(ostat));
 
 	diff = timediff(end, start);
-	printf("Time diff: %lliusec (%lli bytes/sec)\n", diff, ((long long)opos * 1000000) / diff);
+	printf("Time diff: %Liusec (%Li bytes/sec)\n", diff, ((long long)opos * 1000000) / diff);
 
 	if (verbose) {
 		fprintf(stderr,"Closing\n");

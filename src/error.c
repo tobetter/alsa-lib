@@ -1,13 +1,13 @@
 /**
  * \file error.c
  * \brief Error code handling routines
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 1998-2001
  *
  * Error code handling routines.
  */
 /*
- *  Copyright (c) 1998 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998 by Jaroslav Kysela <perex@suse.cz>
  *
  *  snd_strerror routine needs to be recoded for the locale support
  *
@@ -60,28 +60,6 @@ const char *snd_strerror(int errnum)
 	return snd_error_codes[errnum];
 }
 
-#ifndef DOC_HIDDEN
-#ifdef HAVE___THREAD
-#define TLS_PFX		__thread
-#else
-#define TLS_PFX		/* NOP */
-#endif
-#endif
-
-static TLS_PFX snd_local_error_handler_t local_error = NULL;
-
-/**
- * \brief Install local error handler
- * \param func The local error handler function
- * \retval Previous local error handler function
- */
-snd_local_error_handler_t snd_lib_error_set_local(snd_local_error_handler_t func)
-{
-	snd_local_error_handler_t old = local_error;
-	local_error = func;
-	return old;
-}
-
 /**
  * \brief The default error handler function.
  * \param file The filename where the error was hit.
@@ -91,19 +69,12 @@ snd_local_error_handler_t snd_lib_error_set_local(snd_local_error_handler_t func
  * \param fmt The message (including the format characters).
  * \param ... Optional arguments.
  *
- * If a local error function has been installed for the current thread by
- * \ref snd_lib_error_set_local, it is called. Otherwise, prints the error
- * message including location to \c stderr.
+ * Prints the error message including location to \c stderr.
  */
 static void snd_lib_error_default(const char *file, int line, const char *function, int err, const char *fmt, ...)
 {
 	va_list arg;
 	va_start(arg, fmt);
-	if (local_error) {
-		local_error(file, line, function, err, fmt, arg);
-		va_end(arg);
-		return;
-	}
 	fprintf(stderr, "ALSA lib %s:%i:(%s) ", file, line, function);
 	vfprintf(stderr, fmt, arg);
 	if (err)
@@ -129,10 +100,6 @@ snd_lib_error_handler_t snd_lib_error = snd_lib_error_default;
 int snd_lib_error_set_handler(snd_lib_error_handler_t handler)
 {
 	snd_lib_error = handler == NULL ? snd_lib_error_default : handler;
-#ifndef NDEBUG
-	if (snd_lib_error != snd_lib_error_default)
-		snd_err_msg = snd_lib_error;
-#endif
 	return 0;
 }
 
@@ -144,36 +111,3 @@ const char *snd_asoundlib_version(void)
 {
 	return SND_LIB_VERSION_STR;
 }
-
-#ifndef NDEBUG
-/*
- * internal error handling
- */
-static void snd_err_msg_default(const char *file, int line, const char *function, int err, const char *fmt, ...)
-{
-	va_list arg;
-	const char *verbose;
-	
-	verbose = getenv("LIBASOUND_DEBUG");
-	if (! verbose || ! *verbose)
-		return;
-	va_start(arg, fmt);
-	fprintf(stderr, "ALSA lib %s:%i:(%s) ", file, line, function);
-	vfprintf(stderr, fmt, arg);
-	if (err)
-		fprintf(stderr, ": %s", snd_strerror(err));
-	putc('\n', stderr);
-	va_end(arg);
-#ifdef ALSA_DEBUG_ASSERT
-	verbose = getenv("LIBASOUND_DEBUG_ASSERT");
-	if (verbose && *verbose)
-		assert(0);
-#endif
-}
-
-/**
- * The ALSA error message handler
- */
-snd_lib_error_handler_t snd_err_msg = snd_err_msg_default;
-
-#endif

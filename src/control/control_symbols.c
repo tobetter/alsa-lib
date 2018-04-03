@@ -1,6 +1,6 @@
 /*
  *  Control Symbols
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
@@ -22,16 +22,15 @@
 
 extern const char *_snd_module_control_hw;
 extern const char *_snd_module_control_shm;
-extern const char *_snd_module_control_ext;
 
 static const char **snd_control_open_objects[] = {
 	&_snd_module_control_hw,
-#include "ctl_symbols_list.c"
+	&_snd_module_control_shm
 };
 	
 void *snd_control_open_symbols(void)
 {
-	return snd_control_open_objects;
+	return (void *)snd_control_open_objects[0];
 }
 
 #endif /* !PIC */

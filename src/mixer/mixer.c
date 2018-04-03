@@ -1,7 +1,7 @@
 /**
  * \file mixer/mixer.c
  * \brief Mixer Interface
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \date 2001
  *
@@ -10,7 +10,7 @@
  */
 /*
  *  Mixer Interface - main file
- *  Copyright (c) 1998/1999/2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998/1999/2000 by Jaroslav Kysela <perex@suse.cz>
  *  Copyright (c) 2001 by Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -35,7 +35,7 @@
 <P>Mixer interface is designed to access the abstracted mixer controls.
 This is an abstraction layer over the hcontrol layer.
 
-\section mixer_general_overview General overview
+\section control_general_overview General overview
 
 */
 
@@ -152,8 +152,8 @@ static int hctl_elem_event_handler(snd_hctl_elem_t *helem,
 	}
 	if (mask & (SND_CTL_EVENT_MASK_VALUE | SND_CTL_EVENT_MASK_INFO)) {
 		int err = 0;
-		bag_iterator_t i, n;
-		bag_for_each_safe(i, n, bag) {
+		bag_iterator_t i;
+		bag_for_each(i, bag) {
 			snd_mixer_elem_t *melem = bag_iterator_entry(i);
 			snd_mixer_class_t *class = melem->class;
 			err = class->event(class, mask, helem, melem);
@@ -190,43 +190,23 @@ static int hctl_event_handler(snd_hctl_t *hctl, unsigned int mask,
 
 
 /**
- * \brief Attach an HCTL specified with the CTL device name to an opened mixer
+ * \brief Attach an HCTL to an opened mixer
  * \param mixer Mixer handle
  * \param name HCTL name (see #snd_hctl_open)
  * \return 0 on success otherwise a negative error code
  */
 int snd_mixer_attach(snd_mixer_t *mixer, const char *name)
 {
+	snd_mixer_slave_t *slave;
 	snd_hctl_t *hctl;
 	int err;
-
-	err = snd_hctl_open(&hctl, name, 0);
-	if (err < 0)
-		return err;
-	err = snd_mixer_attach_hctl(mixer, hctl);
-	if (err < 0)
-		return err;
-	return 0;
-}
-
-/**
- * \brief Attach an HCTL to an opened mixer
- * \param mixer Mixer handle
- * \param hctl the HCTL to be attached
- * \return 0 on success otherwise a negative error code
- *
- * Upon error, this function closes the given hctl handle automatically.
- */
-int snd_mixer_attach_hctl(snd_mixer_t *mixer, snd_hctl_t *hctl)
-{
-	snd_mixer_slave_t *slave;
-	int err;
-
-	assert(hctl);
 	slave = calloc(1, sizeof(*slave));
-	if (slave == NULL) {
-		snd_hctl_close(hctl);
+	if (slave == NULL)
 		return -ENOMEM;
+	err = snd_hctl_open(&hctl, name, 0);
+	if (err < 0) {
+		free(slave);
+		return err;
 	}
 	err = snd_hctl_nonblock(hctl, 1);
 	if (err < 0) {
@@ -257,50 +237,6 @@ int snd_mixer_detach(snd_mixer_t *mixer, const char *name)
 			snd_hctl_close(s->hctl);
 			list_del(pos);
 			free(s);
-			return 0;
-		}
-	}
-	return -ENOENT;
-}
-
-/**
- * \brief Detach a previously attached HCTL to an opened mixer freeing all related resources
- * \param mixer Mixer handle
- * \param hctl HCTL previously attached
- * \return 0 on success otherwise a negative error code
- *
- * Note: The hctl handle is not closed!
- */
-int snd_mixer_detach_hctl(snd_mixer_t *mixer, snd_hctl_t *hctl)
-{
-	struct list_head *pos;
-	list_for_each(pos, &mixer->slaves) {
-		snd_mixer_slave_t *s;
-		s = list_entry(pos, snd_mixer_slave_t, list);
-		if (hctl == s->hctl) {
-			list_del(pos);
-			free(s);
-			return 0;
-		}
-	}
-	return -ENOENT;
-}
-
-/**
- * \brief Obtain a HCTL pointer associated to given name
- * \param mixer Mixer handle
- * \param name HCTL previously attached
- * \param hctl HCTL pointer
- * \return 0 on success otherwise a negative error code
- */
-int snd_mixer_get_hctl(snd_mixer_t *mixer, const char *name, snd_hctl_t **hctl)
-{
-	struct list_head *pos;
-	list_for_each(pos, &mixer->slaves) {
-		snd_mixer_slave_t *s;
-		s = list_entry(pos, snd_mixer_slave_t, list);
-		if (strcmp(name, snd_hctl_name(s->hctl)) == 0) {
-			*hctl = s->hctl;
 			return 0;
 		}
 	}
@@ -345,47 +281,6 @@ static int _snd_mixer_find_elem(snd_mixer_t *mixer, snd_mixer_elem_t *elem, int 
 	}
 	*dir = c;
 	return idx;
-}
-
-/**
- * \brief Get private data associated to give mixer element
- * \param elem Mixer element
- * \return private data
- *
- * For use by mixer element class specific code.
- */
-void *snd_mixer_elem_get_private(const snd_mixer_elem_t *elem)
-{
-	return elem->private_data;
-}
-
-/**
- * \brief Allocate a new mixer element
- * \param elem Returned mixer element
- * \param type Mixer element type
- * \param compare_weight Mixer element compare weight
- * \param private_data Private data
- * \param private_free Private data free callback
- * \return 0 on success otherwise a negative error code
- *
- * For use by mixer element class specific code.
- */
-int snd_mixer_elem_new(snd_mixer_elem_t **elem,
-		       snd_mixer_elem_type_t type,
-		       int compare_weight,
-		       void *private_data,
-		       void (*private_free)(snd_mixer_elem_t *elem))
-{
-	snd_mixer_elem_t *melem = calloc(1, sizeof(*melem));
-	if (melem == NULL)
-		return -ENOMEM;
-	melem->type = type;
-	melem->compare_weight = compare_weight;
-	melem->private_data = private_data;
-	melem->private_free = private_free;
-	INIT_LIST_HEAD(&melem->helems);
-	*elem = melem;
-	return 0;
 }
 
 /**
@@ -457,7 +352,9 @@ int snd_mixer_elem_remove(snd_mixer_elem_t *elem)
 	}
 	err = snd_mixer_elem_throw_event(elem, SND_CTL_EVENT_MASK_REMOVE);
 	list_del(&elem->list);
-	snd_mixer_elem_free(elem);
+	if (elem->private_free)
+		elem->private_free(elem);
+	free(elem);
 	mixer->count--;
 	m = mixer->count - idx;
 	if (m > 0)
@@ -465,20 +362,6 @@ int snd_mixer_elem_remove(snd_mixer_elem_t *elem)
 			mixer->pelems + idx + 1,
 			m * sizeof(snd_mixer_elem_t *));
 	return err;
-}
-
-/**
- * \brief Free a mixer element
- * \param elem Mixer element
- * \return 0 on success otherwise a negative error code
- *
- * For use by mixer element class specific code.
- */
-void snd_mixer_elem_free(snd_mixer_elem_t *elem)
-{
-	if (elem->private_free)
-		elem->private_free(elem);
-	free(elem);
 }
 
 /**
@@ -540,8 +423,6 @@ int snd_mixer_class_register(snd_mixer_class_t *class, snd_mixer_t *mixer)
  * \brief Unregister mixer element class and remove all its elements
  * \param class Mixer element class
  * \return 0 on success otherwise a negative error code
- *
- * Note that the class structure is also deallocated!
  */
 int snd_mixer_class_unregister(snd_mixer_class_t *class)
 {
@@ -609,8 +490,10 @@ int snd_mixer_close(snd_mixer_t *mixer)
 	}
 	assert(list_empty(&mixer->elems));
 	assert(mixer->count == 0);
-	free(mixer->pelems);
-	mixer->pelems = NULL;
+	if (mixer->pelems) {
+		free(mixer->pelems);
+		mixer->pelems = NULL;
+	}
 	while (!list_empty(&mixer->slaves)) {
 		int err;
 		snd_mixer_slave_t *s;
@@ -637,21 +520,17 @@ static int snd_mixer_compare_default(const snd_mixer_elem_t *c1,
 	return c1->class->compare(c1, c2);
 }
 
-static int mixer_compare(const void *a, const void *b)
-{
-	snd_mixer_t *mixer;
-
-	mixer = (*((const snd_mixer_elem_t * const *)a))->class->mixer;
-	return mixer->compare(*(const snd_mixer_elem_t * const *)a, *(const snd_mixer_elem_t * const *)b);
-}
-
 static int snd_mixer_sort(snd_mixer_t *mixer)
 {
 	unsigned int k;
+	int compar(const void *a, const void *b) {
+		return mixer->compare(*(const snd_mixer_elem_t * const *) a,
+				      *(const snd_mixer_elem_t * const *) b);
+	}
 	assert(mixer);
 	assert(mixer->compare);
 	INIT_LIST_HEAD(&mixer->elems);
-	qsort(mixer->pelems, mixer->count, sizeof(snd_mixer_elem_t *), mixer_compare);
+	qsort(mixer->pelems, mixer->count, sizeof(snd_mixer_elem_t*), compar);
 	for (k = 0; k < mixer->count; k++)
 		list_add_tail(&mixer->pelems[k]->list, &mixer->elems);
 	return 0;
@@ -745,7 +624,7 @@ int snd_mixer_poll_descriptors_revents(snd_mixer_t *mixer, struct pollfd *pfds, 
 	if (nfds == 0)
 		return -EINVAL;
 	res = 0;
-	for (idx = 0; idx < nfds; idx++, pfds++)
+	for (idx = 0; idx < nfds; idx++)
 		res |= pfds->revents & (POLLIN|POLLERR|POLLNVAL);
 	*revents = res;
 	return 0;
@@ -835,7 +714,7 @@ snd_mixer_elem_t *snd_mixer_elem_prev(snd_mixer_elem_t *elem)
 /**
  * \brief Handle pending mixer events invoking callbacks
  * \param mixer Mixer handle
- * \return Number of events that occured on success, otherwise a negative error code on failure
+ * \return 0 otherwise a negative error code on failure
  */
 int snd_mixer_handle_events(snd_mixer_t *mixer)
 {
@@ -855,8 +734,8 @@ int snd_mixer_handle_events(snd_mixer_t *mixer)
 
 /**
  * \brief Set callback function for a mixer
- * \param obj mixer handle
- * \param val callback function
+ * \param mixer mixer handle
+ * \param callback callback function
  */
 void snd_mixer_set_callback(snd_mixer_t *obj, snd_mixer_callback_t val)
 {
@@ -867,12 +746,12 @@ void snd_mixer_set_callback(snd_mixer_t *obj, snd_mixer_callback_t val)
 /**
  * \brief Set callback private value for a mixer
  * \param mixer mixer handle
- * \param val callback private value
+ * \param callback_private callback private value
  */
-void snd_mixer_set_callback_private(snd_mixer_t *mixer, void * val)
+void snd_mixer_set_callback_private(snd_mixer_t *obj, void * val)
 {
-	assert(mixer);
-	mixer->callback_private = val;
+	assert(obj);
+	obj->callback_private = val;
 }
 
 /**
@@ -880,10 +759,10 @@ void snd_mixer_set_callback_private(snd_mixer_t *mixer, void * val)
  * \param mixer mixer handle
  * \return callback private value
  */
-void * snd_mixer_get_callback_private(const snd_mixer_t *mixer)
+void * snd_mixer_get_callback_private(const snd_mixer_t *obj)
 {
-	assert(mixer);
-	return mixer->callback_private;
+	assert(obj);
+	return obj->callback_private;
 }
 
 /**
@@ -891,195 +770,53 @@ void * snd_mixer_get_callback_private(const snd_mixer_t *mixer)
  * \param mixer mixer handle
  * \return elements count
  */
-unsigned int snd_mixer_get_count(const snd_mixer_t *mixer)
+unsigned int snd_mixer_get_count(const snd_mixer_t *obj)
 {
-	assert(mixer);
-	return mixer->count;
+	assert(obj);
+	return obj->count;
 }
 
 /**
  * \brief Set callback function for a mixer element
- * \param mixer mixer element
+ * \param obj mixer element
  * \param val callback function
  */
-void snd_mixer_elem_set_callback(snd_mixer_elem_t *mixer, snd_mixer_elem_callback_t val)
+void snd_mixer_elem_set_callback(snd_mixer_elem_t *obj, snd_mixer_elem_callback_t val)
 {
-	assert(mixer);
-	mixer->callback = val;
+	assert(obj);
+	obj->callback = val;
 }
 
 /**
  * \brief Set callback private value for a mixer element
- * \param mixer mixer element
+ * \param obj mixer element
  * \param val callback private value
  */
-void snd_mixer_elem_set_callback_private(snd_mixer_elem_t *mixer, void * val)
+void snd_mixer_elem_set_callback_private(snd_mixer_elem_t *obj, void * val)
 {
-	assert(mixer);
-	mixer->callback_private = val;
+	assert(obj);
+	obj->callback_private = val;
 }
 
 /**
  * \brief Get callback private value for a mixer element
- * \param mixer mixer element
+ * \param obj mixer element
  * \return callback private value
  */
-void * snd_mixer_elem_get_callback_private(const snd_mixer_elem_t *mixer)
+void * snd_mixer_elem_get_callback_private(const snd_mixer_elem_t *obj)
 {
-	assert(mixer);
-	return mixer->callback_private;
+	assert(obj);
+	return obj->callback_private;
 }
 
 /**
  * \brief Get type for a mixer element
- * \param mixer mixer element
+ * \param obj mixer element
  * \return mixer element type
  */
-snd_mixer_elem_type_t snd_mixer_elem_get_type(const snd_mixer_elem_t *mixer)
-{
-	assert(mixer);
-	return mixer->type;
-}
-
-
-/**
- * \brief get size of #snd_mixer_class_t
- * \return size in bytes
- */
-size_t snd_mixer_class_sizeof()
-{
-	return sizeof(snd_mixer_class_t);
-}
-
-/**
- * \brief allocate an invalid #snd_mixer_class_t using standard malloc
- * \param ptr returned pointer
- * \return 0 on success otherwise negative error code
- */
-int snd_mixer_class_malloc(snd_mixer_class_t **ptr)
-{
-	assert(ptr);
-	*ptr = calloc(1, sizeof(snd_mixer_class_t));
-	if (!*ptr)
-		return -ENOMEM;
-	return 0;
-}
-
-/**
- * \brief frees a previously allocated #snd_mixer_class_t
- * \param obj pointer to object to free
- */
-void snd_mixer_class_free(snd_mixer_class_t *obj)
-{
-	if (obj->private_free)
-		obj->private_free(obj);
-	free(obj);
-}
-
-/**
- * \brief copy one #snd_mixer_class_t to another
- * \param dst pointer to destination
- * \param src pointer to source
- */
-void snd_mixer_class_copy(snd_mixer_class_t *dst, const snd_mixer_class_t *src)
-{
-	assert(dst && src);
-	*dst = *src;
-}
-
-/**
- * \brief Get a mixer associated to given mixer class
- * \param obj Mixer simple class identifier
- * \return mixer pointer
- */
-snd_mixer_t *snd_mixer_class_get_mixer(const snd_mixer_class_t *obj)
+snd_mixer_elem_type_t snd_mixer_elem_get_type(const snd_mixer_elem_t *obj)
 {
 	assert(obj);
-	return obj->mixer;
+	return obj->type;
 }
 
-/**
- * \brief Get mixer event callback associated to given mixer class
- * \param obj Mixer simple class identifier
- * \return event callback pointer
- */
-snd_mixer_event_t snd_mixer_class_get_event(const snd_mixer_class_t *obj)
-{
-	assert(obj);
-	return obj->event;
-}
-
-/**
- * \brief Get mixer private data associated to given mixer class
- * \param obj Mixer simple class identifier
- * \return event callback pointer
- */
-void *snd_mixer_class_get_private(const snd_mixer_class_t *obj)
-{
-	assert(obj);
-	return obj->private_data;
-}
-
-
-/**
- * \brief Get mixer compare callback associated to given mixer class
- * \param obj Mixer simple class identifier
- * \return event callback pointer
- */
-snd_mixer_compare_t snd_mixer_class_get_compare(const snd_mixer_class_t *obj)
-{
-	assert(obj);
-	return obj->compare;
-}
-
-/**
- * \brief Set mixer event callback to given mixer class
- * \param obj Mixer simple class identifier
- * \param event Event callback
- * \return zero if success, otherwise a negative error code
- */
-int snd_mixer_class_set_event(snd_mixer_class_t *obj, snd_mixer_event_t event)
-{
-	assert(obj);
-	obj->event = event;
-	return 0;
-}
-
-/**
- * \brief Set mixer private data to given mixer class
- * \param obj Mixer simple class identifier
- * \param private_data class private data
- * \return zero if success, otherwise a negative error code
- */
-int snd_mixer_class_set_private(snd_mixer_class_t *obj, void *private_data)
-{
-	assert(obj);
-	obj->private_data = private_data;
-	return 0;
-}
-
-/**
- * \brief Set mixer private data free callback to given mixer class
- * \param obj Mixer simple class identifier
- * \param private_free Mixer class private data free callback
- * \return zero if success, otherwise a negative error code
- */
-int snd_mixer_class_set_private_free(snd_mixer_class_t *obj, void (*private_free)(snd_mixer_class_t *))
-{
-	assert(obj);
-	obj->private_free = private_free;
-	return 0;
-}
-
-/**
- * \brief Set mixer compare callback to given mixer class
- * \param obj Mixer simple class identifier
- * \param compare the compare callback to be used
- * \return zero if success, otherwise a negative error code
- */
-int snd_mixer_class_set_compare(snd_mixer_class_t *obj, snd_mixer_compare_t compare)
-{
-	assert(obj);
-	obj->compare = compare;
-	return 0;
-}

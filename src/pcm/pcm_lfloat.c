@@ -2,12 +2,12 @@
  * \file pcm/pcm_lfloat.c
  * \ingroup PCM_Plugins
  * \brief PCM Linear<->Float Conversion Plugin Interface
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2001
  */
 /*
  *  PCM - Linear Integer <-> Linear Float conversion
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -29,8 +29,6 @@
 #include <byteswap.h>
 #include "pcm_local.h"
 #include "pcm_plugin.h"
-
-#include "plugin_ops.h"
 
 #ifndef DOC_HIDDEN
 
@@ -263,19 +261,19 @@ static int snd_pcm_lfloat_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 				       snd_pcm_lfloat_hw_refine_cchange,
 				       snd_pcm_lfloat_hw_refine_sprepare,
 				       snd_pcm_lfloat_hw_refine_schange,
-				       snd_pcm_generic_hw_refine);
+				       snd_pcm_plugin_hw_refine_slave);
 }
 
 static int snd_pcm_lfloat_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 {
 	snd_pcm_lfloat_t *lfloat = pcm->private_data;
-	snd_pcm_t *slave = lfloat->plug.gen.slave;
+	snd_pcm_t *slave = lfloat->plug.slave;
 	snd_pcm_format_t src_format, dst_format;
 	int err = snd_pcm_hw_params_slave(pcm, params,
 					  snd_pcm_lfloat_hw_refine_cchange,
 					  snd_pcm_lfloat_hw_refine_sprepare,
 					  snd_pcm_lfloat_hw_refine_schange,
-					  snd_pcm_generic_hw_params);
+					  snd_pcm_plugin_hw_params_slave);
 	if (err < 0)
 		return err;
 	if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
@@ -286,11 +284,11 @@ static int snd_pcm_lfloat_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		err = INTERNAL(snd_pcm_hw_params_get_format)(params, &dst_format);
 	}
 	if (snd_pcm_format_linear(src_format)) {
-		lfloat->int32_idx = snd_pcm_linear_get_index(src_format, SND_PCM_FORMAT_S32);
+		lfloat->int32_idx = snd_pcm_linear_get32_index(src_format, SND_PCM_FORMAT_S32);
 		lfloat->float32_idx = snd_pcm_lfloat_put_s32_index(dst_format);
 		lfloat->func = snd_pcm_lfloat_convert_integer_float;
 	} else {
-		lfloat->int32_idx = snd_pcm_linear_put_index(SND_PCM_FORMAT_S32, dst_format);
+		lfloat->int32_idx = snd_pcm_linear_put32_index(SND_PCM_FORMAT_S32, dst_format);
 		lfloat->float32_idx = snd_pcm_lfloat_get_s32_index(src_format);
 		lfloat->func = snd_pcm_lfloat_convert_float_integer;
 	}
@@ -347,25 +345,23 @@ static void snd_pcm_lfloat_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(lfloat->plug.gen.slave, out);
+	snd_pcm_dump(lfloat->plug.slave, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_lfloat_ops = {
-	.close = snd_pcm_generic_close,
-	.info = snd_pcm_generic_info,
+static snd_pcm_ops_t snd_pcm_lfloat_ops = {
+	.close = snd_pcm_plugin_close,
+	.info = snd_pcm_plugin_info,
 	.hw_refine = snd_pcm_lfloat_hw_refine,
 	.hw_params = snd_pcm_lfloat_hw_params,
-	.hw_free = snd_pcm_generic_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
-	.channel_info = snd_pcm_generic_channel_info,
+	.hw_free = snd_pcm_plugin_hw_free,
+	.sw_params = snd_pcm_plugin_sw_params,
+	.channel_info = snd_pcm_plugin_channel_info,
 	.dump = snd_pcm_lfloat_dump,
-	.nonblock = snd_pcm_generic_nonblock,
-	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_generic_mmap,
-	.munmap = snd_pcm_generic_munmap,
-	.query_chmaps = snd_pcm_generic_query_chmaps,
-	.get_chmap = snd_pcm_generic_get_chmap,
-	.set_chmap = snd_pcm_generic_set_chmap,
+	.nonblock = snd_pcm_plugin_nonblock,
+	.async = snd_pcm_plugin_async,
+	.poll_revents = snd_pcm_plugin_poll_revents,
+	.mmap = snd_pcm_plugin_mmap,
+	.munmap = snd_pcm_plugin_munmap,
 };
 
 /**
@@ -399,8 +395,8 @@ int snd_pcm_lfloat_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sfo
 	lfloat->plug.write = snd_pcm_lfloat_write_areas;
 	lfloat->plug.undo_read = snd_pcm_plugin_undo_read_generic;
 	lfloat->plug.undo_write = snd_pcm_plugin_undo_write_generic;
-	lfloat->plug.gen.slave = slave;
-	lfloat->plug.gen.close_slave = close_slave;
+	lfloat->plug.slave = slave;
+	lfloat->plug.close_slave = close_slave;
 
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_LINEAR_FLOAT, name, slave->stream, slave->mode);
 	if (err < 0) {
@@ -412,7 +408,6 @@ int snd_pcm_lfloat_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sfo
 	pcm->private_data = lfloat;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
-	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_set_hw_ptr(pcm, &lfloat->plug.hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &lfloat->plug.appl_ptr, -1, 0);
 	*pcmp = pcm;
@@ -501,7 +496,7 @@ int _snd_pcm_lfloat_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("slave format is not linear integer or linear float");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

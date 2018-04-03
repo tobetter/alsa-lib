@@ -1,6 +1,6 @@
 /*
  *  IPC SHM area manager
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
  *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
@@ -17,12 +17,7 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
-
-#include "config.h"
-
-/* These funcs are only used by pcm_mmap when sys/shm.h is available. */
-#ifdef HAVE_SYS_SHM_H
-
+  
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>
@@ -32,26 +27,15 @@
 #include <sys/shm.h>
 #include "list.h"
 
-#ifndef DOC_HIDDEN
 struct snd_shm_area {
 	struct list_head list;
 	int shmid;
 	void *ptr;
 	int share;
 };
-#endif
 
 static LIST_HEAD(shm_areas);
 
-/**
- * \brief Create a shm area record
- * \param shmid IPC SHM ID
- * \param ptr the shared area pointer
- * \return The allocated shm area record, NULL if fail
- *
- * Allocates a shared area record with the given SHM ID and pointer.
- * The record has a reference counter, which is initialized to 1 by this function.
- */
 struct snd_shm_area *snd_shm_area_create(int shmid, void *ptr)
 {
 	struct snd_shm_area *area = malloc(sizeof(*area));
@@ -64,13 +48,6 @@ struct snd_shm_area *snd_shm_area_create(int shmid, void *ptr)
 	return area;
 }
 
-/**
- * \brief Increase the reference counter of shm area record
- * \param area shm area record
- * \return the shm area record (identical with the argument)
- *
- * Increases the reference counter of the given shared area record.
- */
 struct snd_shm_area *snd_shm_area_share(struct snd_shm_area *area)
 {
 	if (area == NULL)
@@ -79,14 +56,6 @@ struct snd_shm_area *snd_shm_area_share(struct snd_shm_area *area)
 	return area;
 }
 
-/**
- * \brief Release the shared area record
- * \param area the shared are record
- * \return 0 if successful, or a negative error code
- *
- * Decreases the reference counter of the given shared area record, and
- * releases the resources automaticall if it reaches to 0.
- */
 int snd_shm_area_destroy(struct snd_shm_area *area)
 {
 	if (area == NULL)
@@ -111,5 +80,3 @@ void snd_shm_area_destructor(void)
 		shmdt(area->ptr);
 	}
 }
-
-#endif

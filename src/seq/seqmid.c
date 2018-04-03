@@ -107,7 +107,6 @@ int snd_seq_delete_simple_port(snd_seq_t *seq, int port)
 
 /**
  * \brief simple subscription (w/o exclusive & time conversion)
- * \param seq sequencer handle
  * \param myport the port id as receiver
  * \param src_client sender client id
  * \param src_port sender port id
@@ -134,7 +133,6 @@ int snd_seq_connect_from(snd_seq_t *seq, int myport, int src_client, int src_por
 
 /**
  * \brief simple subscription (w/o exclusive & time conversion)
- * \param seq sequencer handle
  * \param myport the port id as sender
  * \param dest_client destination client id
  * \param dest_port destination port id
@@ -161,7 +159,6 @@ int snd_seq_connect_to(snd_seq_t *seq, int myport, int dest_client, int dest_por
 
 /**
  * \brief simple disconnection
- * \param seq sequencer handle
  * \param myport the port id as receiver
  * \param src_client sender client id
  * \param src_port sender port id
@@ -188,7 +185,6 @@ int snd_seq_disconnect_from(snd_seq_t *seq, int myport, int src_client, int src_
 
 /**
  * \brief simple disconnection
- * \param seq sequencer handle
  * \param myport the port id as sender
  * \param dest_client destination client id
  * \param dest_port destination port id
@@ -251,7 +247,8 @@ int snd_seq_set_client_event_filter(snd_seq_t *seq, int event_type)
 
 	if ((err = snd_seq_get_client_info(seq, &info)) < 0)
 		return err;
-	snd_seq_client_info_event_filter_add(&info, event_type);
+	info.filter |= SNDRV_SEQ_FILTER_USE_EVENT;
+	snd_seq_set_bit(event_type, info.event_filter);
 	return snd_seq_set_client_info(seq, &info);
 }
 
@@ -317,7 +314,7 @@ int snd_seq_set_client_pool_input(snd_seq_t *seq, size_t size)
  * \param seq sequencer handle
  * \return 0 on success or negative error code
  *
- * So far, this works identically like #snd_seq_drop_output().
+ * So far, this works ideically like #snd_seq_drop_output().
  */
 int snd_seq_reset_pool_output(snd_seq_t *seq)
 {
@@ -329,7 +326,7 @@ int snd_seq_reset_pool_output(snd_seq_t *seq)
  * \param seq sequencer handle
  * \return 0 on success or negative error code
  *
- * So far, this works identically like #snd_seq_drop_input().
+ * So far, this works ideically like #snd_seq_drop_input().
  */
 int snd_seq_reset_pool_input(snd_seq_t *seq)
 {
@@ -378,13 +375,9 @@ int snd_seq_sync_output_queue(snd_seq_t *seq)
  * \return 0 on success or negative error code
  *
  * This function parses the sequencer client and port numbers from the given string.
- * The client and port tokens are separated by either colon or period, e.g. 128:1.
+ * The client and port tokes are separated by either colon or period, e.g. 128:1.
  * When \a seq is not NULL, the function accepts also a client name not only
  * digit numbers.
- * Actually \a arg need to be only a prefix of the wanted client.
- * That is, if a client named "Foobar XXL Master 2012" with number 128 is available,
- * then parsing "Foobar" will return the address 128:0 if no other client is
- * an exact match.
  */
 int snd_seq_parse_address(snd_seq_t *seq, snd_seq_addr_t *addr, const char *arg)
 {
@@ -416,23 +409,12 @@ int snd_seq_parse_address(snd_seq_t *seq, snd_seq_addr_t *addr, const char *arg)
 			return -EINVAL;
 		if (len <= 0)
 			return -EINVAL;
-		client = -1;
 		cinfo.client = -1;
 		while (snd_seq_query_next_client(seq, &cinfo) >= 0) {
-			if (!strncmp(arg, cinfo.name, len)) {
-				if (strlen(cinfo.name) == (size_t)len) {
-					/* exact match */
-					addr->client = cinfo.client;
-					return 0;
-				}
-				if (client < 0)
-					client = cinfo.client;
+			if (! strncmp(arg, cinfo.name, len)) {
+				addr->client = cinfo.client;
+				return 0;
 			}
-		}
-		if (client >= 0) {
-			/* prefix match */
-			addr->client = client;
-			return 0;
 		}
 		return -ENOENT; /* not found */
 	}

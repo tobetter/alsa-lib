@@ -40,12 +40,10 @@
 const char *_snd_module_control_shm = "";
 #endif
 
-#ifndef DOC_HIDDEN
 typedef struct {
 	int socket;
 	volatile snd_ctl_shm_ctrl_t *ctrl;
 } snd_ctl_shm_t;
-#endif
 
 static int snd_ctl_shm_action(snd_ctl_t *ctl)
 {
@@ -397,7 +395,7 @@ static int snd_ctl_shm_read(snd_ctl_t *ctl, snd_ctl_event_t *event)
 	return err;
 }
 
-static const snd_ctl_ops_t snd_ctl_shm_ops = {
+snd_ctl_ops_t snd_ctl_shm_ops = {
 	.close = snd_ctl_shm_close,
 	.nonblock = snd_ctl_shm_nonblock,
 	.async = snd_ctl_shm_async,
@@ -440,6 +438,29 @@ static int make_local_socket(const char *filename)
 		return -errno;
 	return sock;
 }
+
+#if 0
+static int make_inet_socket(const char *host, int port)
+{
+	struct sockaddr_in addr;
+	int sock;
+	struct hostent *h = gethostbyname(host);
+	if (!h)
+		return -ENOENT;
+
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
+		return -errno;
+	
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	memcpy(&addr.sin_addr, h->h_addr_list[0], sizeof(struct in_addr));
+
+	if (connect(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0)
+		return -errno;
+	return sock;
+}
+#endif
 
 int snd_ctl_shm_open(snd_ctl_t **handlep, const char *name, const char *sockname, const char *sname, int mode)
 {
@@ -532,7 +553,8 @@ int snd_ctl_shm_open(snd_ctl_t **handlep, const char *name, const char *sockname
 	close(sock);
 	if (ctrl)
 		shmdt(ctrl);
-	free(shm);
+	if (shm)
+		free(shm);
 	return result;
 }
 
@@ -542,16 +564,21 @@ int _snd_ctl_shm_open(snd_ctl_t **handlep, char *name, snd_config_t *root, snd_c
 	const char *server = NULL;
 	const char *ctl_name = NULL;
 	snd_config_t *sconfig;
+	const char *host = NULL;
 	const char *sockname = NULL;
 	long port = -1;
 	int err;
-
+	int local;
+	struct hostent *h;
 	snd_config_for_each(i, next, conf) {
 		snd_config_t *n = snd_config_iterator_entry(i);
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (_snd_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
+			continue;
 		if (strcmp(id, "server") == 0) {
 			err = snd_config_get_string(n, &server);
 			if (err < 0) {
@@ -594,10 +621,16 @@ int _snd_ctl_shm_open(snd_ctl_t **handlep, char *name, snd_config_t *root, snd_c
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (_snd_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
 			continue;
-		if (strcmp(id, "host") == 0)
+		if (strcmp(id, "host") == 0) {
+			err = snd_config_get_string(n, &host);
+			if (err < 0) {
+				SNDERR("Invalid type for %s", id);
+				goto _err;
+			}
 			continue;
+		}
 		if (strcmp(id, "socket") == 0) {
 			err = snd_config_get_string(n, &sockname);
 			if (err < 0) {
@@ -619,8 +652,22 @@ int _snd_ctl_shm_open(snd_ctl_t **handlep, char *name, snd_config_t *root, snd_c
 		goto _err;
 	}
 
+	if (!host) {
+		SNDERR("host is not defined");
+		goto _err;
+	}
 	if (!sockname) {
 		SNDERR("socket is not defined");
+		goto _err;
+	}
+	h = gethostbyname(host);
+	if (!h) {
+		SNDERR("Cannot resolve %s", host);
+		goto _err;
+	}
+	local = snd_is_local(h);
+	if (!local) {
+		SNDERR("%s is not the local host", host);
 		goto _err;
 	}
 	err = snd_ctl_shm_open(handlep, name, sockname, ctl_name, mode);

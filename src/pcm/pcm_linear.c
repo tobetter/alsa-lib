@@ -30,8 +30,6 @@
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
-#include "plugin_ops.h"
-
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_linear = "";
@@ -107,7 +105,28 @@ int snd_pcm_linear_get_index(snd_pcm_format_t src_format, snd_pcm_format_t dst_f
 	}
 }
 
+int snd_pcm_linear_get32_index(snd_pcm_format_t src_format, snd_pcm_format_t dst_format)
+{
+	return snd_pcm_linear_get_index(src_format, dst_format);
+}
+
 int snd_pcm_linear_put_index(snd_pcm_format_t src_format, snd_pcm_format_t dst_format)
+{
+	int sign, width, endian;
+	sign = (snd_pcm_format_signed(src_format) != 
+		snd_pcm_format_signed(dst_format));
+	width = snd_pcm_format_width(dst_format) / 8 - 1;
+#ifdef SND_LITTLE_ENDIAN
+	endian = snd_pcm_format_big_endian(dst_format);
+#else
+	endian = snd_pcm_format_little_endian(dst_format);
+#endif
+	if (endian < 0)
+		endian = 0;
+	return width * 4 + endian * 2 + sign;
+}
+
+int snd_pcm_linear_put32_index(snd_pcm_format_t src_format, snd_pcm_format_t dst_format)
 {
 	int sign, width, pwidth, endian;
 	sign = (snd_pcm_format_signed(src_format) != 
@@ -285,7 +304,7 @@ static int snd_pcm_linear_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 				       snd_pcm_linear_hw_refine_cchange,
 				       snd_pcm_linear_hw_refine_sprepare,
 				       snd_pcm_linear_hw_refine_schange,
-				       snd_pcm_generic_hw_refine);
+				       snd_pcm_plugin_hw_refine_slave);
 }
 
 static int snd_pcm_linear_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
@@ -296,7 +315,7 @@ static int snd_pcm_linear_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 					  snd_pcm_linear_hw_refine_cchange,
 					  snd_pcm_linear_hw_refine_sprepare,
 					  snd_pcm_linear_hw_refine_schange,
-					  snd_pcm_generic_hw_params);
+					  snd_pcm_plugin_hw_params_slave);
 	if (err < 0)
 		return err;
 	err = INTERNAL(snd_pcm_hw_params_get_format)(params, &format);
@@ -306,11 +325,11 @@ static int snd_pcm_linear_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			      snd_pcm_format_physical_width(linear->sformat) == 24);
 	if (linear->use_getput) {
 		if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
-			linear->get_idx = snd_pcm_linear_get_index(format, SND_PCM_FORMAT_S32);
-			linear->put_idx = snd_pcm_linear_put_index(SND_PCM_FORMAT_S32, linear->sformat);
+			linear->get_idx = snd_pcm_linear_get32_index(format, SND_PCM_FORMAT_S32);
+			linear->put_idx = snd_pcm_linear_put32_index(SND_PCM_FORMAT_S32, linear->sformat);
 		} else {
-			linear->get_idx = snd_pcm_linear_get_index(linear->sformat, SND_PCM_FORMAT_S32);
-			linear->put_idx = snd_pcm_linear_put_index(SND_PCM_FORMAT_S32, format);
+			linear->get_idx = snd_pcm_linear_get32_index(linear->sformat, SND_PCM_FORMAT_S32);
+			linear->put_idx = snd_pcm_linear_put32_index(SND_PCM_FORMAT_S32, format);
 		}
 	} else {
 		if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
@@ -383,25 +402,23 @@ static void snd_pcm_linear_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(linear->plug.gen.slave, out);
+	snd_pcm_dump(linear->plug.slave, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_linear_ops = {
-	.close = snd_pcm_generic_close,
-	.info = snd_pcm_generic_info,
+static snd_pcm_ops_t snd_pcm_linear_ops = {
+	.close = snd_pcm_plugin_close,
+	.info = snd_pcm_plugin_info,
 	.hw_refine = snd_pcm_linear_hw_refine,
 	.hw_params = snd_pcm_linear_hw_params,
-	.hw_free = snd_pcm_generic_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
-	.channel_info = snd_pcm_generic_channel_info,
+	.hw_free = snd_pcm_plugin_hw_free,
+	.sw_params = snd_pcm_plugin_sw_params,
+	.channel_info = snd_pcm_plugin_channel_info,
 	.dump = snd_pcm_linear_dump,
-	.nonblock = snd_pcm_generic_nonblock,
-	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_generic_mmap,
-	.munmap = snd_pcm_generic_munmap,
-	.query_chmaps = snd_pcm_generic_query_chmaps,
-	.get_chmap = snd_pcm_generic_get_chmap,
-	.set_chmap = snd_pcm_generic_set_chmap,
+	.nonblock = snd_pcm_plugin_nonblock,
+	.async = snd_pcm_plugin_async,
+	.poll_revents = snd_pcm_plugin_poll_revents,
+	.mmap = snd_pcm_plugin_mmap,
+	.munmap = snd_pcm_plugin_munmap,
 };
 
 
@@ -435,8 +452,8 @@ int snd_pcm_linear_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sfo
 	linear->plug.write = snd_pcm_linear_write_areas;
 	linear->plug.undo_read = snd_pcm_plugin_undo_read_generic;
 	linear->plug.undo_write = snd_pcm_plugin_undo_write_generic;
-	linear->plug.gen.slave = slave;
-	linear->plug.gen.close_slave = close_slave;
+	linear->plug.slave = slave;
+	linear->plug.close_slave = close_slave;
 
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_LINEAR, name, slave->stream, slave->mode);
 	if (err < 0) {
@@ -448,7 +465,6 @@ int snd_pcm_linear_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sfo
 	pcm->private_data = linear;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
-	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_set_hw_ptr(pcm, &linear->plug.hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &linear->plug.appl_ptr, -1, 0);
 	*pcmp = pcm;
@@ -535,7 +551,7 @@ int _snd_pcm_linear_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("slave format is not linear");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

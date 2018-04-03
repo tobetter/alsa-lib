@@ -1,3 +1,4 @@
+SUBDIRS=control mixer ordinary_mixer pcm ordinary_pcm rawmidi timer hwdep seq instr compat conf alisp
 EXTRA_DIST=Versions
 COMPATNUM=@LIBTOOL_VERSION_INFO@
 
@@ -7,53 +8,17 @@ else
 VSYMS =
 endif
 
-if SYMBOLIC_FUNCTIONS
-SYMFUNCS = -Wl,-Bsymbolic-functions
-else
-SYMFUNCS =
-endif
-
 lib_LTLIBRARIES = libasound.la
-libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c names.c
+libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c
+libasound_la_LIBADD = control/libcontrol.la \
+		      mixer/libmixer.la ordinary_mixer/libordinarymixer.la \
+		      pcm/libpcm.la ordinary_pcm/libordinarypcm.la \
+                      rawmidi/librawmidi.la timer/libtimer.la \
+		      hwdep/libhwdep.la seq/libseq.la instr/libinstr.la \
+		      compat/libcompat.la alisp/libalisp.la -lm -ldl -lpthread
 
-SUBDIRS=control
-libasound_la_LIBADD = control/libcontrol.la
-if BUILD_MIXER
-SUBDIRS += mixer
-libasound_la_LIBADD += mixer/libmixer.la
-endif
-if BUILD_PCM
-SUBDIRS += pcm timer
-libasound_la_LIBADD += pcm/libpcm.la timer/libtimer.la
-endif
-if BUILD_RAWMIDI
-SUBDIRS += rawmidi
-libasound_la_LIBADD += rawmidi/librawmidi.la
-endif
-if BUILD_HWDEP
-SUBDIRS += hwdep
-libasound_la_LIBADD += hwdep/libhwdep.la
-endif
-if BUILD_SEQ
-SUBDIRS += seq
-libasound_la_LIBADD += seq/libseq.la
-endif
-if BUILD_UCM
-SUBDIRS += ucm
-libasound_la_LIBADD += ucm/libucm.la
-endif
-if BUILD_TOPOLOGY
-SUBDIRS += topology
-libasound_la_LIBADD += topology/libtopology.la
-endif
-if BUILD_ALISP
-SUBDIRS += alisp
-libasound_la_LIBADD += alisp/libalisp.la
-endif
-SUBDIRS += conf
-libasound_la_LIBADD += @ALSA_DEPLIBS@
-
-libasound_la_LDFLAGS = -version-info $(COMPATNUM) $(VSYMS) $(SYMFUNCS) $(LDFLAGS_NOUNDEFINED)
+libasound_la_LDFLAGS = -version-info $(COMPATNUM)
+AM_LDFLAGS = $(VSYMS)
 
 control/libcontrol.la:
 	$(MAKE) -C control libcontrol.la
@@ -82,16 +47,13 @@ hwdep/libhwdep.la:
 seq/libseq.la:
 	$(MAKE) -C seq libseq.la
 
-ucm/libucm.la:
-	$(MAKE) -C ucm libucm.la
-
-topology/libtopology.la:
-	$(MAKE) -C topology libtopology.la
-
 instr/libinstr.la:
 	$(MAKE) -C instr libinstr.la
+
+compat/libcompat.la:
+	$(MAKE) -C compat libcompat.la
 
 alisp/libalisp.la:
 	$(MAKE) -C alisp libalisp.la
 
-AM_CPPFLAGS=-I$(top_srcdir)/include
+INCLUDES=-I$(top_srcdir)/include

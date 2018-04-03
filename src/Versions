@@ -1,16 +1,8 @@
 ALSA_0.9 {
   global:
+    __snd_*;
+    _snd_*;
     snd_*;
-
-    _snd_*_open;
-    _snd_*_dlsym_*;
-    _snd_*_poll_descriptor;
-    _snd_pcm_hook_*;
-
-    __snd_pcm_hw_params_*;
-    __snd_pcm_sw_params_*;
-    __snd_*_dlsym_*;
-
   local:
     *;
 };
@@ -123,9 +115,48 @@ ALSA_0.9.5 {
     alsa_lisp;
 } ALSA_0.9.3;
 
+ALSA_0.9.6 {
+  global:
+
+    snd_hctl_open_ctl;
+    snd_seq_port_info_get_timestamping;
+    snd_seq_port_info_get_timestamp_real;
+    snd_seq_port_info_get_timestamp_queue;
+    snd_seq_port_info_set_timestamping;
+    snd_seq_port_info_set_timestamp_real;
+    snd_seq_port_info_set_timestamp_queue;
+} ALSA_0.9.5;
+
 ALSA_0.9.7 {
   global:
 
+    snd_user_file;
+    snd_hctl_ctl;
+    sndo_*;
     alsa_lisp_*;
-} ALSA_0.9.5;
+} ALSA_0.9.6;
 
+ALSA_0.9.8 {
+  global:
+
+    snd_ctl_elem_add;
+    snd_ctl_elem_replace;
+    snd_ctl_elem_remove;
+    snd_hctl_poll_descriptors_revents;
+} ALSA_0.9.7;
+
+ALSA_1.0.4 {
+  global:
+
+    snd_spcm_init;
+    snd_spcm_init_duplex;
+    snd_spcm_init_get_params;
+} ALSA_0.9.8;
+
+ALSA_1.0.5 {
+  global:
+
+    snd_asoundlib_version;
+    snd_timer_params_set_early_event;
+    snd_timer_params_get_early_event;
+} ALSA_1.0.4;

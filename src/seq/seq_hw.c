@@ -1,6 +1,6 @@
 /*
  *  Sequencer Interface - main file
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *                        Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -29,27 +29,23 @@
 const char *_snd_module_seq_hw = "";
 #endif
 
-#ifndef DOC_HIDDEN
-#define SNDRV_FILE_SEQ		ALSA_DEVICE_DIRECTORY "seq"
-#define SNDRV_FILE_ALOADSEQ	ALOAD_DEVICE_DIRECTORY "aloadSEQ"
+#define SNDRV_FILE_SEQ		"/dev/snd/seq"
+#define SNDRV_FILE_ALOADSEQ	"/dev/aloadSEQ"
 #define SNDRV_SEQ_VERSION_MAX	SNDRV_PROTOCOL_VERSION(1, 0, 1)
 
 typedef struct {
 	int fd;
 } snd_seq_hw_t;
-#endif /* DOC_HIDDEN */
 
 static int snd_seq_hw_close(snd_seq_t *seq)
 {
 	snd_seq_hw_t *hw = seq->private_data;
-	int err = 0;
-
 	if (close(hw->fd)) {
-		err = -errno;
 		SYSERR("close failed\n");
+		return -errno;
 	}
 	free(hw);
-	return err;
+	return 0;
 }
 
 static int snd_seq_hw_nonblock(snd_seq_t *seq, int nonblock)
@@ -381,7 +377,7 @@ static int snd_seq_hw_query_next_port(snd_seq_t *seq, snd_seq_port_info_t *info)
 	return 0;
 }
 
-static const snd_seq_ops_t snd_seq_hw_ops = {
+snd_seq_ops_t snd_seq_hw_ops = {
 	.close = snd_seq_hw_close,
 	.nonblock = snd_seq_hw_nonblock,
 	.system_info = snd_seq_hw_system_info,
@@ -419,7 +415,7 @@ static const snd_seq_ops_t snd_seq_hw_ops = {
 int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 {
 	int fd, ver, client, fmode, ret;
-	const char *filename;
+	char filename[32];
 	snd_seq_t *seq;
 	snd_seq_hw_t *hw;
 
@@ -443,20 +439,25 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 	if (mode & SND_SEQ_NONBLOCK)
 		fmode |= O_NONBLOCK;
 
-	filename = SNDRV_FILE_SEQ;
-	fd = snd_open_device(filename, fmode);
-#ifdef SUPPORT_ALOAD
-	if (fd < 0) {
-		fd = snd_open_device(SNDRV_FILE_ALOADSEQ, fmode);
-		if (fd >= 0)
-			close(fd);
-		fd = snd_open_device(filename, fmode);
+	sprintf(filename, SNDRV_FILE_SEQ);
+	if ((fd = open(filename, fmode)) < 0) {
+		close(open(SNDRV_FILE_ALOADSEQ, O_RDWR));
+		if ((fd = open(filename, fmode)) < 0) {
+			SYSERR("open %s failed", filename);
+			return -errno;
+		}
+	}
+#if 0
+	/*
+         * this is bogus, an application have to care about open filedescriptors
+	 */                          
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+		SYSERR("fcntl FD_CLOEXEC failed");
+		ret = -errno;
+		close(fd);
+		return ret;
 	}
 #endif
-	if (fd < 0) {
-		SYSERR("open %s failed", filename);
-		return -errno;
-	}
 	if (ioctl(fd, SNDRV_SEQ_IOCTL_PVERSION, &ver) < 0) {
 		SYSERR("SNDRV_SEQ_IOCTL_PVERSION failed");
 		ret = -errno;
@@ -492,7 +493,7 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 	if (streams & SND_SEQ_OPEN_INPUT) {
 		seq->ibuf = (snd_seq_event_t *) calloc(sizeof(snd_seq_event_t), seq->ibufsize = SND_SEQ_IBUF_SIZE);
 		if (!seq->ibuf) {
-			free(seq->obuf);
+			free(seq->ibuf);
 			free(hw);
 			free(seq);
 			close(fd);
@@ -518,7 +519,7 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 
 #ifdef SNDRV_SEQ_IOCTL_RUNNING_MODE
 	{
-		struct snd_seq_running_info run_mode;
+		struct sndrv_seq_running_info run_mode;
 		/* check running mode */
 		memset(&run_mode, 0, sizeof(run_mode));
 		run_mode.client = client;
@@ -546,7 +547,9 @@ int _snd_seq_hw_open(snd_seq_t **handlep, char *name,
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (_snd_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
 			continue;
 		return -EINVAL;
 	}

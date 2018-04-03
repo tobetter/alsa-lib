@@ -1,8 +1,8 @@
 /**
- * \file include/pcm_plugin.h
+ * \file <alsa/pcm_plugin.h>
  * \brief Common PCM plugin code
  * \author Abramo Bagnara <abramo@alsa-project.org>
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2000-2001
  *
  * Application interface library for the ALSA driver.
@@ -11,8 +11,8 @@
  * \warning Using of contents of this header file might be dangerous
  *	    in the sense of compatibility reasons. The contents might be
  *	    freely changed in future.
- */
-/*
+ *
+ *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -157,7 +157,6 @@ int _snd_pcm_route_open(snd_pcm_t **pcmp, const char *name,
  */
 int snd_pcm_rate_open(snd_pcm_t **pcmp, const char *name,
 		      snd_pcm_format_t sformat, unsigned int srate,
-		      const snd_config_t *converter,
 		      snd_pcm_t *slave, int close_slave);
 int _snd_pcm_rate_open(snd_pcm_t **pcmp, const char *name,
 		       snd_config_t *root, snd_config_t *conf,
@@ -177,7 +176,6 @@ int _snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name,
  */
 int snd_pcm_ladspa_open(snd_pcm_t **pcmp, const char *name,
 			const char *ladspa_path,
-			unsigned int channels,
 			snd_config_t *ladspa_pplugins,
 			snd_config_t *ladspa_cplugins,
 			snd_pcm_t *slave, int close_slave);

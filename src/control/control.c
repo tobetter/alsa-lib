@@ -42,12 +42,12 @@ and IEC958 structure.
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <dlfcn.h>
 #include <sys/poll.h>
 #include "control_local.h"
 
@@ -94,8 +94,10 @@ int snd_ctl_close(snd_ctl_t *ctl)
 		snd_async_del_handler(h);
 	}
 	err = ctl->ops->close(ctl);
-	free(ctl->name);
-	snd_dlobj_cache_put(ctl->open_func);
+	if (ctl->name)
+		free(ctl->name);
+	if (ctl->dl_handle)
+		snd_dlclose(ctl->dl_handle);
 	free(ctl);
 	return err;
 }
@@ -103,7 +105,7 @@ int snd_ctl_close(snd_ctl_t *ctl)
 /**
  * \brief set nonblock mode
  * \param ctl CTL handle
- * \param nonblock 0 = block, 1 = nonblock mode, 2 = abort
+ * \param nonblock 0 = block, 1 = nonblock mode
  * \return 0 on success otherwise a negative error code
  */
 int snd_ctl_nonblock(snd_ctl_t *ctl, int nonblock)
@@ -161,10 +163,6 @@ int snd_ctl_async(snd_ctl_t *ctl, int sig, pid_t pid)
 int snd_ctl_poll_descriptors_count(snd_ctl_t *ctl)
 {
 	assert(ctl);
-	if (ctl->ops->poll_descriptors_count)
-		return ctl->ops->poll_descriptors_count(ctl);
-	if (ctl->poll_fd < 0)
-		return 0;
 	return 1;
 }
 
@@ -178,10 +176,6 @@ int snd_ctl_poll_descriptors_count(snd_ctl_t *ctl)
 int snd_ctl_poll_descriptors(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int space)
 {
 	assert(ctl && pfds);
-	if (ctl->ops->poll_descriptors)
-		return ctl->ops->poll_descriptors(ctl, pfds, space);
-	if (ctl->poll_fd < 0)
-		return 0;
 	if (space > 0) {
 		pfds->fd = ctl->poll_fd;
 		pfds->events = POLLIN|POLLERR|POLLNVAL;
@@ -201,8 +195,6 @@ int snd_ctl_poll_descriptors(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int s
 int snd_ctl_poll_descriptors_revents(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
 {
 	assert(ctl && pfds && revents);
-	if (ctl->ops->poll_revents)
-		return ctl->ops->poll_revents(ctl, pfds, nfds, revents);
 	if (nfds == 1) {
 		*revents = pfds->revents;
                 return 0;
@@ -211,9 +203,9 @@ int snd_ctl_poll_descriptors_revents(snd_ctl_t *ctl, struct pollfd *pfds, unsign
 }
 
 /**
- * \brief Ask to be informed about events (poll, #snd_async_add_ctl_handler, #snd_ctl_read)
+ * \brief Ask to be informed about events (poll, #snd_ctl_async, #snd_ctl_read)
  * \param ctl CTL handle
- * \param subscribe 0 = unsubscribe, 1 = subscribe, -1 = check subscribe or not
+ * \param subscribe 0 = unsubscribe, 1 = subscribe
  * \return 0 on success otherwise a negative error code
  */
 int snd_ctl_subscribe_events(snd_ctl_t *ctl, int subscribe)
@@ -261,190 +253,31 @@ int snd_ctl_elem_info(snd_ctl_t *ctl, snd_ctl_elem_info_t *info)
 }
 
 /**
- * \brief Create and add an user INTEGER CTL element
+ * \brief Create and add an user CTL element
  * \param ctl CTL handle
- * \param id CTL element id to add
- * \param count number of elements
- * \param min minimum value
- * \param max maximum value
- * \param step value step
+ * \param info CTL element info
  * \return 0 on success otherwise a negative error code
+ *
+ * Note that the new element is locked!
  */
-int snd_ctl_elem_add_integer(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			     unsigned int count, long min, long max, long step)
+int snd_ctl_elem_add(snd_ctl_t *ctl, snd_ctl_elem_info_t *info)
 {
-	snd_ctl_elem_info_t *info;
-	snd_ctl_elem_value_t *val;
-	unsigned int i;
-	int err;
-
-	assert(ctl && id && id->name[0]);
-	snd_ctl_elem_info_alloca(&info);
-	info->id = *id;
-	info->type = SND_CTL_ELEM_TYPE_INTEGER;
-	info->access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
-		SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE;
-	info->count = count;
-	info->value.integer.min = min;
-	info->value.integer.max = max;
-	info->value.integer.step = step;
-	err = ctl->ops->element_add(ctl, info);
-	if (err < 0)
-		return err;
-	snd_ctl_elem_value_alloca(&val);
-	val->id = *id;
-	for (i = 0; i < count; i++)
-		val->value.integer.value[i] = min;
-	err = ctl->ops->element_write(ctl, val);
-	return err;
-}
-
-/**
- * \brief Create and add an user INTEGER64 CTL element
- * \param ctl CTL handle
- * \param id CTL element id to add
- * \param count number of elements
- * \param min minimum value
- * \param max maximum value
- * \param step value step
- * \return 0 on success otherwise a negative error code
- */
-int snd_ctl_elem_add_integer64(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			       unsigned int count, long long min, long long max,
-			       long long step)
-{
-	snd_ctl_elem_info_t *info;
-	snd_ctl_elem_value_t *val;
-	unsigned int i;
-	int err;
-
-	assert(ctl && id && id->name[0]);
-	snd_ctl_elem_info_alloca(&info);
-	info->id = *id;
-	info->type = SND_CTL_ELEM_TYPE_INTEGER64;
-	info->count = count;
-	info->value.integer64.min = min;
-	info->value.integer64.max = max;
-	info->value.integer64.step = step;
-	err = ctl->ops->element_add(ctl, info);
-	if (err < 0)
-		return err;
-	snd_ctl_elem_value_alloca(&val);
-	val->id = *id;
-	for (i = 0; i < count; i++)
-		val->value.integer64.value[i] = min;
-	err = ctl->ops->element_write(ctl, val);
-	return err;
-}
-
-/**
- * \brief Create and add an user BOOLEAN CTL element
- * \param ctl CTL handle
- * \param id CTL element id to add
- * \param count number of elements
- * \return 0 on success otherwise a negative error code
- */
-int snd_ctl_elem_add_boolean(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			     unsigned int count)
-{
-	snd_ctl_elem_info_t *info;
-
-	assert(ctl && id && id->name[0]);
-	snd_ctl_elem_info_alloca(&info);
-	info->id = *id;
-	info->type = SND_CTL_ELEM_TYPE_BOOLEAN;
-	info->count = count;
-	info->value.integer.min = 0;
-	info->value.integer.max = 1;
+	assert(ctl && info && info->id.name[0]);
 	return ctl->ops->element_add(ctl, info);
 }
 
 /**
- * \brief Create and add a user-defined control element of type enumerated.
- * \param[in] ctl Control device handle.
- * \param[in] id ID of the new control element.
- * \param[in] count Number of element values.
- * \param[in] items Range of possible values (0 ... \a items - 1).
- * \param[in] names An array containing \a items strings.
- * \return Zero on success, otherwise a negative error code.
- *
- * This function creates a user element, i.e., a control element that is not
- * controlled by the control device's driver but that is just stored together
- * with the other elements of \a ctl.
- *
- * The fields of \a id, except numid, must be set to unique values that
- * identify the new element.
- *
- * The new element is locked; its value is initialized as zero.
- *
- * \par Errors:
- * <dl>
- * <dt>-EBUSY<dd>A control element with ID \a id already exists.
- * <dt>-EINVAL<dd>\a count is not at least one or greater than 128, or \a items
- * 	is not at least one, or a string in \a names is empty or longer than 63
- * 	bytes, or the strings in \a names require more than 64 KB storage.
- * <dt>-ENOMEM<dd>Out of memory, or there are too many user control elements.
- * <dt>-ENXIO<dd>This driver does not support (enumerated) user controls.
- * <dt>-ENODEV<dd>Device unplugged.
- * </dl>
- *
- * \par Compatibility:
- * snd_ctl_elem_add_enumerated() was introduced in ALSA 1.0.25.
- */
-int snd_ctl_elem_add_enumerated(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-				unsigned int count, unsigned int items,
-				const char *const names[])
-{
-	snd_ctl_elem_info_t *info;
-	unsigned int i, bytes;
-	char *buf, *p;
-	int err;
-
-	assert(ctl && id && id->name[0] && names);
-
-	snd_ctl_elem_info_alloca(&info);
-	info->id = *id;
-	info->type = SND_CTL_ELEM_TYPE_ENUMERATED;
-	info->count = count;
-	info->value.enumerated.items = items;
-
-	bytes = 0;
-	for (i = 0; i < items; ++i)
-		bytes += strlen(names[i]) + 1;
-	buf = malloc(bytes);
-	if (!buf)
-		return -ENOMEM;
-	info->value.enumerated.names_ptr = (uintptr_t)buf;
-	info->value.enumerated.names_length = bytes;
-	p = buf;
-	for (i = 0; i < items; ++i) {
-		strcpy(p, names[i]);
-		p += strlen(names[i]) + 1;
-	}
-
-	err = ctl->ops->element_add(ctl, info);
-
-	free(buf);
-
-	return err;
-}
-
-/**
- * \brief Create and add an user IEC958 CTL element
+ * \brief Replace an user CTL element
  * \param ctl CTL handle
- * \param id CTL element info to add
+ * \param info CTL element info
  * \return 0 on success otherwise a negative error code
+ *
+ * Note that the new element is locked!
  */
-int snd_ctl_elem_add_iec958(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id)
+int snd_ctl_elem_replace(snd_ctl_t *ctl, snd_ctl_elem_info_t *info)
 {
-	snd_ctl_elem_info_t *info;
-
-	assert(ctl && id && id->name[0]);
-	snd_ctl_elem_info_alloca(&info);
-	info->id = *id;
-	info->type = SND_CTL_ELEM_TYPE_IEC958;
-	info->count = 1;
-	return ctl->ops->element_add(ctl, info);
+	assert(ctl && info && info->id.name[0]);
+	return ctl->ops->element_replace(ctl, info);
 }
 
 /**
@@ -452,6 +285,8 @@ int snd_ctl_elem_add_iec958(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id)
  * \param ctl CTL handle
  * \param id CTL element identification
  * \return 0 on success otherwise a negative error code
+ *
+ * Note that the new element is locked!
  */
 int snd_ctl_elem_remove(snd_ctl_t *ctl, snd_ctl_elem_id_t *id)
 {
@@ -475,9 +310,7 @@ int snd_ctl_elem_read(snd_ctl_t *ctl, snd_ctl_elem_value_t *control)
  * \brief Set CTL element value
  * \param ctl CTL handle
  * \param control CTL element id/value pointer
- * \retval 0 on success
- * \retval >0 on success when value was changed
- * \retval <0 a negative error code
+ * \return 0 on success otherwise a negative error code
  */
 int snd_ctl_elem_write(snd_ctl_t *ctl, snd_ctl_elem_value_t *control)
 {
@@ -485,100 +318,10 @@ int snd_ctl_elem_write(snd_ctl_t *ctl, snd_ctl_elem_value_t *control)
 	return ctl->ops->element_write(ctl, control);
 }
 
-static int snd_ctl_tlv_do(snd_ctl_t *ctl, int op_flag,
-			  const snd_ctl_elem_id_t *id,
-		          unsigned int *tlv, unsigned int tlv_size)
-{
-	snd_ctl_elem_info_t *info = NULL;
-	int err;
-
-	if (id->numid == 0) {
-		info = calloc(1, sizeof(*info));
-		if (info == NULL)
-			return -ENOMEM;
-		info->id = *id;
-		id = &info->id;
-		err = snd_ctl_elem_info(ctl, info);
-		if (err < 0)
-			goto __err;
-		if (id->numid == 0) {
-			err = -ENOENT;
-			goto __err;
-		}
-	}
-	err = ctl->ops->element_tlv(ctl, op_flag, id->numid, tlv, tlv_size);
-      __err:
-      	if (info)
-      		free(info);
-	return err;
-}
-
-
-
-/**
- * \brief Get CTL element TLV value
- * \param ctl CTL handle
- * \param id CTL element id pointer
- * \param tlv TLV array pointer to store 
- * \param tlv_size TLV array size in bytes
- * \return 0 on success otherwise a negative error code
- */
-int snd_ctl_elem_tlv_read(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			  unsigned int *tlv, unsigned int tlv_size)
-{
-	int err;
-	assert(ctl && id && (id->name[0] || id->numid) && tlv);
-	if (tlv_size < 2 * sizeof(int))
-		return -EINVAL;
-	/* 1.0.12 driver doesn't return the error even if the user TLV
-	 * is empty.  So, initialize TLV here with an invalid type
-	 * and compare the returned value after ioctl for checking
-	 * the validity of TLV.
-	 */
-	tlv[0] = -1;
-	tlv[1] = 0;
-	err = snd_ctl_tlv_do(ctl, 0, id, tlv, tlv_size);
-	if (err >= 0 && tlv[0] == (unsigned int)-1)
-		err = -ENXIO;
-	return err;
-}
-
-/**
- * \brief Set CTL element TLV value
- * \param ctl CTL handle
- * \param id CTL element id pointer
- * \param tlv TLV array pointer to store 
- * \retval 0 on success
- * \retval >0 on success when value was changed
- * \retval <0 a negative error code
- */
-int snd_ctl_elem_tlv_write(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			   const unsigned int *tlv)
-{
-	assert(ctl && id && (id->name[0] || id->numid) && tlv);
-	return snd_ctl_tlv_do(ctl, 1, id, (unsigned int *)tlv, tlv[1] + 2 * sizeof(unsigned int));
-}
-
-/**
- * \brief Process CTL element TLV command
- * \param ctl CTL handle
- * \param id CTL element id pointer
- * \param tlv TLV array pointer to process
- * \retval 0 on success
- * \retval >0 on success when value was changed
- * \retval <0 a negative error code
- */
-int snd_ctl_elem_tlv_command(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			     const unsigned int *tlv)
-{
-	assert(ctl && id && (id->name[0] || id->numid) && tlv);
-	return snd_ctl_tlv_do(ctl, -1, id, (unsigned int *)tlv, tlv[1] + 2 * sizeof(unsigned int));
-}
-
 /**
  * \brief Lock CTL element
  * \param ctl CTL handle
- * \param id CTL element id pointer
+ * \param control CTL element id pointer
  * \return 0 on success otherwise a negative error code
  */
 int snd_ctl_elem_lock(snd_ctl_t *ctl, snd_ctl_elem_id_t *id)
@@ -590,7 +333,7 @@ int snd_ctl_elem_lock(snd_ctl_t *ctl, snd_ctl_elem_id_t *id)
 /**
  * \brief Unlock CTL element
  * \param ctl CTL handle
- * \param id CTL element id pointer
+ * \param control CTL element id pointer
  * \return 0 on success otherwise a negative error code
  */
 int snd_ctl_elem_unlock(snd_ctl_t *ctl, snd_ctl_elem_id_t *id)
@@ -732,7 +475,7 @@ int snd_ctl_get_power_state(snd_ctl_t *ctl, unsigned int *state)
 int snd_ctl_read(snd_ctl_t *ctl, snd_ctl_event_t *event)
 {
 	assert(ctl && event);
-	return (ctl->ops->read)(ctl, event);
+	return ctl->ops->read(ctl, event);
 }
 
 /**
@@ -743,37 +486,14 @@ int snd_ctl_read(snd_ctl_t *ctl, snd_ctl_event_t *event)
  */
 int snd_ctl_wait(snd_ctl_t *ctl, int timeout)
 {
-	struct pollfd *pfd;
-	unsigned short revents;
-	int npfds, err, err_poll;
-
-	npfds = snd_ctl_poll_descriptors_count(ctl);
-	if (npfds <= 0 || npfds >= 16) {
-		SNDERR("Invalid poll_fds %d\n", npfds);
-		return -EIO;
-	}
-	pfd = alloca(sizeof(*pfd) * npfds);
-	err = snd_ctl_poll_descriptors(ctl, pfd, npfds);
+	struct pollfd pfd;
+	int err;
+	err = snd_ctl_poll_descriptors(ctl, &pfd, 1);
+	assert(err == 1);
+	err = poll(&pfd, 1, timeout);
 	if (err < 0)
-		return err;
-	if (err != npfds) {
-		SNDMSG("invalid poll descriptors %d\n", err);
-		return -EIO;
-	}
-	for (;;) {
-		err_poll = poll(pfd, npfds, timeout);
-		if (err_poll < 0)
-			return -errno;
-		if (! err_poll)
-			return 0;
-		err = snd_ctl_poll_descriptors_revents(ctl, pfd, npfds, &revents);
-		if (err < 0)
-			return err;
-		if (revents & (POLLERR | POLLNVAL))
-			return -EIO;
-		if (revents & (POLLIN | POLLOUT))
-			return 1;
-	}
+		return -errno;
+	return 0;
 }
 
 /**
@@ -820,15 +540,11 @@ snd_ctl_t *snd_async_handler_get_ctl(snd_async_handler_t *handler)
 	return handler->u.ctl;
 }
 
-static const char *const build_in_ctls[] = {
-	"hw", "shm", NULL
-};
-
 static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 			     snd_config_t *ctl_root, snd_config_t *ctl_conf, int mode)
 {
 	const char *str;
-	char *buf = NULL, *buf1 = NULL;
+	char buf[256];
 	int err;
 	snd_config_t *conf, *type_conf = NULL;
 	snd_config_iterator_t i, next;
@@ -838,6 +554,7 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 #ifndef PIC
 	extern void *snd_control_open_symbols(void);
 #endif
+	void *h = NULL;
 	if (snd_config_get_type(ctl_conf) != SND_CONFIG_TYPE_COMPOUND) {
 		if (name)
 			SNDERR("Invalid type for CTL %s definition", name);
@@ -864,7 +581,6 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 	if (err >= 0) {
 		if (snd_config_get_type(type_conf) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for CTL type %s definition", str);
-			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, type_conf) {
@@ -896,52 +612,36 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 		}
 	}
 	if (!open_name) {
-		buf = malloc(strlen(str) + 32);
-		if (buf == NULL) {
-			err = -ENOMEM;
-			goto _err;
-		}
 		open_name = buf;
-		sprintf(buf, "_snd_ctl_%s_open", str);
-	}
-	if (!lib) {
-		const char *const *build_in = build_in_ctls;
-		while (*build_in) {
-			if (!strcmp(*build_in, str))
-				break;
-			build_in++;
-		}
-		if (*build_in == NULL) {
-			buf1 = malloc(strlen(str) + sizeof(ALSA_PLUGIN_DIR) + 32);
-			if (buf1 == NULL) {
-				err = -ENOMEM;
-				goto _err;
-			}
-			lib = buf1;
-			sprintf(buf1, "%s/libasound_module_ctl_%s.so", ALSA_PLUGIN_DIR, str);
-		}
+		snprintf(buf, sizeof(buf), "_snd_ctl_%s_open", str);
 	}
 #ifndef PIC
 	snd_control_open_symbols();
 #endif
-	open_func = snd_dlobj_cache_get(lib, open_name,
-			SND_DLSYM_VERSION(SND_CONTROL_DLSYM_VERSION), 1);
-	if (open_func) {
-		err = open_func(ctlp, name, ctl_root, ctl_conf, mode);
-		if (err >= 0) {
-			(*ctlp)->open_func = open_func;
-			err = 0;
-		} else {
-			snd_dlobj_cache_put(open_func);
-		}
-	} else {
+	h = snd_dlopen(lib, RTLD_NOW);
+	if (h)
+		open_func = snd_dlsym(h, open_name, SND_DLSYM_VERSION(SND_CONTROL_DLSYM_VERSION));
+	err = 0;
+	if (!h) {
+		SNDERR("Cannot open shared library %s", lib);
+		err = -ENOENT;
+	} if (!open_func) {
+		SNDERR("symbol %s is not defined inside %s", open_name, lib);
+		snd_dlclose(h);
 		err = -ENXIO;
 	}
        _err:
 	if (type_conf)
 		snd_config_delete(type_conf);
-	free(buf);
-	free(buf1);
+	if (err >= 0) {
+		err = open_func(ctlp, name, ctl_root, ctl_conf, mode);
+		if (err >= 0) {
+			(*ctlp)->dl_handle = h;
+			return 0;
+		} else {
+			snd_dlclose(h);
+		}
+	}
 	return err;
 }
 
@@ -991,35 +691,12 @@ int snd_ctl_open_lconf(snd_ctl_t **ctlp, const char *name,
 	return snd_ctl_open_noupdate(ctlp, lconf, name, mode);
 }
 
-/**
- * \brief Opens a fallback CTL
- * \param ctlp Returned CTL handle
- * \param root Configuration root
- * \param name ASCII identifier of the CTL handle used as fallback
- * \param orig_name The original ASCII name
- * \param mode Open mode (see #SND_CTL_NONBLOCK, #SND_CTL_ASYNC)
- * \return 0 on success otherwise a negative error code
- */
-int snd_ctl_open_fallback(snd_ctl_t **ctlp, snd_config_t *root,
-			  const char *name, const char *orig_name, int mode)
-{
-	int err;
-	assert(ctlp && name && root);
-	err = snd_ctl_open_noupdate(ctlp, root, name, mode);
-	if (err >= 0) {
-		free((*ctlp)->name);
-		(*ctlp)->name = orig_name ? strdup(orig_name) : NULL;
-	}
-	return err;
-}
-
 #ifndef DOC_HIDDEN
 #define TYPE(v) [SND_CTL_ELEM_TYPE_##v] = #v
 #define IFACE(v) [SND_CTL_ELEM_IFACE_##v] = #v
-#define IFACE1(v, n) [SND_CTL_ELEM_IFACE_##v] = #n
 #define EVENT(v) [SND_CTL_EVENT_##v] = #v
 
-static const char *const snd_ctl_elem_type_names[] = {
+static const char *snd_ctl_elem_type_names[] = {
 	TYPE(NONE),
 	TYPE(BOOLEAN),
 	TYPE(INTEGER),
@@ -1029,7 +706,7 @@ static const char *const snd_ctl_elem_type_names[] = {
 	TYPE(INTEGER64),
 };
 
-static const char *const snd_ctl_elem_iface_names[] = {
+static const char *snd_ctl_elem_iface_names[] = {
 	IFACE(CARD),
 	IFACE(HWDEP),
 	IFACE(MIXER),
@@ -1039,7 +716,7 @@ static const char *const snd_ctl_elem_iface_names[] = {
 	IFACE(SEQUENCER),
 };
 
-static const char *const snd_ctl_event_type_names[] = {
+static const char *snd_ctl_event_type_names[] = {
 	EVENT(ELEM),
 };
 #endif
@@ -1085,7 +762,8 @@ const char *snd_ctl_event_type_name(snd_ctl_event_type_t type)
  */
 int snd_ctl_elem_list_alloc_space(snd_ctl_elem_list_t *obj, unsigned int entries)
 {
-	free(obj->pids);
+	if (obj->pids)
+		free(obj->pids);
 	obj->pids = calloc(entries, sizeof(*obj->pids));
 	if (!obj->pids) {
 		obj->space = 0;
@@ -1187,7 +865,7 @@ const char *snd_ctl_event_elem_get_name(const snd_ctl_event_t *obj)
 {
 	assert(obj);
 	assert(obj->type == SND_CTL_EVENT_ELEM);
-	return (const char *)obj->data.elem.id.name;
+	return obj->data.elem.id.name;
 }
 
 /**
@@ -1235,7 +913,7 @@ int snd_ctl_elem_id_malloc(snd_ctl_elem_id_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_ctl_elem_id_t
- * \param obj pointer to object to free
+ * \param pointer to object to free
  */
 void snd_ctl_elem_id_free(snd_ctl_elem_id_t *obj)
 {
@@ -1314,7 +992,7 @@ unsigned int snd_ctl_elem_id_get_subdevice(const snd_ctl_elem_id_t *obj)
 const char *snd_ctl_elem_id_get_name(const snd_ctl_elem_id_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->name;
+	return obj->name;
 }
 
 /**
@@ -1380,7 +1058,7 @@ void snd_ctl_elem_id_set_subdevice(snd_ctl_elem_id_t *obj, unsigned int val)
 void snd_ctl_elem_id_set_name(snd_ctl_elem_id_t *obj, const char *val)
 {
 	assert(obj);
-	strncpy((char *)obj->name, val, sizeof(obj->name));
+	strncpy(obj->name, val, sizeof(obj->name));
 }
 
 /**
@@ -1419,7 +1097,7 @@ int snd_ctl_card_info_malloc(snd_ctl_card_info_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_ctl_card_info_t
- * \param obj pointer to object to free
+ * \param pointer to object to free
  */
 void snd_ctl_card_info_free(snd_ctl_card_info_t *obj)
 {
@@ -1465,7 +1143,7 @@ int snd_ctl_card_info_get_card(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_id(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->id;
+	return obj->id;
 }
 
 /**
@@ -1476,7 +1154,7 @@ const char *snd_ctl_card_info_get_id(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_driver(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->driver;
+	return obj->driver;
 }
 
 /**
@@ -1487,7 +1165,7 @@ const char *snd_ctl_card_info_get_driver(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_name(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->name;
+	return obj->name;
 }
 
 /**
@@ -1498,7 +1176,7 @@ const char *snd_ctl_card_info_get_name(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_longname(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->longname;
+	return obj->longname;
 }
 
 /**
@@ -1509,7 +1187,7 @@ const char *snd_ctl_card_info_get_longname(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_mixername(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->mixername;
+	return obj->mixername;
 }
 
 /**
@@ -1520,7 +1198,7 @@ const char *snd_ctl_card_info_get_mixername(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_components(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->components;
+	return obj->components;
 }
 
 /**
@@ -1548,7 +1226,7 @@ int snd_ctl_event_malloc(snd_ctl_event_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_ctl_event_t
- * \param obj pointer to object to free
+ * \param pointer to object to free
  */
 void snd_ctl_event_free(snd_ctl_event_t *obj)
 {
@@ -1611,7 +1289,7 @@ int snd_ctl_elem_list_malloc(snd_ctl_elem_list_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_ctl_elem_list_t
- * \param obj pointer to object to free
+ * \param pointer to object to free
  */
 void snd_ctl_elem_list_free(snd_ctl_elem_list_t *obj)
 {
@@ -1746,7 +1424,7 @@ const char *snd_ctl_elem_list_get_name(const snd_ctl_elem_list_t *obj, unsigned 
 {
 	assert(obj);
 	assert(idx < obj->used);
-	return (const char *)obj->pids[idx].name;
+	return obj->pids[idx].name;
 }
 
 /**
@@ -1787,7 +1465,7 @@ int snd_ctl_elem_info_malloc(snd_ctl_elem_info_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_ctl_elem_info_t
- * \param obj pointer to object to free
+ * \param pointer to object to free
  */
 void snd_ctl_elem_info_free(snd_ctl_elem_info_t *obj)
 {
@@ -1892,50 +1570,6 @@ int snd_ctl_elem_info_is_owner(const snd_ctl_elem_info_t *obj)
 }
 
 /**
- * \brief Get info if it's a user element
- * \param obj CTL element id/info
- * \return 0 if element value is a system element, 1 if it's a user-created element
- */
-int snd_ctl_elem_info_is_user(const snd_ctl_elem_info_t *obj)
-{
-	assert(obj);
-	return !!(obj->access & SNDRV_CTL_ELEM_ACCESS_USER);
-}
-
-/**
- * \brief Get info about TLV readability from a CTL element id/info
- * \param obj CTL element id/info
- * \return 0 if element's TLV is not readable, 1 if element's TLV is readable
- */
-int snd_ctl_elem_info_is_tlv_readable(const snd_ctl_elem_info_t *obj)
-{
-	assert(obj);
-	return !!(obj->access & SNDRV_CTL_ELEM_ACCESS_TLV_READ);
-}
-
-/**
- * \brief Get info about TLV writeability from a CTL element id/info
- * \param obj CTL element id/info
- * \return 0 if element's TLV is not writable, 1 if element's TLV is writable
- */
-int snd_ctl_elem_info_is_tlv_writable(const snd_ctl_elem_info_t *obj)
-{
-	assert(obj);
-	return !!(obj->access & SNDRV_CTL_ELEM_ACCESS_TLV_WRITE);
-}
-
-/**
- * \brief Get info about TLV command possibility from a CTL element id/info
- * \param obj CTL element id/info
- * \return 0 if element's TLV command is not possible, 1 if element's TLV command is supported
- */
-int snd_ctl_elem_info_is_tlv_commandable(const snd_ctl_elem_info_t *obj)
-{
-	assert(obj);
-	return !!(obj->access & SNDRV_CTL_ELEM_ACCESS_TLV_COMMAND);
-}
-
-/**
  * \brief (DEPRECATED) Get info about values passing policy from a CTL element value
  * \param obj CTL element id/info
  * \return 0 if element value need to be passed by contents, 1 if need to be passed with a pointer
@@ -1943,7 +1577,7 @@ int snd_ctl_elem_info_is_tlv_commandable(const snd_ctl_elem_info_t *obj)
 int snd_ctl_elem_info_is_indirect(const snd_ctl_elem_info_t *obj)
 {
 	assert(obj);
-	return 0;
+	return !!(obj->access & SNDRV_CTL_ELEM_ACCESS_INDIRECT);
 }
 link_warning(snd_ctl_elem_info_is_indirect, "Warning: snd_ctl_elem_info_is_indirect is deprecated, do not use it");
 
@@ -2090,6 +1724,8 @@ int snd_ctl_elem_info_get_dimensions(const snd_ctl_elem_info_t *obj)
 	int i;
 
 	assert(obj);
+	if (obj->access & SNDRV_CTL_ELEM_ACCESS_DINDIRECT)
+		return 0;			/* FIXME: implement indirect access as well */
 	for (i = 3; i >= 0; i--)
 		if (obj->dimen.d[i])
 			break;
@@ -2100,7 +1736,6 @@ use_default_symbol_version(__snd_ctl_elem_info_get_dimensions, snd_ctl_elem_info
 /**
  * \brief Get specified of dimension width for given element
  * \param obj CTL element id/info
- * \param idx The dimension index
  * \return zero value if no dimension width is defined, otherwise positive value with with of specified dimension
  */
 #ifndef DOXYGEN
@@ -2110,6 +1745,8 @@ int snd_ctl_elem_info_get_dimension(const snd_ctl_elem_info_t *obj, unsigned int
 #endif
 {
 	assert(obj);
+	if (obj->access & SNDRV_CTL_ELEM_ACCESS_DINDIRECT)
+		return 0;			/* FIXME: implement indirect access as well */
 	if (idx >= 3)
 		return 0;
 	return obj->dimen.d[idx];
@@ -2179,7 +1816,7 @@ unsigned int snd_ctl_elem_info_get_subdevice(const snd_ctl_elem_info_t *obj)
 const char *snd_ctl_elem_info_get_name(const snd_ctl_elem_info_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->id.name;
+	return obj->id.name;
 }
 
 /**
@@ -2256,7 +1893,7 @@ void snd_ctl_elem_info_set_subdevice(snd_ctl_elem_info_t *obj, unsigned int val)
 void snd_ctl_elem_info_set_name(snd_ctl_elem_info_t *obj, const char *val)
 {
 	assert(obj);
-	strncpy((char *)obj->id.name, val, sizeof(obj->id.name));
+	strncpy(obj->id.name, val, sizeof(obj->id.name));
 }
 
 /**
@@ -2295,7 +1932,7 @@ int snd_ctl_elem_value_malloc(snd_ctl_elem_value_t **ptr)
 
 /**
  * \brief frees a previously allocated #snd_ctl_elem_value_t
- * \param obj pointer to object to free
+ * \param pointer to object to free
  */
 void snd_ctl_elem_value_free(snd_ctl_elem_value_t *obj)
 {
@@ -2320,18 +1957,6 @@ void snd_ctl_elem_value_copy(snd_ctl_elem_value_t *dst, const snd_ctl_elem_value
 {
 	assert(dst && src);
 	*dst = *src;
-}
-
-/**
- * \brief compare one #snd_ctl_elem_value_t to another
- * \param left pointer to first value
- * \param right pointer to second value
- * \return 0 on match, less than or greater than otherwise, see memcmp
- */
-int snd_ctl_elem_value_compare(snd_ctl_elem_value_t *left, const snd_ctl_elem_value_t *right)
-{
-	assert(left && right);
-	return memcmp(left, right, sizeof(*left));
 }
 
 /**
@@ -2397,7 +2022,7 @@ unsigned int snd_ctl_elem_value_get_subdevice(const snd_ctl_elem_value_t *obj)
 const char *snd_ctl_elem_value_get_name(const snd_ctl_elem_value_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->id.name;
+	return obj->id.name;
 }
 
 /**
@@ -2474,7 +2099,7 @@ void snd_ctl_elem_value_set_subdevice(snd_ctl_elem_value_t *obj, unsigned int va
 void snd_ctl_elem_value_set_name(snd_ctl_elem_value_t *obj, const char *val)
 {
 	assert(obj);
-	strncpy((char *)obj->id.name, val, sizeof(obj->id.name));
+	strncpy(obj->id.name, val, sizeof(obj->id.name));
 }
 
 /**
@@ -2615,7 +2240,7 @@ void snd_ctl_elem_value_set_byte(snd_ctl_elem_value_t *obj, unsigned int idx, un
 
 /**
  * \brief Set CTL element #SND_CTL_ELEM_TYPE_BYTES value
- * \param obj CTL handle
+ * \param ctl CTL handle
  * \param data Bytes value
  * \param size Size in bytes
  */
@@ -2643,7 +2268,7 @@ const void * snd_ctl_elem_value_get_bytes(const snd_ctl_elem_value_t *obj)
 /**
  * \brief Get value for a #SND_CTL_ELEM_TYPE_IEC958 CTL element id/value 
  * \param obj CTL element id/value
- * \param ptr Pointer to returned CTL element value
+ * \param Pointer to returned CTL element value
  */ 
 void snd_ctl_elem_value_get_iec958(const snd_ctl_elem_value_t *obj, snd_aes_iec958_t *ptr)
 {
@@ -2654,7 +2279,7 @@ void snd_ctl_elem_value_get_iec958(const snd_ctl_elem_value_t *obj, snd_aes_iec9
 /**
  * \brief Set value for a #SND_CTL_ELEM_TYPE_IEC958 CTL element id/value 
  * \param obj CTL element id/value
- * \param ptr Pointer to CTL element value
+ * \param Pointer to CTL element value
  */ 
 void snd_ctl_elem_value_set_iec958(snd_ctl_elem_value_t *obj, const snd_aes_iec958_t *ptr)
 {

@@ -1,6 +1,6 @@
 /*
  *  RawMIDI - Hardware
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *                        Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -34,31 +34,27 @@
 const char *_snd_module_rawmidi_hw = "";
 #endif
 
-#define SNDRV_FILE_RAWMIDI		ALSA_DEVICE_DIRECTORY "midiC%iD%i"
+#define SNDRV_FILE_RAWMIDI		"/dev/snd/midiC%iD%i"
 #define SNDRV_RAWMIDI_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 0)
 
-#ifndef DOC_HIDDEN
 typedef struct {
 	int open;
 	int fd;
 	int card, device, subdevice;
 } snd_rawmidi_hw_t;
-#endif
 
 static int snd_rawmidi_hw_close(snd_rawmidi_t *rmidi)
 {
 	snd_rawmidi_hw_t *hw = rmidi->private_data;
-	int err = 0;
-
 	hw->open--;
 	if (hw->open)
 		return 0;
 	if (close(hw->fd)) {
-		err = -errno;
 		SYSERR("close failed\n");
+		return -errno;
 	}
 	free(hw);
-	return err;
+	return 0;
 }
 
 static int snd_rawmidi_hw_nonblock(snd_rawmidi_t *rmidi, int nonblock)
@@ -156,7 +152,7 @@ static ssize_t snd_rawmidi_hw_read(snd_rawmidi_t *rmidi, void *buffer, size_t si
 	return result;
 }
 
-static const snd_rawmidi_ops_t snd_rawmidi_hw_ops = {
+snd_rawmidi_ops_t snd_rawmidi_hw_ops = {
 	.close = snd_rawmidi_hw_close,
 	.nonblock = snd_rawmidi_hw_nonblock,
 	.info = snd_rawmidi_hw_info,
@@ -175,7 +171,7 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 {
 	int fd, ver, ret;
 	int attempt = 0;
-	char filename[sizeof(SNDRV_FILE_RAWMIDI) + 20];
+	char filename[32];
 	snd_ctl_t *ctl;
 	snd_rawmidi_t *rmidi;
 	snd_rawmidi_hw_t *hw = NULL;
@@ -224,16 +220,25 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 
 	assert(!(mode & ~(SND_RAWMIDI_APPEND|SND_RAWMIDI_NONBLOCK|SND_RAWMIDI_SYNC)));
 
-	fd = snd_open_device(filename, fmode);
-	if (fd < 0) {
+	if ((fd = open(filename, fmode)) < 0) {
 		snd_card_load(card);
-		fd = snd_open_device(filename, fmode);
-		if (fd < 0) {
+		if ((fd = open(filename, fmode)) < 0) {
 			snd_ctl_close(ctl);
 			SYSERR("open %s failed", filename);
 			return -errno;
 		}
 	}
+#if 0
+	/*
+	 * this is bogus, an application have to care about open filedescriptors
+	 */
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+		SYSERR("fcntl FD_CLOEXEC failed");
+		ret = -errno;
+		close(fd);
+		return ret;
+	}
+#endif
 	if (ioctl(fd, SNDRV_RAWMIDI_IOCTL_PVERSION, &ver) < 0) {
 		ret = -errno;
 		SYSERR("SNDRV_RAWMIDI_IOCTL_PVERSION failed");
@@ -305,10 +310,11 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 
  _nomem:
 	close(fd);
-	free(hw);
-	if (inputp)
+	if (hw)
+		free(hw);
+	if (inputp && *inputp)
 		free(*inputp);
-	if (outputp)
+	if (outputp && *outputp)
 		free(*outputp);
 	return -ENOMEM;
 }
@@ -326,7 +332,9 @@ int _snd_rawmidi_hw_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (snd_rawmidi_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
 			continue;
 		if (strcmp(id, "card") == 0) {
 			err = snd_config_get_integer(n, &card);

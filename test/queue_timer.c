@@ -18,22 +18,19 @@ void normalize(struct timeval *tv)
 }
 
 int
-main(int argc ATTRIBUTE_UNUSED, char **argv ATTRIBUTE_UNUSED)
+main(int argc, char **argv)
 {
     snd_seq_t *handle;
     int portid;
-    /* int npfd;
-       struct pollfd *pfd;
-    */
+    int npfd;
+    struct pollfd *pfd;
     int queue;
-    /* int i;
-       int rval;'
-    */
+    int i;
+    int rval;
     struct timeval starttv, prevdiff;
     int countdown = -1;
-    /* snd_seq_queue_timer_t *timer;
-       snd_timer_id_t *timerid;
-    */
+    snd_seq_queue_timer_t *timer;
+    snd_timer_id_t *timerid;
 
     if (snd_seq_open(&handle, "hw", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
 	fprintf(stderr, "failed to open ALSA sequencer interface\n");
@@ -101,9 +98,9 @@ main(int argc ATTRIBUTE_UNUSED, char **argv ATTRIBUTE_UNUSED)
 
 	fprintf(stderr, " real time: %12ld sec %8ld usec\nqueue time: %12ld sec %8ld usec\n      diff: %12ld sec %8ld usec\n  diffdiff: %12ld sec %8ld usec\n",
 		tv.tv_sec, tv.tv_usec,
-		(long)rtime->tv_sec, (long)rtime->tv_nsec / 1000,
+		rtime->tv_sec, rtime->tv_nsec / 1000,
 		diff.tv_sec, diff.tv_usec,
-		(long)diffdiff.tv_sec, (long)diffdiff.tv_usec);
+		diffdiff.tv_sec, diffdiff.tv_usec);
 
 	if (diffdiff.tv_usec >  5000 ||
 	    diffdiff.tv_usec < -5000) {

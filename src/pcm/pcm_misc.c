@@ -1,6 +1,6 @@
 /*
  *  PCM Interface - misc routines
- *  Copyright (c) 1998 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -62,11 +62,6 @@ int snd_pcm_format_signed(snd_pcm_format_t format)
 	case SNDRV_PCM_FORMAT_U20_3BE:
 	case SNDRV_PCM_FORMAT_U18_3LE:
 	case SNDRV_PCM_FORMAT_U18_3BE:
-	case SNDRV_PCM_FORMAT_DSD_U8:
-	case SNDRV_PCM_FORMAT_DSD_U16_LE:
-	case SNDRV_PCM_FORMAT_DSD_U32_LE:
-	case SNDRV_PCM_FORMAT_DSD_U16_BE:
-	case SNDRV_PCM_FORMAT_DSD_U32_BE:
 		return 0;
 	default:
 		return -EINVAL;
@@ -139,8 +134,6 @@ int snd_pcm_format_little_endian(snd_pcm_format_t format)
 	case SNDRV_PCM_FORMAT_U24_3LE:
 	case SNDRV_PCM_FORMAT_U20_3LE:
 	case SNDRV_PCM_FORMAT_U18_3LE:
-	case SNDRV_PCM_FORMAT_DSD_U16_LE:
-	case SNDRV_PCM_FORMAT_DSD_U32_LE:
 		return 1;
 	case SNDRV_PCM_FORMAT_S16_BE:
 	case SNDRV_PCM_FORMAT_U16_BE:
@@ -157,8 +150,6 @@ int snd_pcm_format_little_endian(snd_pcm_format_t format)
 	case SNDRV_PCM_FORMAT_U24_3BE:
 	case SNDRV_PCM_FORMAT_U20_3BE:
 	case SNDRV_PCM_FORMAT_U18_3BE:
-	case SNDRV_PCM_FORMAT_DSD_U16_BE:
-	case SNDRV_PCM_FORMAT_DSD_U32_BE:
 		return 0;
 	default:
 		return -EINVAL;
@@ -204,14 +195,11 @@ int snd_pcm_format_width(snd_pcm_format_t format)
 	switch (format) {
 	case SNDRV_PCM_FORMAT_S8:
 	case SNDRV_PCM_FORMAT_U8:
-	case SNDRV_PCM_FORMAT_DSD_U8:
 		return 8;
 	case SNDRV_PCM_FORMAT_S16_LE:
 	case SNDRV_PCM_FORMAT_S16_BE:
 	case SNDRV_PCM_FORMAT_U16_LE:
 	case SNDRV_PCM_FORMAT_U16_BE:
-	case SNDRV_PCM_FORMAT_DSD_U16_LE:
-	case SNDRV_PCM_FORMAT_DSD_U16_BE:
 		return 16;
 	case SNDRV_PCM_FORMAT_S18_3LE:
 	case SNDRV_PCM_FORMAT_S18_3BE:
@@ -238,8 +226,6 @@ int snd_pcm_format_width(snd_pcm_format_t format)
 	case SNDRV_PCM_FORMAT_U32_BE:
 	case SNDRV_PCM_FORMAT_FLOAT_LE:
 	case SNDRV_PCM_FORMAT_FLOAT_BE:
-	case SNDRV_PCM_FORMAT_DSD_U32_LE:
-	case SNDRV_PCM_FORMAT_DSD_U32_BE:
 		return 32;
 	case SNDRV_PCM_FORMAT_FLOAT64_LE:
 	case SNDRV_PCM_FORMAT_FLOAT64_BE:
@@ -267,14 +253,11 @@ int snd_pcm_format_physical_width(snd_pcm_format_t format)
 	switch (format) {
 	case SNDRV_PCM_FORMAT_S8:
 	case SNDRV_PCM_FORMAT_U8:
-	case SNDRV_PCM_FORMAT_DSD_U8:
 		return 8;
 	case SNDRV_PCM_FORMAT_S16_LE:
 	case SNDRV_PCM_FORMAT_S16_BE:
 	case SNDRV_PCM_FORMAT_U16_LE:
 	case SNDRV_PCM_FORMAT_U16_BE:
-	case SNDRV_PCM_FORMAT_DSD_U16_LE:
-	case SNDRV_PCM_FORMAT_DSD_U16_BE:
 		return 16;
 	case SNDRV_PCM_FORMAT_S18_3LE:
 	case SNDRV_PCM_FORMAT_S18_3BE:
@@ -301,8 +284,6 @@ int snd_pcm_format_physical_width(snd_pcm_format_t format)
 	case SNDRV_PCM_FORMAT_FLOAT_BE:
 	case SNDRV_PCM_FORMAT_IEC958_SUBFRAME_LE:
 	case SNDRV_PCM_FORMAT_IEC958_SUBFRAME_BE:
-	case SNDRV_PCM_FORMAT_DSD_U32_LE:
-	case SNDRV_PCM_FORMAT_DSD_U32_BE:
 		return 32;
 	case SNDRV_PCM_FORMAT_FLOAT64_LE:
 	case SNDRV_PCM_FORMAT_FLOAT64_BE:
@@ -328,14 +309,11 @@ ssize_t snd_pcm_format_size(snd_pcm_format_t format, size_t samples)
 	switch (format) {
 	case SNDRV_PCM_FORMAT_S8:
 	case SNDRV_PCM_FORMAT_U8:
-	case SNDRV_PCM_FORMAT_DSD_U8:
 		return samples;
 	case SNDRV_PCM_FORMAT_S16_LE:
 	case SNDRV_PCM_FORMAT_S16_BE:
 	case SNDRV_PCM_FORMAT_U16_LE:
 	case SNDRV_PCM_FORMAT_U16_BE:
-	case SNDRV_PCM_FORMAT_DSD_U16_LE:
-	case SNDRV_PCM_FORMAT_DSD_U16_BE:
 		return samples * 2;
 	case SNDRV_PCM_FORMAT_S18_3LE:
 	case SNDRV_PCM_FORMAT_S18_3BE:
@@ -360,8 +338,6 @@ ssize_t snd_pcm_format_size(snd_pcm_format_t format, size_t samples)
 	case SNDRV_PCM_FORMAT_U32_BE:
 	case SNDRV_PCM_FORMAT_FLOAT_LE:
 	case SNDRV_PCM_FORMAT_FLOAT_BE:
-	case SNDRV_PCM_FORMAT_DSD_U32_LE:
-	case SNDRV_PCM_FORMAT_DSD_U32_BE:
 		return samples * 4;
 	case SNDRV_PCM_FORMAT_FLOAT64_LE:
 	case SNDRV_PCM_FORMAT_FLOAT64_BE:
@@ -406,12 +382,6 @@ u_int64_t snd_pcm_format_silence_64(snd_pcm_format_t format)
 		return 0;
 	case SNDRV_PCM_FORMAT_U8:
 		return 0x8080808080808080ULL;
-	case SNDRV_PCM_FORMAT_DSD_U8:
-	case SNDRV_PCM_FORMAT_DSD_U16_LE:
-	case SNDRV_PCM_FORMAT_DSD_U32_LE:
-	case SNDRV_PCM_FORMAT_DSD_U16_BE:
-	case SNDRV_PCM_FORMAT_DSD_U32_BE:
-		return 0x6969696969696969ULL;
 #ifdef SNDRV_LITTLE_ENDIAN
 	case SNDRV_PCM_FORMAT_U16_LE:
 		return 0x8000800080008000ULL;
@@ -571,8 +541,7 @@ u_int8_t snd_pcm_format_silence(snd_pcm_format_t format)
  * \brief Silence a PCM samples buffer
  * \param format Sample format
  * \param data Buffer
- * \param samples Samples count
- * \return 0 if successful or a negative error code
+ * \return samples Samples count
  */
 int snd_pcm_format_set_silence(snd_pcm_format_t format, void *data, unsigned int samples)
 {
@@ -653,24 +622,38 @@ int snd_pcm_format_set_silence(snd_pcm_format_t format, void *data, unsigned int
 	return 0;
 }
 
-static const int linear_formats[4][2][2] = {
-	{ { SNDRV_PCM_FORMAT_S8, SNDRV_PCM_FORMAT_S8 },
-	  { SNDRV_PCM_FORMAT_U8, SNDRV_PCM_FORMAT_U8 } },
-	{ { SNDRV_PCM_FORMAT_S16_LE, SNDRV_PCM_FORMAT_S16_BE },
-	  { SNDRV_PCM_FORMAT_U16_LE, SNDRV_PCM_FORMAT_U16_BE } },
-	{ { SNDRV_PCM_FORMAT_S24_LE, SNDRV_PCM_FORMAT_S24_BE },
-	  { SNDRV_PCM_FORMAT_U24_LE, SNDRV_PCM_FORMAT_U24_BE } },
-	{ { SNDRV_PCM_FORMAT_S32_LE, SNDRV_PCM_FORMAT_S32_BE },
-	  { SNDRV_PCM_FORMAT_U32_LE, SNDRV_PCM_FORMAT_U32_BE } }
+static int linear_formats[4*2*2] = {
+	SNDRV_PCM_FORMAT_S8,
+	SNDRV_PCM_FORMAT_S8,
+	SNDRV_PCM_FORMAT_U8,
+	SNDRV_PCM_FORMAT_U8,
+	SNDRV_PCM_FORMAT_S16_LE,
+	SNDRV_PCM_FORMAT_S16_BE,
+	SNDRV_PCM_FORMAT_U16_LE,
+	SNDRV_PCM_FORMAT_U16_BE,
+	SNDRV_PCM_FORMAT_S24_LE,
+	SNDRV_PCM_FORMAT_S24_BE,
+	SNDRV_PCM_FORMAT_U24_LE,
+	SNDRV_PCM_FORMAT_U24_BE,
+	SNDRV_PCM_FORMAT_S32_LE,
+	SNDRV_PCM_FORMAT_S32_BE,
+	SNDRV_PCM_FORMAT_U32_LE,
+	SNDRV_PCM_FORMAT_U32_BE
 };
 
-static const int linear24_formats[3][2][2] = {
-	{ { SNDRV_PCM_FORMAT_S24_3LE, SNDRV_PCM_FORMAT_S24_3BE },
-	  { SNDRV_PCM_FORMAT_U24_3LE, SNDRV_PCM_FORMAT_U24_3BE } },
-	{ { SNDRV_PCM_FORMAT_S20_3LE, SNDRV_PCM_FORMAT_S20_3BE },
-	  { SNDRV_PCM_FORMAT_U20_3LE, SNDRV_PCM_FORMAT_U20_3BE } },
-	{ { SNDRV_PCM_FORMAT_S18_3LE, SNDRV_PCM_FORMAT_S18_3BE },
-	  { SNDRV_PCM_FORMAT_U18_3LE, SNDRV_PCM_FORMAT_U18_3BE } },
+static int linear24_formats[3*2*2] = {
+	SNDRV_PCM_FORMAT_S24_3LE,
+	SNDRV_PCM_FORMAT_S24_3BE,
+	SNDRV_PCM_FORMAT_U24_3LE,
+	SNDRV_PCM_FORMAT_U24_3BE,
+	SNDRV_PCM_FORMAT_S20_3LE,
+	SNDRV_PCM_FORMAT_S20_3BE,
+	SNDRV_PCM_FORMAT_U20_3LE,
+	SNDRV_PCM_FORMAT_U20_3BE,
+	SNDRV_PCM_FORMAT_S18_3LE,
+	SNDRV_PCM_FORMAT_S18_3BE,
+	SNDRV_PCM_FORMAT_U18_3LE,
+	SNDRV_PCM_FORMAT_U18_3BE,
 };
 
 /**
@@ -678,8 +661,7 @@ static const int linear24_formats[3][2][2] = {
  * \param width Nominal bits per sample
  * \param pwidth Physical bit width of the format
  * \param unsignd Sign: 0 signed, 1 unsigned
- * \param big_endian Endian: 0 little endian, 1 big endian
- * \return The matching format type, or #SND_PCM_FORMAT_UNKNOWN if no match
+ * \return big_endian Endian: 0 little endian, 1 big endian
  */
 snd_pcm_format_t snd_pcm_build_linear_format(int width, int pwidth, int unsignd, int big_endian)
 {
@@ -697,7 +679,7 @@ snd_pcm_format_t snd_pcm_build_linear_format(int width, int pwidth, int unsignd,
 		default:
 			return SND_PCM_FORMAT_UNKNOWN;
 		}
-		return linear24_formats[width][!!unsignd][!!big_endian];
+		return ((int(*)[2][2])linear24_formats)[width][!!unsignd][!!big_endian];
 	} else {
 		switch (width) {
 		case 8:
@@ -715,149 +697,6 @@ snd_pcm_format_t snd_pcm_build_linear_format(int width, int pwidth, int unsignd,
 		default:
 			return SND_PCM_FORMAT_UNKNOWN;
 		}
-		return linear_formats[width][!!unsignd][!!big_endian];
+		return ((int(*)[2][2])linear_formats)[width][!!unsignd][!!big_endian];
 	}
-}
-
-/**
- * \brief Parse control element id from the config
- * \param conf the config tree to parse
- * \param ctl_id the pointer to store the resultant control element id
- * \param cardp the pointer to store the card index
- * \param cchannelsp the pointer to store the number of channels (optional)
- * \param hwctlp the pointer to store the h/w control flag (optional)
- * \return 0 if successful, or a negative error code
- *
- * This function parses the given config tree to retrieve the control element id
- * and the card index.  It's used by softvol.  External PCM plugins can use this
- * function for creating or assigining their controls.
- *
- * cchannelsp and hwctlp arguments are optional.  Set NULL if not necessary.
- */
-int snd_pcm_parse_control_id(snd_config_t *conf, snd_ctl_elem_id_t *ctl_id, int *cardp,
-			     int *cchannelsp, int *hwctlp)
-{
-	snd_config_iterator_t i, next;
-	int iface = SND_CTL_ELEM_IFACE_MIXER;
-	const char *name = NULL;
-	long index = 0;
-	long device = -1;
-	long subdevice = -1;
-	int err;
-
-	assert(ctl_id && cardp);
-
-	*cardp = -1;
-	if (cchannelsp)
-		*cchannelsp = 2;
-	snd_config_for_each(i, next, conf) {
-		snd_config_t *n = snd_config_iterator_entry(i);
-		const char *id;
-		if (snd_config_get_id(n, &id) < 0)
-			continue;
-		if (strcmp(id, "comment") == 0)
-			continue;
-		if (strcmp(id, "card") == 0) {
-			const char *str;
-			long v;
-			if ((err = snd_config_get_integer(n, &v)) < 0) {
-				if ((err = snd_config_get_string(n, &str)) < 0) {
-					SNDERR("Invalid field %s", id);
-					goto _err;
-				}
-				*cardp = snd_card_get_index(str);
-				if (*cardp < 0) {
-					SNDERR("Cannot get index for %s", str);
-					err = *cardp;
-					goto _err;
-				}
-			} else
-				*cardp = v;
-			continue;
-		}
-		if (strcmp(id, "iface") == 0 || strcmp(id, "interface") == 0) {
-			const char *ptr;
-			if ((err = snd_config_get_string(n, &ptr)) < 0) {
-				SNDERR("field %s is not a string", id);
-				goto _err;
-			}
-			if ((err = snd_config_get_ctl_iface_ascii(ptr)) < 0) {
-				SNDERR("Invalid value for '%s'", id);
-				goto _err;
-			}
-			iface = err;
-			continue;
-		}
-		if (strcmp(id, "name") == 0) {
-			if ((err = snd_config_get_string(n, &name)) < 0) {
-				SNDERR("field %s is not a string", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "index") == 0) {
-			if ((err = snd_config_get_integer(n, &index)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "device") == 0) {
-			if ((err = snd_config_get_integer(n, &device)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (strcmp(id, "subdevice") == 0) {
-			if ((err = snd_config_get_integer(n, &subdevice)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			continue;
-		}
-		if (cchannelsp && strcmp(id, "count") == 0) {
-			long v;
-			if ((err = snd_config_get_integer(n, &v)) < 0) {
-				SNDERR("field %s is not an integer", id);
-				goto _err;
-			}
-			if (v < 1 || v > 2) {
-				SNDERR("Invalid count %ld", v);
-				goto _err;
-			}
-			*cchannelsp = v;
-			continue;
-		}
-		if (hwctlp && strcmp(id, "hwctl") == 0) {
-			if ((err = snd_config_get_bool(n)) < 0) {
-				SNDERR("The field %s must be a boolean type", id);
-				return err;
-			}
-			*hwctlp = err;
-			continue;
-		}
-		SNDERR("Unknown field %s", id);
-		return -EINVAL;
-	}
-	if (name == NULL) {
-		SNDERR("Missing control name");
-		err = -EINVAL;
-		goto _err;
-	}
-	if (device < 0)
-		device = 0;
-	if (subdevice < 0)
-		subdevice = 0;
-
-	snd_ctl_elem_id_set_interface(ctl_id, iface);
-	snd_ctl_elem_id_set_name(ctl_id, name);
-	snd_ctl_elem_id_set_index(ctl_id, index);
-	snd_ctl_elem_id_set_device(ctl_id, device);
-	snd_ctl_elem_id_set_subdevice(ctl_id, subdevice);
-
-	return 0;
-
- _err:
-	return err;
 }

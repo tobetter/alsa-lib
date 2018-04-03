@@ -43,7 +43,7 @@ struct _snd_rawmidi {
 	snd_rawmidi_stream_t stream;
 	int mode;
 	int poll_fd;
-	const snd_rawmidi_ops_t *ops;
+	snd_rawmidi_ops_t *ops;
 	void *private_data;
 	size_t buffer_size;
 	size_t avail_min;
@@ -57,5 +57,3 @@ int snd_rawmidi_hw_open(snd_rawmidi_t **input, snd_rawmidi_t **output,
 int snd_rawmidi_virtual_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 			     const char *name, snd_seq_t *seq_handle, int port,
 			     int merge, int mode);
-
-#define snd_rawmidi_conf_generic_id(id)	_snd_conf_generic_id(id)

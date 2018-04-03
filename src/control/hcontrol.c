@@ -1,7 +1,7 @@
 /**
  * \file control/hcontrol.c
  * \brief HCTL Interface - High Level CTL
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \date 2000
  *
@@ -11,7 +11,7 @@
  */
 /*
  *  Control Interface - high level API
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *  Copyright (c) 2001 by Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -48,10 +48,11 @@ to reduce overhead accessing the real controls in kernel drivers.
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include "control_local.h"
-#ifdef HAVE_LIBPTHREAD
 #include <pthread.h>
+#ifndef DOC_HIDDEN
+#define __USE_GNU
 #endif
+#include "control_local.h"
 
 #ifndef DOC_HIDDEN
 #define NOT_FOUND 1000000000
@@ -186,7 +187,7 @@ int snd_hctl_poll_descriptors(snd_hctl_t *hctl, struct pollfd *pfds, unsigned in
 
 /**
  * \brief get returned events from poll descriptors
- * \param hctl HCTL handle
+ * \param ctl HCTL handle
  * \param pfds array of poll descriptors
  * \param nfds count of poll descriptors
  * \param revents returned events
@@ -231,14 +232,13 @@ static int snd_hctl_compare_mixer_priority_lookup(const char **name, const char 
 
 static int get_compare_weight(const snd_ctl_elem_id_t *id)
 {
-	static const char *const names[] = {
+	static const char *names[] = {
 		"Master",
 		"Hardware Master",
 		"Headphone",
 		"Tone Control",
 		"3D Control",
 		"PCM",
-		"Front",
 		"Surround",
 		"Center",
 		"LFE",
@@ -267,7 +267,7 @@ static int get_compare_weight(const snd_ctl_elem_id_t *id)
 		"IEC958",
 		NULL
 	};
-	static const char *const names1[] = {
+	static const char *names1[] = {
 		"Switch",
 		"Volume",
 		"Playback",
@@ -281,7 +281,7 @@ static int get_compare_weight(const snd_ctl_elem_id_t *id)
 		"-",
 		NULL
 	};
-	static const char *const names2[] = {
+	static const char *names2[] = {
 		"Switch",
 		"Volume",
 		"Bypass",
@@ -292,7 +292,7 @@ static int get_compare_weight(const snd_ctl_elem_id_t *id)
 		"Center",
 		NULL
 	};
-	const char *name = (char *)id->name, *name1;
+	const char *name = id->name, *name1;
 	int res, res1;
 	
 	if ((res = snd_hctl_compare_mixer_priority_lookup((const char **)&name, names, 1000000)) == NOT_FOUND)
@@ -419,22 +419,17 @@ static int hctl_compare(const void *a, const void *b) {
 static void snd_hctl_sort(snd_hctl_t *hctl)
 {
 	unsigned int k;
-#ifdef HAVE_LIBPTHREAD
 	static pthread_mutex_t sync_lock = PTHREAD_MUTEX_INITIALIZER;
-#endif
 
 	assert(hctl);
 	assert(hctl->compare);
 	INIT_LIST_HEAD(&hctl->elems);
 
-#ifdef HAVE_LIBPTHREAD
 	pthread_mutex_lock(&sync_lock);
-#endif
 	compare_hctl = hctl;
 	qsort(hctl->pelems, hctl->count, sizeof(*hctl->pelems), hctl_compare);
-#ifdef HAVE_LIBPTHREAD
 	pthread_mutex_unlock(&sync_lock);
-#endif
+
 	for (k = 0; k < hctl->count; k++)
 		list_add_tail(&hctl->pelems[k]->list, &hctl->elems);
 }
@@ -468,9 +463,8 @@ int snd_hctl_compare_fast(const snd_hctl_elem_t *c1,
 static int snd_hctl_compare_default(const snd_hctl_elem_t *c1,
 				    const snd_hctl_elem_t *c2)
 {
-	int res, d;
-
-	d = c1->id.iface - c2->id.iface;
+	int res;
+	int d = c1->id.iface - c2->id.iface;
 	if (d != 0)
 		return d;
 	if (c1->id.iface == SNDRV_CTL_ELEM_IFACE_MIXER) {
@@ -478,16 +472,11 @@ static int snd_hctl_compare_default(const snd_hctl_elem_t *c1,
 		if (d != 0)
 			return d;
 	}
-	d = c1->id.device - c2->id.device;
-	if (d != 0)
-		return d;
-	d = c1->id.subdevice - c2->id.subdevice;
-	if (d != 0)
-		return d;
-	res = strcmp((const char *)c1->id.name, (const char *)c2->id.name);
+	res = strcmp(c1->id.name, c2->id.name);
 	if (res != 0)
 		return res;
-	return c1->id.index - c2->id.index;
+	d = c1->id.index - c2->id.index;
+	return d;
 }
 
 /**
@@ -617,7 +606,8 @@ int snd_hctl_load(snd_hctl_t *hctl)
 	}
 	err = snd_ctl_subscribe_events(hctl->ctl, 1);
  _end:
-	free(list.pids);
+	if (list.pids)
+		free(list.pids);
 	return err;
 }
 
@@ -668,52 +658,18 @@ unsigned int snd_hctl_get_count(snd_hctl_t *hctl)
  * \brief Wait for a HCTL to become ready (i.e. at least one event pending)
  * \param hctl HCTL handle
  * \param timeout maximum time in milliseconds to wait
- * \return a positive value on success otherwise a negative error code
- * \retval 0 timeout occurred
- * \retval 1 an event is pending
+ * \return 0 otherwise a negative error code on failure
  */
 int snd_hctl_wait(snd_hctl_t *hctl, int timeout)
 {
-	struct pollfd *pfd;
-	unsigned short *revents;
-	int i, npfds, pollio, err, err_poll;
-	
-	npfds = snd_hctl_poll_descriptors_count(hctl);
-	if (npfds <= 0 || npfds >= 16) {
-		SNDERR("Invalid poll_fds %d\n", npfds);
-		return -EIO;
-	}
-	pfd = alloca(sizeof(*pfd) * npfds);
-	revents = alloca(sizeof(*revents) * npfds);
-	err = snd_hctl_poll_descriptors(hctl, pfd, npfds);
+	struct pollfd pfd;
+	int err;
+	err = snd_hctl_poll_descriptors(hctl, &pfd, 1);
+	assert(err == 1);
+	err = poll(&pfd, 1, timeout);
 	if (err < 0)
-		return err;
-	if (err != npfds) {
-		SNDMSG("invalid poll descriptors %d\n", err);
-		return -EIO;
-	}
-	do {
-		pollio = 0;
-		err_poll = poll(pfd, npfds, timeout);
-		if (err_poll < 0) {
-			if (errno == EINTR && !CTLINABORT(hctl->ctl))
-				continue;
-			return -errno;
-		}
-		if (! err_poll)
-			break;
-		err = snd_hctl_poll_descriptors_revents(hctl, pfd, npfds, revents);
-		if (err < 0)
-			return err;
-		for (i = 0; i < npfds; i++) {
-			if (revents[i] & (POLLERR | POLLNVAL))
-				return -EIO;
-			if ((revents[i] & (POLLIN | POLLOUT)) == 0)
-				continue;
-			pollio++;
-		}
-	} while (! pollio);
-	return err_poll > 0 ? 1 : 0;
+		return -errno;
+	return 0;
 }
 
 /**
@@ -761,6 +717,7 @@ static int snd_hctl_handle_event(snd_hctl_t *hctl, snd_ctl_event_t *event)
 	if (event->data.elem.mask & (SNDRV_CTL_EVENT_MASK_VALUE |
 				     SNDRV_CTL_EVENT_MASK_INFO)) {
 		elem = snd_hctl_find_elem(hctl, &event->data.elem.id);
+		assert(elem);
 		if (!elem)
 			return -ENOENT;
 		res = snd_hctl_elem_throw_event(elem, event->data.elem.mask &
@@ -831,9 +788,7 @@ int snd_hctl_elem_read(snd_hctl_elem_t *elem, snd_ctl_elem_value_t * value)
  * \brief Set value for an HCTL element
  * \param elem HCTL element
  * \param value HCTL element value
- * \retval 0 on success
- * \retval >1 on success when value was changed
- * \retval <0 a negative error code on failure
+ * \return 0 otherwise a negative error code on failure
  */
 int snd_hctl_elem_write(snd_hctl_elem_t *elem, snd_ctl_elem_value_t * value)
 {
@@ -842,53 +797,6 @@ int snd_hctl_elem_write(snd_hctl_elem_t *elem, snd_ctl_elem_value_t * value)
 	assert(value);
 	value->id = elem->id;
 	return snd_ctl_elem_write(elem->hctl->ctl, value);
-}
-
-/**
- * \brief Get TLV value for an HCTL element
- * \param elem HCTL element
- * \param tlv TLV array for value
- * \param tlv_size size of TLV array in bytes
- * \return 0 otherwise a negative error code on failure
- */
-int snd_hctl_elem_tlv_read(snd_hctl_elem_t *elem, unsigned int *tlv, unsigned int tlv_size)
-{
-	assert(elem);
-	assert(tlv);
-	assert(tlv_size >= 12);
-	return snd_ctl_elem_tlv_read(elem->hctl->ctl, &elem->id, tlv, tlv_size);
-}
-
-/**
- * \brief Set TLV value for an HCTL element
- * \param elem HCTL element
- * \param tlv TLV array for value
- * \retval 0 on success
- * \retval >1 on success when value was changed
- * \retval <0 a negative error code on failure
- */
-int snd_hctl_elem_tlv_write(snd_hctl_elem_t *elem, const unsigned int *tlv)
-{
-	assert(elem);
-	assert(tlv);
-	assert(tlv[1] >= 4);
-	return snd_ctl_elem_tlv_write(elem->hctl->ctl, &elem->id, tlv);
-}
-
-/**
- * \brief Set TLV value for an HCTL element
- * \param elem HCTL element
- * \param tlv TLV array for value
- * \retval 0 on success
- * \retval >1 on success when value was changed
- * \retval <0 a negative error code on failure
- */
-int snd_hctl_elem_tlv_command(snd_hctl_elem_t *elem, const unsigned int *tlv)
-{
-	assert(elem);
-	assert(tlv);
-	assert(tlv[1] >= 4);
-	return snd_ctl_elem_tlv_command(elem->hctl->ctl, &elem->id, tlv);
 }
 
 /**
@@ -965,7 +873,7 @@ unsigned int snd_hctl_elem_get_subdevice(const snd_hctl_elem_t *obj)
 const char *snd_hctl_elem_get_name(const snd_hctl_elem_t *obj)
 {
 	assert(obj);
-	return (const char *)obj->id.name;
+	return obj->id.name;
 }
 
 /**

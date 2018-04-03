@@ -6,4 +6,4 @@ noinst_HEADERS = timer_local.h
 all: libtimer.la
 
 
-AM_CPPFLAGS=-I$(top_srcdir)/include
+INCLUDES=-I$(top_srcdir)/include

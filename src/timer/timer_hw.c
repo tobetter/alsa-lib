@@ -1,6 +1,6 @@
 /*
  *  Timer Interface - main file
- *  Copyright (c) 1998-2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998-2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -19,6 +19,13 @@
  *
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#define __USE_GNU
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include "timer_local.h"
 
 #ifndef PIC
@@ -26,17 +33,10 @@
 const char *_snd_module_timer_hw = "";
 #endif
 
-#define SNDRV_FILE_TIMER		ALSA_DEVICE_DIRECTORY "timer"
-#define SNDRV_TIMER_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 5)
+#define SNDRV_FILE_TIMER		"/dev/snd/timer"
+#define SNDRV_TIMER_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 1)
 
-#define SNDRV_TIMER_IOCTL_STATUS_OLD	_IOW('T', 0x14, struct snd_timer_status)
-
-enum {
-	SNDRV_TIMER_IOCTL_START_OLD = _IO('T', 0x20),
-	SNDRV_TIMER_IOCTL_STOP_OLD = _IO('T', 0x21),
-	SNDRV_TIMER_IOCTL_CONTINUE_OLD = _IO('T', 0x22),
-	SNDRV_TIMER_IOCTL_PAUSE_OLD = _IO('T', 0x23),
-};
+#define SNDRV_TIMER_IOCTL_STATUS_OLD	_IOW('T', 0x14, struct sndrv_timer_status)
 
 static int snd_timer_hw_close(snd_timer_t *handle)
 {
@@ -140,16 +140,11 @@ static int snd_timer_hw_status(snd_timer_t *handle, snd_timer_status_t * status)
 static int snd_timer_hw_start(snd_timer_t *handle)
 {
 	snd_timer_t *tmr;
-	unsigned int cmd;
 
 	tmr = handle;
 	if (!tmr)
 		return -EINVAL;
-	if (tmr->version < SNDRV_PROTOCOL_VERSION(2, 0, 4))
-		cmd = SNDRV_TIMER_IOCTL_START_OLD;
-	else
-		cmd = SNDRV_TIMER_IOCTL_START;
-	if (ioctl(tmr->poll_fd, cmd) < 0)
+	if (ioctl(tmr->poll_fd, SNDRV_TIMER_IOCTL_START) < 0)
 		return -errno;
 	return 0;
 }
@@ -157,16 +152,11 @@ static int snd_timer_hw_start(snd_timer_t *handle)
 static int snd_timer_hw_stop(snd_timer_t *handle)
 {
 	snd_timer_t *tmr;
-	unsigned int cmd;
 
 	tmr = handle;
 	if (!tmr)
 		return -EINVAL;
-	if (tmr->version < SNDRV_PROTOCOL_VERSION(2, 0, 4))
-		cmd = SNDRV_TIMER_IOCTL_STOP_OLD;
-	else
-		cmd = SNDRV_TIMER_IOCTL_STOP;
-	if (ioctl(tmr->poll_fd, cmd) < 0)
+	if (ioctl(tmr->poll_fd, SNDRV_TIMER_IOCTL_STOP) < 0)
 		return -errno;
 	return 0;
 }
@@ -174,16 +164,11 @@ static int snd_timer_hw_stop(snd_timer_t *handle)
 static int snd_timer_hw_continue(snd_timer_t *handle)
 {
 	snd_timer_t *tmr;
-	unsigned int cmd;
 
 	tmr = handle;
 	if (!tmr)
 		return -EINVAL;
-	if (tmr->version < SNDRV_PROTOCOL_VERSION(2, 0, 4))
-		cmd = SNDRV_TIMER_IOCTL_CONTINUE_OLD;
-	else
-		cmd = SNDRV_TIMER_IOCTL_CONTINUE;
-	if (ioctl(tmr->poll_fd, cmd) < 0)
+	if (ioctl(tmr->poll_fd, SNDRV_TIMER_IOCTL_CONTINUE) < 0)
 		return -errno;
 	return 0;
 }
@@ -202,7 +187,7 @@ static ssize_t snd_timer_hw_read(snd_timer_t *handle, void *buffer, size_t size)
 	return result;
 }
 
-static const snd_timer_ops_t snd_timer_hw_ops = {
+static snd_timer_ops_t snd_timer_hw_ops = {
 	.close = snd_timer_hw_close,
 	.nonblock = snd_timer_hw_nonblock,
 	.async = snd_timer_hw_async,
@@ -219,16 +204,26 @@ int snd_timer_hw_open(snd_timer_t **handle, const char *name, int dev_class, int
 {
 	int fd, ver, tmode, ret;
 	snd_timer_t *tmr;
-	struct snd_timer_select sel;
+	struct sndrv_timer_select sel;
 
 	*handle = NULL;
 
 	tmode = O_RDONLY;
 	if (mode & SND_TIMER_OPEN_NONBLOCK)
 		tmode |= O_NONBLOCK;	
-	fd = snd_open_device(SNDRV_FILE_TIMER, tmode);
-	if (fd < 0)
+	if ((fd = open(SNDRV_FILE_TIMER, tmode)) < 0)
 		return -errno;
+#if 0
+	/*
+	 * this is bogus, an application have to care about open filedescriptors
+	 */
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+		SYSERR("fcntl FD_CLOEXEC failed");
+		ret = -errno;
+		close(fd);
+		return ret;
+	}
+#endif
 	if (ioctl(fd, SNDRV_TIMER_IOCTL_PVERSION, &ver) < 0) {
 		ret = -errno;
 		close(fd);
@@ -240,15 +235,10 @@ int snd_timer_hw_open(snd_timer_t **handle, const char *name, int dev_class, int
 	}
 	if (mode & SND_TIMER_OPEN_TREAD) {
 		int arg = 1;
-		if (ver < SNDRV_PROTOCOL_VERSION(2, 0, 3)) {
-			ret = -ENOTTY;
-			goto __no_tread;
-		}
 		if (ioctl(fd, SNDRV_TIMER_IOCTL_TREAD, &arg) < 0) {
 			ret = -errno;
-		      __no_tread:
 			close(fd);
-			SNDMSG("extended read is not supported (SNDRV_TIMER_IOCTL_TREAD)");
+			SNDERR("extended read is not supported (SNDRV_TIMER_IOCTL_TREAD)");
 			return ret;
 		}
 	}
@@ -274,7 +264,6 @@ int snd_timer_hw_open(snd_timer_t **handle, const char *name, int dev_class, int
 	tmr->name = strdup(name);
 	tmr->poll_fd = fd;
 	tmr->ops = &snd_timer_hw_ops;
-	INIT_LIST_HEAD(&tmr->async_handlers);
 	*handle = tmr;
 	return 0;
 }
@@ -293,7 +282,9 @@ int _snd_timer_hw_open(snd_timer_t **timer, char *name,
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (_snd_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
 			continue;
 		if (strcmp(id, "class") == 0) {
 			err = snd_config_get_integer(n, &dev_class);

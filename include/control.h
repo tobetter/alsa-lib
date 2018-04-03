@@ -1,14 +1,14 @@
 /**
- * \file include/control.h
+ * \file <alsa/control.h>
  * \brief Application interface library for the ALSA driver
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Takashi Iwai <tiwai@suse.de>
  * \date 1998-2001
  *
  * Application interface library for the ALSA driver
- */
-/*
+ *
+ *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -122,8 +122,6 @@ typedef enum _snd_ctl_event_type {
 #define SND_CTL_EVENT_MASK_INFO		(1<<1)
 /** Element has been added \hideinitializer */
 #define SND_CTL_EVENT_MASK_ADD		(1<<2)
-/** Element's TLV value has been changed \hideinitializer */
-#define SND_CTL_EVENT_MASK_TLV		(1<<3)
 
 /** CTL name helper */
 #define SND_CTL_NAME_NONE				""
@@ -166,29 +164,6 @@ typedef enum _snd_ctl_event_type {
 /** ACPI/PCI Power State D3cold */
 #define SND_CTL_POWER_D3cold	      	(SND_CTL_POWER_D3|0x0001)
 
-/** TLV type - Container */
-#define SND_CTL_TLVT_CONTAINER		0x0000
-/** TLV type - basic dB scale */
-#define SND_CTL_TLVT_DB_SCALE		0x0001
-/** TLV type - linear volume */
-#define SND_CTL_TLVT_DB_LINEAR		0x0002
-/** TLV type - dB range container */
-#define SND_CTL_TLVT_DB_RANGE		0x0003
-/** TLV type - dB scale specified by min/max values */
-#define SND_CTL_TLVT_DB_MINMAX		0x0004
-/** TLV type - dB scale specified by min/max values (with mute) */
-#define SND_CTL_TLVT_DB_MINMAX_MUTE	0x0005
-
-/** Mute state */
-#define SND_CTL_TLV_DB_GAIN_MUTE	-9999999
-
-/** TLV type - fixed channel map positions */
-#define SND_CTL_TLVT_CHMAP_FIXED	0x00101
-/** TLV type - freely swappable channel map positions */
-#define SND_CTL_TLVT_CHMAP_VAR		0x00102
-/** TLV type - pair-wise swappable channel map positions */
-#define SND_CTL_TLVT_CHMAP_PAIRED	0x00103
-
 /** CTL type */
 typedef enum _snd_ctl_type {
 	/** Kernel level CTL */
@@ -196,9 +171,7 @@ typedef enum _snd_ctl_type {
 	/** Shared memory client CTL */
 	SND_CTL_TYPE_SHM,
 	/** INET client CTL (not yet implemented) */
-	SND_CTL_TYPE_INET,
-	/** External control plugin */
-	SND_CTL_TYPE_EXT
+	SND_CTL_TYPE_INET
 } snd_ctl_type_t;
 
 /** Non blocking mode (flag for open mode) \hideinitializer */
@@ -225,16 +198,10 @@ int snd_card_get_index(const char *name);
 int snd_card_get_name(int card, char **name);
 int snd_card_get_longname(int card, char **name);
 
-int snd_device_name_hint(int card, const char *iface, void ***hints);
-int snd_device_name_free_hint(void **hints);
-char *snd_device_name_get_hint(const void *hint, const char *id);
-
 int snd_ctl_open(snd_ctl_t **ctl, const char *name, int mode);
 int snd_ctl_open_lconf(snd_ctl_t **ctl, const char *name, int mode, snd_config_t *lconf);
-int snd_ctl_open_fallback(snd_ctl_t **ctl, snd_config_t *root, const char *name, const char *orig_name, int mode);
 int snd_ctl_close(snd_ctl_t *ctl);
 int snd_ctl_nonblock(snd_ctl_t *ctl, int nonblock);
-static __inline__ int snd_ctl_abort(snd_ctl_t *ctl) { return snd_ctl_nonblock(ctl, 2); }
 int snd_async_add_ctl_handler(snd_async_handler_t **handler, snd_ctl_t *ctl, 
 			      snd_async_callback_t callback, void *private_data);
 snd_ctl_t *snd_async_handler_get_ctl(snd_async_handler_t *handler);
@@ -243,32 +210,20 @@ int snd_ctl_poll_descriptors(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int s
 int snd_ctl_poll_descriptors_revents(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
 int snd_ctl_subscribe_events(snd_ctl_t *ctl, int subscribe);
 int snd_ctl_card_info(snd_ctl_t *ctl, snd_ctl_card_info_t *info);
-int snd_ctl_elem_list(snd_ctl_t *ctl, snd_ctl_elem_list_t *list);
+int snd_ctl_elem_list(snd_ctl_t *ctl, snd_ctl_elem_list_t * list);
 int snd_ctl_elem_info(snd_ctl_t *ctl, snd_ctl_elem_info_t *info);
 int snd_ctl_elem_read(snd_ctl_t *ctl, snd_ctl_elem_value_t *value);
 int snd_ctl_elem_write(snd_ctl_t *ctl, snd_ctl_elem_value_t *value);
 int snd_ctl_elem_lock(snd_ctl_t *ctl, snd_ctl_elem_id_t *id);
 int snd_ctl_elem_unlock(snd_ctl_t *ctl, snd_ctl_elem_id_t *id);
-int snd_ctl_elem_tlv_read(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			  unsigned int *tlv, unsigned int tlv_size);
-int snd_ctl_elem_tlv_write(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			   const unsigned int *tlv);
-int snd_ctl_elem_tlv_command(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			     const unsigned int *tlv);
-#ifdef __ALSA_HWDEP_H
 int snd_ctl_hwdep_next_device(snd_ctl_t *ctl, int * device);
 int snd_ctl_hwdep_info(snd_ctl_t *ctl, snd_hwdep_info_t * info);
-#endif
-#ifdef __ALSA_PCM_H
 int snd_ctl_pcm_next_device(snd_ctl_t *ctl, int *device);
 int snd_ctl_pcm_info(snd_ctl_t *ctl, snd_pcm_info_t * info);
 int snd_ctl_pcm_prefer_subdevice(snd_ctl_t *ctl, int subdev);
-#endif
-#ifdef __ALSA_RAWMIDI_H
 int snd_ctl_rawmidi_next_device(snd_ctl_t *ctl, int * device);
 int snd_ctl_rawmidi_info(snd_ctl_t *ctl, snd_rawmidi_info_t * info);
 int snd_ctl_rawmidi_prefer_subdevice(snd_ctl_t *ctl, int subdev);
-#endif
 int snd_ctl_set_power_state(snd_ctl_t *ctl, unsigned int state);
 int snd_ctl_get_power_state(snd_ctl_t *ctl, unsigned int *state);
 
@@ -293,19 +248,12 @@ unsigned int snd_ctl_event_elem_get_index(const snd_ctl_event_t *obj);
 int snd_ctl_elem_list_alloc_space(snd_ctl_elem_list_t *obj, unsigned int entries);
 void snd_ctl_elem_list_free_space(snd_ctl_elem_list_t *obj);
 
-char *snd_ctl_ascii_elem_id_get(snd_ctl_elem_id_t *id);
-int snd_ctl_ascii_elem_id_parse(snd_ctl_elem_id_t *dst, const char *str);
-int snd_ctl_ascii_value_parse(snd_ctl_t *handle,
-			      snd_ctl_elem_value_t *dst,
-			      snd_ctl_elem_info_t *info,
-			      const char *value);
-
 size_t snd_ctl_elem_id_sizeof(void);
 /** \hideinitializer
  * \brief allocate an invalid #snd_ctl_elem_id_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_id_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_id)
+#define snd_ctl_elem_id_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_id_t *) alloca(snd_ctl_elem_id_sizeof()); memset(*ptr, 0, snd_ctl_elem_id_sizeof()); } while (0)
 int snd_ctl_elem_id_malloc(snd_ctl_elem_id_t **ptr);
 void snd_ctl_elem_id_free(snd_ctl_elem_id_t *obj);
 void snd_ctl_elem_id_clear(snd_ctl_elem_id_t *obj);
@@ -328,7 +276,7 @@ size_t snd_ctl_card_info_sizeof(void);
  * \brief allocate an invalid #snd_ctl_card_info_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_card_info_alloca(ptr) __snd_alloca(ptr, snd_ctl_card_info)
+#define snd_ctl_card_info_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_card_info_t *) alloca(snd_ctl_card_info_sizeof()); memset(*ptr, 0, snd_ctl_card_info_sizeof()); } while (0)
 int snd_ctl_card_info_malloc(snd_ctl_card_info_t **ptr);
 void snd_ctl_card_info_free(snd_ctl_card_info_t *obj);
 void snd_ctl_card_info_clear(snd_ctl_card_info_t *obj);
@@ -346,7 +294,7 @@ size_t snd_ctl_event_sizeof(void);
  * \brief allocate an invalid #snd_ctl_event_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_event_alloca(ptr) __snd_alloca(ptr, snd_ctl_event)
+#define snd_ctl_event_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_event_t *) alloca(snd_ctl_event_sizeof()); memset(*ptr, 0, snd_ctl_event_sizeof()); } while (0)
 int snd_ctl_event_malloc(snd_ctl_event_t **ptr);
 void snd_ctl_event_free(snd_ctl_event_t *obj);
 void snd_ctl_event_clear(snd_ctl_event_t *obj);
@@ -358,7 +306,7 @@ size_t snd_ctl_elem_list_sizeof(void);
  * \brief allocate an invalid #snd_ctl_elem_list_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_list_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_list)
+#define snd_ctl_elem_list_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_list_t *) alloca(snd_ctl_elem_list_sizeof()); memset(*ptr, 0, snd_ctl_elem_list_sizeof()); } while (0)
 int snd_ctl_elem_list_malloc(snd_ctl_elem_list_t **ptr);
 void snd_ctl_elem_list_free(snd_ctl_elem_list_t *obj);
 void snd_ctl_elem_list_clear(snd_ctl_elem_list_t *obj);
@@ -379,7 +327,7 @@ size_t snd_ctl_elem_info_sizeof(void);
  * \brief allocate an invalid #snd_ctl_elem_info_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_info_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_info)
+#define snd_ctl_elem_info_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_info_t *) alloca(snd_ctl_elem_info_sizeof()); memset(*ptr, 0, snd_ctl_elem_info_sizeof()); } while (0)
 int snd_ctl_elem_info_malloc(snd_ctl_elem_info_t **ptr);
 void snd_ctl_elem_info_free(snd_ctl_elem_info_t *obj);
 void snd_ctl_elem_info_clear(snd_ctl_elem_info_t *obj);
@@ -390,11 +338,7 @@ int snd_ctl_elem_info_is_writable(const snd_ctl_elem_info_t *obj);
 int snd_ctl_elem_info_is_volatile(const snd_ctl_elem_info_t *obj);
 int snd_ctl_elem_info_is_inactive(const snd_ctl_elem_info_t *obj);
 int snd_ctl_elem_info_is_locked(const snd_ctl_elem_info_t *obj);
-int snd_ctl_elem_info_is_tlv_readable(const snd_ctl_elem_info_t *obj);
-int snd_ctl_elem_info_is_tlv_writable(const snd_ctl_elem_info_t *obj);
-int snd_ctl_elem_info_is_tlv_commandable(const snd_ctl_elem_info_t *obj);
 int snd_ctl_elem_info_is_owner(const snd_ctl_elem_info_t *obj);
-int snd_ctl_elem_info_is_user(const snd_ctl_elem_info_t *obj);
 pid_t snd_ctl_elem_info_get_owner(const snd_ctl_elem_info_t *obj);
 unsigned int snd_ctl_elem_info_get_count(const snd_ctl_elem_info_t *obj);
 long snd_ctl_elem_info_get_min(const snd_ctl_elem_info_t *obj);
@@ -423,24 +367,16 @@ void snd_ctl_elem_info_set_subdevice(snd_ctl_elem_info_t *obj, unsigned int val)
 void snd_ctl_elem_info_set_name(snd_ctl_elem_info_t *obj, const char *val);
 void snd_ctl_elem_info_set_index(snd_ctl_elem_info_t *obj, unsigned int val);
 
-int snd_ctl_elem_add_integer(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id, unsigned int count, long imin, long imax, long istep);
-int snd_ctl_elem_add_integer64(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id, unsigned int count, long long imin, long long imax, long long istep);
-int snd_ctl_elem_add_boolean(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id, unsigned int count);
-int snd_ctl_elem_add_enumerated(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id, unsigned int count, unsigned int items, const char *const names[]);
-int snd_ctl_elem_add_iec958(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id);
-int snd_ctl_elem_remove(snd_ctl_t *ctl, snd_ctl_elem_id_t *id);
-
 size_t snd_ctl_elem_value_sizeof(void);
 /** \hideinitializer
  * \brief allocate an invalid #snd_ctl_elem_value_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_ctl_elem_value_alloca(ptr) __snd_alloca(ptr, snd_ctl_elem_value)
+#define snd_ctl_elem_value_alloca(ptr) do { assert(ptr); *ptr = (snd_ctl_elem_value_t *) alloca(snd_ctl_elem_value_sizeof()); memset(*ptr, 0, snd_ctl_elem_value_sizeof()); } while (0)
 int snd_ctl_elem_value_malloc(snd_ctl_elem_value_t **ptr);
 void snd_ctl_elem_value_free(snd_ctl_elem_value_t *obj);
 void snd_ctl_elem_value_clear(snd_ctl_elem_value_t *obj);
 void snd_ctl_elem_value_copy(snd_ctl_elem_value_t *dst, const snd_ctl_elem_value_t *src);
-int snd_ctl_elem_value_compare(snd_ctl_elem_value_t *left, const snd_ctl_elem_value_t *right);
 void snd_ctl_elem_value_get_id(const snd_ctl_elem_value_t *obj, snd_ctl_elem_id_t *ptr);
 unsigned int snd_ctl_elem_value_get_numid(const snd_ctl_elem_value_t *obj);
 snd_ctl_elem_iface_t snd_ctl_elem_value_get_interface(const snd_ctl_elem_value_t *obj);
@@ -469,21 +405,6 @@ void snd_ctl_elem_set_bytes(snd_ctl_elem_value_t *obj, void *data, size_t size);
 const void * snd_ctl_elem_value_get_bytes(const snd_ctl_elem_value_t *obj);
 void snd_ctl_elem_value_get_iec958(const snd_ctl_elem_value_t *obj, snd_aes_iec958_t *ptr);
 void snd_ctl_elem_value_set_iec958(snd_ctl_elem_value_t *obj, const snd_aes_iec958_t *ptr);
-
-int snd_tlv_parse_dB_info(unsigned int *tlv, unsigned int tlv_size,
-			  unsigned int **db_tlvp);
-int snd_tlv_get_dB_range(unsigned int *tlv, long rangemin, long rangemax,
-			 long *min, long *max);
-int snd_tlv_convert_to_dB(unsigned int *tlv, long rangemin, long rangemax,
-			  long volume, long *db_gain);
-int snd_tlv_convert_from_dB(unsigned int *tlv, long rangemin, long rangemax,
-			    long db_gain, long *value, int xdir);
-int snd_ctl_get_dB_range(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			 long *min, long *max);
-int snd_ctl_convert_to_dB(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			  long volume, long *db_gain);
-int snd_ctl_convert_from_dB(snd_ctl_t *ctl, const snd_ctl_elem_id_t *id,
-			    long db_gain, long *value, int xdir);
 
 /**
  *  \defgroup HControl High level Control Interface
@@ -532,7 +453,6 @@ int snd_hctl_open(snd_hctl_t **hctl, const char *name, int mode);
 int snd_hctl_open_ctl(snd_hctl_t **hctlp, snd_ctl_t *ctl);
 int snd_hctl_close(snd_hctl_t *hctl);
 int snd_hctl_nonblock(snd_hctl_t *hctl, int nonblock);
-static __inline__ int snd_hctl_abort(snd_hctl_t *hctl) { return snd_hctl_nonblock(hctl, 2); }
 int snd_hctl_poll_descriptors_count(snd_hctl_t *hctl);
 int snd_hctl_poll_descriptors(snd_hctl_t *hctl, struct pollfd *pfds, unsigned int space);
 int snd_hctl_poll_descriptors_revents(snd_hctl_t *ctl, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
@@ -556,9 +476,6 @@ snd_hctl_elem_t *snd_hctl_elem_prev(snd_hctl_elem_t *elem);
 int snd_hctl_elem_info(snd_hctl_elem_t *elem, snd_ctl_elem_info_t * info);
 int snd_hctl_elem_read(snd_hctl_elem_t *elem, snd_ctl_elem_value_t * value);
 int snd_hctl_elem_write(snd_hctl_elem_t *elem, snd_ctl_elem_value_t * value);
-int snd_hctl_elem_tlv_read(snd_hctl_elem_t *elem, unsigned int *tlv, unsigned int tlv_size);
-int snd_hctl_elem_tlv_write(snd_hctl_elem_t *elem, const unsigned int *tlv);
-int snd_hctl_elem_tlv_command(snd_hctl_elem_t *elem, const unsigned int *tlv);
 
 snd_hctl_t *snd_hctl_elem_get_hctl(snd_hctl_elem_t *elem);
 

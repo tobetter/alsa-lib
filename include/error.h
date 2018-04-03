@@ -1,7 +1,7 @@
 /**
- * \file include/error.h
+ * \file <alsa/error.h>
  * \brief Application interface library for the ALSA driver
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Takashi Iwai <tiwai@suse.de>
  * \date 1998-2001
@@ -73,13 +73,6 @@ extern int snd_lib_error_set_handler(snd_lib_error_handler_t handler);
 #ifdef __cplusplus
 }
 #endif
-
-/** Local error handler function type */
-typedef void (*snd_local_error_handler_t)(const char *file, int line,
-					  const char *func, int err,
-					  const char *fmt, va_list arg);
-
-snd_local_error_handler_t snd_lib_error_set_local(snd_local_error_handler_t func);
 
 #endif /* __ALSA_ERROR_H */
 

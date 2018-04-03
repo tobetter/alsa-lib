@@ -1,14 +1,14 @@
 /**
- * \file include/global.h
+ * \file <alsa/global.h>
  * \brief Application interface library for the ALSA driver
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Takashi Iwai <tiwai@suse.de>
  * \date 1998-2001
  *
  * Application interface library for the ALSA driver
- */
-/*
+ *
+ *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -27,9 +27,6 @@
 
 #ifndef __ALSA_GLOBAL_H_
 #define __ALSA_GLOBAL_H_
-
-/* for timeval and timespec */
-#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,9 +99,6 @@ void *snd_dlsym(void *handle, const char *name, const char *version);
 int snd_dlclose(void *handle);
 
 
-/** \brief alloca helper macro. */
-#define __snd_alloca(ptr,type) do { *ptr = (type##_t *) alloca(type##_sizeof()); memset(*ptr, 0, type##_sizeof()); } while (0)
-
 /**
  * \brief Internal structure for an async notification client handler.
  *
@@ -132,20 +126,6 @@ struct snd_shm_area *snd_shm_area_share(struct snd_shm_area *area);
 int snd_shm_area_destroy(struct snd_shm_area *area);
 
 int snd_user_file(const char *file, char **result);
-
-#ifdef __GLIBC__
-#if !defined(_POSIX_C_SOURCE) && !defined(_POSIX_SOURCE)
-struct timeval {
-	time_t		tv_sec;		/* seconds */
-	long		tv_usec;	/* microseconds */
-};
-
-struct timespec {
-	time_t		tv_sec;		/* seconds */
-	long		tv_nsec;	/* nanoseconds */
-};
-#endif
-#endif
 
 /** Timestamp */
 typedef struct timeval snd_timestamp_t;

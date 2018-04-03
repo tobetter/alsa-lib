@@ -1,6 +1,6 @@
 /*
  *  ALSA lisp implementation - sound related commands
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -286,7 +286,7 @@ static struct alisp_object * FA_int_pp_strp_int(struct alisp_instance * instance
 	int err, mode;
 	void *handle;
 	struct alisp_object *p1, *p2;
-	static const struct flags flags[] = {
+	static struct flags flags[] = {
 		{ "nonblock", SND_CTL_NONBLOCK },
 		{ "async", SND_CTL_ASYNC },
 		{ "readonly", SND_CTL_READONLY },
@@ -572,7 +572,7 @@ static struct alisp_object * FA_hctl_elem_info(struct alisp_instance * instance,
 	}
 	p1 = add_cons(instance, p1, 1, "type", new_string(instance, snd_ctl_elem_type_name(type)));
 	p1 = add_cons(instance, p1, 1, "readable", new_integer(instance, snd_ctl_elem_info_is_readable(info)));
-	p1 = add_cons(instance, p1, 1, "writable", new_integer(instance, snd_ctl_elem_info_is_writable(info)));
+	p1 = add_cons(instance, p1, 1, "writeable", new_integer(instance, snd_ctl_elem_info_is_writable(info)));
 	p1 = add_cons(instance, p1, 1, "volatile", new_integer(instance, snd_ctl_elem_info_is_volatile(info)));
 	p1 = add_cons(instance, p1, 1, "inactive", new_integer(instance, snd_ctl_elem_info_is_inactive(info)));
 	p1 = add_cons(instance, p1, 1, "locked", new_integer(instance, snd_ctl_elem_info_is_locked(info)));
@@ -789,7 +789,7 @@ static struct alisp_object * FA_pcm_info(struct alisp_instance * instance, struc
  *  main code
  */
 
-static const struct acall_table acall_table[] = {
+static struct acall_table acall_table[] = {
 	{ "card_get_index", &FA_int_str, (void *)snd_card_get_index, NULL },
 	{ "card_get_longname", &FA_int_int_strp, (void *)snd_card_get_longname, NULL },
 	{ "card_get_name", &FA_int_int_strp, (void *)snd_card_get_name, NULL },
@@ -933,7 +933,7 @@ static struct alisp_object * F_syserr(struct alisp_instance *instance, struct al
 	return &alsa_lisp_t;
 }
 
-static const struct intrinsic snd_intrinsics[] = {
+static struct intrinsic snd_intrinsics[] = {
 	{ "Acall", F_acall },
 	{ "Aerror", F_aerror },
 	{ "Ahandle", F_ahandle },

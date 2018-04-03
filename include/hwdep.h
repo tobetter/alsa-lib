@@ -1,14 +1,14 @@
 /**
- * \file include/hwdep.h
+ * \file <alsa/hwdep.h>
  * \brief Application interface library for the ALSA driver
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Takashi Iwai <tiwai@suse.de>
  * \date 1998-2001
  *
  * Application interface library for the ALSA driver
- */
-/*
+ *
+ *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -63,21 +63,7 @@ typedef enum _snd_hwdep_iface {
 	SND_HWDEP_IFACE_VX,		/**< Digigram VX cards */
 	SND_HWDEP_IFACE_MIXART,		/**< Digigram miXart cards */
 	SND_HWDEP_IFACE_USX2Y,		/**< Tascam US122, US224 & US428 usb */
-	SND_HWDEP_IFACE_EMUX_WAVETABLE,	/**< EmuX wavetable */
-	SND_HWDEP_IFACE_BLUETOOTH,	/**< Bluetooth audio */
-	SND_HWDEP_IFACE_USX2Y_PCM,	/**< Tascam US122, US224 & US428 raw USB PCM */
-	SND_HWDEP_IFACE_PCXHR,		/**< Digigram PCXHR */
-	SND_HWDEP_IFACE_SB_RC,		/**< SB Extigy/Audigy2NX remote control */
-	SND_HWDEP_IFACE_HDA,		/**< HD-audio */
-	SND_HWDEP_IFACE_USB_STREAM,	/**< direct access to usb stream */
-	SND_HWDEP_IFACE_FW_DICE,	/**< TC DICE FireWire device */
-	SND_HWDEP_IFACE_FW_FIREWORKS,	/**< Echo Audio Fireworks based device */
-	SND_HWDEP_IFACE_FW_BEBOB,	/**< BridgeCo BeBoB based device */
-	SND_HWDEP_IFACE_FW_OXFW,	/**< Oxford OXFW970/971 based device */
-	SND_HWDEP_IFACE_FW_DIGI00X,	/* Digidesign Digi 002/003 family */
-	SND_HWDEP_IFACE_FW_TASCAM,	/* TASCAM FireWire series */
-
-	SND_HWDEP_IFACE_LAST = SND_HWDEP_IFACE_FW_TASCAM	/**< last known hwdep interface */
+	SND_HWDEP_IFACE_LAST = SND_HWDEP_IFACE_USX2Y  /**< last know hwdep interface */
 } snd_hwdep_iface_t;
 
 /** open for reading */
@@ -105,7 +91,6 @@ typedef struct _snd_hwdep snd_hwdep_t;
 int snd_hwdep_open(snd_hwdep_t **hwdep, const char *name, int mode);
 int snd_hwdep_close(snd_hwdep_t *hwdep);
 int snd_hwdep_poll_descriptors(snd_hwdep_t *hwdep, struct pollfd *pfds, unsigned int space);
-int snd_hwdep_poll_descriptors_count(snd_hwdep_t *hwdep);
 int snd_hwdep_poll_descriptors_revents(snd_hwdep_t *hwdep, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
 int snd_hwdep_nonblock(snd_hwdep_t *hwdep, int nonblock);
 int snd_hwdep_info(snd_hwdep_t *hwdep, snd_hwdep_info_t * info);
@@ -117,7 +102,7 @@ ssize_t snd_hwdep_read(snd_hwdep_t *hwdep, void *buffer, size_t size);
 
 size_t snd_hwdep_info_sizeof(void);
 /** allocate #snd_hwdep_info_t container on stack */
-#define snd_hwdep_info_alloca(ptr) __snd_alloca(ptr, snd_hwdep_info)
+#define snd_hwdep_info_alloca(ptr) do { assert(ptr); *ptr = (snd_hwdep_info_t *) alloca(snd_hwdep_info_sizeof()); memset(*ptr, 0, snd_hwdep_info_sizeof()); } while (0)
 int snd_hwdep_info_malloc(snd_hwdep_info_t **ptr);
 void snd_hwdep_info_free(snd_hwdep_info_t *obj);
 void snd_hwdep_info_copy(snd_hwdep_info_t *dst, const snd_hwdep_info_t *src);
@@ -131,7 +116,7 @@ void snd_hwdep_info_set_device(snd_hwdep_info_t *obj, unsigned int val);
 
 size_t snd_hwdep_dsp_status_sizeof(void);
 /** allocate #snd_hwdep_dsp_status_t container on stack */
-#define snd_hwdep_dsp_status_alloca(ptr) __snd_alloca(ptr, snd_hwdep_dsp_status)
+#define snd_hwdep_dsp_status_alloca(ptr) do { assert(ptr); *ptr = (snd_hwdep_dsp_status_t *) alloca(snd_hwdep_dsp_status_sizeof()); memset(*ptr, 0, snd_hwdep_dsp_status_sizeof()); } while (0)
 int snd_hwdep_dsp_status_malloc(snd_hwdep_dsp_status_t **ptr);
 void snd_hwdep_dsp_status_free(snd_hwdep_dsp_status_t *obj);
 void snd_hwdep_dsp_status_copy(snd_hwdep_dsp_status_t *dst, const snd_hwdep_dsp_status_t *src);
@@ -144,7 +129,7 @@ unsigned int snd_hwdep_dsp_status_get_chip_ready(const snd_hwdep_dsp_status_t *o
 
 size_t snd_hwdep_dsp_image_sizeof(void);
 /** allocate #snd_hwdep_dsp_image_t container on stack */
-#define snd_hwdep_dsp_image_alloca(ptr) __snd_alloca(ptr, snd_hwdep_dsp_image)
+#define snd_hwdep_dsp_image_alloca(ptr) do { assert(ptr); *ptr = (snd_hwdep_dsp_image_t *) alloca(snd_hwdep_dsp_image_sizeof()); memset(*ptr, 0, snd_hwdep_dsp_image_sizeof()); } while (0)
 int snd_hwdep_dsp_image_malloc(snd_hwdep_dsp_image_t **ptr);
 void snd_hwdep_dsp_image_free(snd_hwdep_dsp_image_t *obj);
 void snd_hwdep_dsp_image_copy(snd_hwdep_dsp_image_t *dst, const snd_hwdep_dsp_image_t *src);
@@ -154,7 +139,7 @@ const char *snd_hwdep_dsp_image_get_name(const snd_hwdep_dsp_image_t *obj);
 const void *snd_hwdep_dsp_image_get_image(const snd_hwdep_dsp_image_t *obj);
 size_t snd_hwdep_dsp_image_get_length(const snd_hwdep_dsp_image_t *obj);
 
-void snd_hwdep_dsp_image_set_index(snd_hwdep_dsp_image_t *obj, unsigned int _index);
+void snd_hwdep_dsp_image_set_index(snd_hwdep_dsp_image_t *obj, unsigned int index);
 void snd_hwdep_dsp_image_set_name(snd_hwdep_dsp_image_t *obj, const char *name);
 void snd_hwdep_dsp_image_set_image(snd_hwdep_dsp_image_t *obj, void *buffer);
 void snd_hwdep_dsp_image_set_length(snd_hwdep_dsp_image_t *obj, size_t length);

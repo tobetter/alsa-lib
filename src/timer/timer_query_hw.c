@@ -1,6 +1,6 @@
 /*
  *  Timer Interface - main file
- *  Copyright (c) 1998-2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998-2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -19,6 +19,12 @@
  *
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include "timer_local.h"
 
 #ifndef PIC
@@ -26,7 +32,7 @@
 const char *_snd_module_timer_query_hw = "";
 #endif
 
-#define SNDRV_FILE_TIMER		ALSA_DEVICE_DIRECTORY "timer"
+#define SNDRV_FILE_TIMER		"/dev/snd/timer"
 #define SNDRV_TIMER_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 0)
 
 static int snd_timer_query_hw_close(snd_timer_query_t *handle)
@@ -75,7 +81,7 @@ static int snd_timer_query_hw_status(snd_timer_query_t *handle, snd_timer_gstatu
 	return 0;
 }
 
-static const snd_timer_query_ops_t snd_timer_query_hw_ops = {
+static snd_timer_query_ops_t snd_timer_query_hw_ops = {
 	.close = snd_timer_query_hw_close,
 	.next_device = snd_timer_query_hw_next_device,
 	.info = snd_timer_query_hw_info,
@@ -93,8 +99,7 @@ int snd_timer_query_hw_open(snd_timer_query_t **handle, const char *name, int mo
 	tmode = O_RDONLY;
 	if (mode & SND_TIMER_OPEN_NONBLOCK)
 		tmode |= O_NONBLOCK;	
-	fd = snd_open_device(SNDRV_FILE_TIMER, tmode);
-	if (fd < 0)
+	if ((fd = open(SNDRV_FILE_TIMER, tmode)) < 0)
 		return -errno;
 	if (ioctl(fd, SNDRV_TIMER_IOCTL_PVERSION, &ver) < 0) {
 		close(fd);
@@ -128,7 +133,9 @@ int _snd_timer_query_hw_open(snd_timer_query_t **timer, char *name,
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (_snd_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
 			continue;
 		SNDERR("Unexpected field %s", id);
 		return -EINVAL;

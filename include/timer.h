@@ -1,14 +1,14 @@
 /**
- * \file include/timer.h
+ * \file <alsa/timer.h>
  * \brief Application interface library for the ALSA driver
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Takashi Iwai <tiwai@suse.de>
  * \date 1998-2001
  *
  * Application interface library for the ALSA driver
- */
-/*
+ *
+ *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
  *   published by the Free Software Foundation; either version 2.1 of
@@ -85,15 +85,11 @@ typedef enum _snd_timer_event {
 	SND_TIMER_EVENT_CONTINUE,	/* val = resolution in ns */
 	SND_TIMER_EVENT_PAUSE,		/* val = 0 */
 	SND_TIMER_EVENT_EARLY,		/* val = 0 */
-	SND_TIMER_EVENT_SUSPEND,	/* val = 0 */
-	SND_TIMER_EVENT_RESUME,		/* val = resolution in ns */
 	/* master timer events for slave timer instances */
 	SND_TIMER_EVENT_MSTART = SND_TIMER_EVENT_START + 10,
 	SND_TIMER_EVENT_MSTOP = SND_TIMER_EVENT_STOP + 10,
 	SND_TIMER_EVENT_MCONTINUE = SND_TIMER_EVENT_CONTINUE + 10,
 	SND_TIMER_EVENT_MPAUSE = SND_TIMER_EVENT_PAUSE + 10,
-	SND_TIMER_EVENT_MSUSPEND = SND_TIMER_EVENT_SUSPEND + 10,
-	SND_TIMER_EVENT_MRESUME = SND_TIMER_EVENT_RESUME + 10	
 } snd_timer_event_t;
 
 /** timer read structure */
@@ -104,19 +100,15 @@ typedef struct _snd_timer_read {
 
 /** timer tstamp + event read structure */
 typedef struct _snd_timer_tread {
-	snd_timer_event_t event;	/**< Timer event */
-	snd_htimestamp_t tstamp;	/**< Time stamp of each event */
-	unsigned int val;		/**< Event value */
+	snd_timer_event_t event;
+	snd_htimestamp_t tstamp;
+	unsigned int val;
 } snd_timer_tread_t;
 
 /** global timer - system */
 #define SND_TIMER_GLOBAL_SYSTEM 0
 /** global timer - RTC */
 #define SND_TIMER_GLOBAL_RTC 	1
-/** global timer - HPET */
-#define SND_TIMER_GLOBAL_HPET	2
-/** global timer - HRTIMER */
-#define SND_TIMER_GLOBAL_HRTIMER 3
 
 /** timer open mode flag - non-blocking behaviour */
 #define SND_TIMER_OPEN_NONBLOCK		(1<<0)
@@ -150,9 +142,6 @@ int snd_timer_query_status(snd_timer_query_t *handle, snd_timer_gstatus_t *statu
 int snd_timer_open(snd_timer_t **handle, const char *name, int mode);
 int snd_timer_open_lconf(snd_timer_t **handle, const char *name, int mode, snd_config_t *lconf);
 int snd_timer_close(snd_timer_t *handle);
-int snd_async_add_timer_handler(snd_async_handler_t **handler, snd_timer_t *timer,
-				snd_async_callback_t callback, void *private_data);
-snd_timer_t *snd_async_handler_get_timer(snd_async_handler_t *handler);
 int snd_timer_poll_descriptors_count(snd_timer_t *handle);
 int snd_timer_poll_descriptors(snd_timer_t *handle, struct pollfd *pfds, unsigned int space);
 int snd_timer_poll_descriptors_revents(snd_timer_t *timer, struct pollfd *pfds, unsigned int nfds, unsigned short *revents);
@@ -166,7 +155,7 @@ ssize_t snd_timer_read(snd_timer_t *handle, void *buffer, size_t size);
 
 size_t snd_timer_id_sizeof(void);
 /** allocate #snd_timer_id_t container on stack */
-#define snd_timer_id_alloca(ptr) __snd_alloca(ptr, snd_timer_id)
+#define snd_timer_id_alloca(ptr) do { assert(ptr); *ptr = (snd_timer_id_t *) alloca(snd_timer_id_sizeof()); memset(*ptr, 0, snd_timer_id_sizeof()); } while (0)
 int snd_timer_id_malloc(snd_timer_id_t **ptr);
 void snd_timer_id_free(snd_timer_id_t *obj);
 void snd_timer_id_copy(snd_timer_id_t *dst, const snd_timer_id_t *src);
@@ -182,27 +171,9 @@ int snd_timer_id_get_device(snd_timer_id_t *id);
 void snd_timer_id_set_subdevice(snd_timer_id_t *id, int subdevice);
 int snd_timer_id_get_subdevice(snd_timer_id_t *id);
 
-size_t snd_timer_ginfo_sizeof(void);
-/** allocate #snd_timer_ginfo_t container on stack */
-#define snd_timer_ginfo_alloca(ptr) __snd_alloca(ptr, snd_timer_ginfo)
-int snd_timer_ginfo_malloc(snd_timer_ginfo_t **ptr);
-void snd_timer_ginfo_free(snd_timer_ginfo_t *obj);
-void snd_timer_ginfo_copy(snd_timer_ginfo_t *dst, const snd_timer_ginfo_t *src);
-
-int snd_timer_ginfo_set_tid(snd_timer_ginfo_t *obj, snd_timer_id_t *tid);
-snd_timer_id_t *snd_timer_ginfo_get_tid(snd_timer_ginfo_t *obj);
-unsigned int snd_timer_ginfo_get_flags(snd_timer_ginfo_t *obj);
-int snd_timer_ginfo_get_card(snd_timer_ginfo_t *obj);
-char *snd_timer_ginfo_get_id(snd_timer_ginfo_t *obj);
-char *snd_timer_ginfo_get_name(snd_timer_ginfo_t *obj);
-unsigned long snd_timer_ginfo_get_resolution(snd_timer_ginfo_t *obj);
-unsigned long snd_timer_ginfo_get_resolution_min(snd_timer_ginfo_t *obj);
-unsigned long snd_timer_ginfo_get_resolution_max(snd_timer_ginfo_t *obj);
-unsigned int snd_timer_ginfo_get_clients(snd_timer_ginfo_t *obj);
-
 size_t snd_timer_info_sizeof(void);
 /** allocate #snd_timer_info_t container on stack */
-#define snd_timer_info_alloca(ptr) __snd_alloca(ptr, snd_timer_info)
+#define snd_timer_info_alloca(ptr) do { assert(ptr); *ptr = (snd_timer_info_t *) alloca(snd_timer_info_sizeof()); memset(*ptr, 0, snd_timer_info_sizeof()); } while (0)
 int snd_timer_info_malloc(snd_timer_info_t **ptr);
 void snd_timer_info_free(snd_timer_info_t *obj);
 void snd_timer_info_copy(snd_timer_info_t *dst, const snd_timer_info_t *src);
@@ -215,7 +186,7 @@ long snd_timer_info_get_resolution(snd_timer_info_t * info);
 
 size_t snd_timer_params_sizeof(void);
 /** allocate #snd_timer_params_t container on stack */
-#define snd_timer_params_alloca(ptr) __snd_alloca(ptr, snd_timer_params)
+#define snd_timer_params_alloca(ptr) do { assert(ptr); *ptr = (snd_timer_params_t *) alloca(snd_timer_params_sizeof()); memset(*ptr, 0, snd_timer_params_sizeof()); } while (0)
 int snd_timer_params_malloc(snd_timer_params_t **ptr);
 void snd_timer_params_free(snd_timer_params_t *obj);
 void snd_timer_params_copy(snd_timer_params_t *dst, const snd_timer_params_t *src);
@@ -235,7 +206,7 @@ unsigned int snd_timer_params_get_filter(snd_timer_params_t * params);
 
 size_t snd_timer_status_sizeof(void);
 /** allocate #snd_timer_status_t container on stack */
-#define snd_timer_status_alloca(ptr) __snd_alloca(ptr, snd_timer_status)
+#define snd_timer_status_alloca(ptr) do { assert(ptr); *ptr = (snd_timer_status_t *) alloca(snd_timer_status_sizeof()); memset(*ptr, 0, snd_timer_status_sizeof()); } while (0)
 int snd_timer_status_malloc(snd_timer_status_t **ptr);
 void snd_timer_status_free(snd_timer_status_t *obj);
 void snd_timer_status_copy(snd_timer_status_t *dst, const snd_timer_status_t *src);

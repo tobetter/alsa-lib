@@ -1,6 +1,6 @@
 /*
  *  Sequencer Interface - definition of sequencer event handler
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *                        Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -32,7 +32,7 @@
 #define SND_SEQ_IBUF_SIZE	500		/* in event_size aligned */
 #define DEFAULT_TMPBUF_SIZE	20
 
-typedef struct snd_seq_queue_client snd_seq_queue_client_t;
+typedef struct sndrv_seq_queue_client snd_seq_queue_client_t;
 
 
 typedef struct {
@@ -76,8 +76,7 @@ struct _snd_seq {
 	int streams;
 	int mode;
 	int poll_fd;
-	void *dl_handle;
-	const snd_seq_ops_t *ops;
+	snd_seq_ops_t *ops;
 	void *private_data;
 	int client;		/* client number */
 	/* buffers */

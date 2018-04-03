@@ -17,17 +17,50 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
-
-#include "config.h"
+  
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>
 #include <sys/poll.h>
 #include <sys/mman.h>
-#ifdef HAVE_SYS_SHM_H
 #include <sys/shm.h>
-#endif
 #include "pcm_local.h"
+
+size_t page_size(void)
+{
+	long s = sysconf(_SC_PAGE_SIZE);
+	assert(s > 0);
+	return s;
+}
+
+size_t page_align(size_t size)
+{
+	size_t r;
+	long psz = page_size();
+	r = size % psz;
+	if (r)
+		return size + psz - r;
+	return size;
+}
+
+size_t page_ptr(size_t object_offset, size_t object_size, size_t *offset, size_t *mmap_offset)
+{
+	size_t r;
+	long psz = page_size();
+	assert(offset);
+	assert(mmap_offset);
+	*mmap_offset = object_offset;
+	object_offset %= psz;
+	*mmap_offset -= object_offset;
+	object_size += object_offset;
+	r = object_size % psz;
+	if (r)
+		r = object_size + psz - r;
+	else
+		r = object_size;
+	*offset = object_offset;
+	return r;
+}
 
 void snd_pcm_mmap_appl_backward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
@@ -72,10 +105,7 @@ static snd_pcm_sframes_t snd_pcm_mmap_write_areas(snd_pcm_t *pcm,
 {
 	snd_pcm_uframes_t xfer = 0;
 
-	if (snd_pcm_mmap_playback_avail(pcm) < size) {
-		SNDMSG("too short avail %ld to size %ld", snd_pcm_mmap_playback_avail(pcm), size);
-		return -EPIPE;
-	}
+	assert(snd_pcm_mmap_playback_avail(pcm) >= size);
 	while (size > 0) {
 		const snd_pcm_channel_area_t *pcm_areas;
 		snd_pcm_uframes_t pcm_offset;
@@ -104,10 +134,7 @@ static snd_pcm_sframes_t snd_pcm_mmap_read_areas(snd_pcm_t *pcm,
 {
 	snd_pcm_uframes_t xfer = 0;
 
-	if (snd_pcm_mmap_capture_avail(pcm) < size) {
-		SNDMSG("too short avail %ld to size %ld", snd_pcm_mmap_capture_avail(pcm), size);
-		return -EPIPE;
-	}
+	assert(snd_pcm_mmap_capture_avail(pcm) >= size);
 	while (size > 0) {
 		const snd_pcm_channel_area_t *pcm_areas;
 		snd_pcm_uframes_t pcm_offset;
@@ -229,6 +256,11 @@ snd_pcm_sframes_t snd_pcm_mmap_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_uframe
 				  snd_pcm_mmap_read_areas);
 }
 
+int snd_pcm_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *info)
+{
+	return pcm->ops->channel_info(pcm, info);
+}
+
 int snd_pcm_channel_info_shm(snd_pcm_t *pcm, snd_pcm_channel_info_t *info, int shmid)
 {
 	switch (pcm->access) {
@@ -243,16 +275,13 @@ int snd_pcm_channel_info_shm(snd_pcm_t *pcm, snd_pcm_channel_info_t *info, int s
 		info->step = pcm->sample_bits;
 		break;
 	default:
-		SNDMSG("invalid access type %d", pcm->access);
-		return -EINVAL;
+		assert(0);
+		break;
 	}
 	info->addr = 0;
-	if (pcm->hw_flags & SND_PCM_HW_PARAMS_EXPORT_BUFFER) {
-		info->type = SND_PCM_AREA_SHM;
-		info->u.shm.shmid = shmid;
-		info->u.shm.area = NULL;
-	} else
-		info->type = SND_PCM_AREA_LOCAL;
+	info->type = SND_PCM_AREA_SHM;
+	info->u.shm.shmid = shmid;
+	info->u.shm.area = NULL;
 	return 0;
 }	
 
@@ -261,14 +290,8 @@ int snd_pcm_mmap(snd_pcm_t *pcm)
 	int err;
 	unsigned int c;
 	assert(pcm);
-	if (CHECK_SANITY(! pcm->setup)) {
-		SNDMSG("PCM not set up");
-		return -EIO;
-	}
-	if (CHECK_SANITY(pcm->mmap_channels || pcm->running_areas)) {
-		SNDMSG("Already mmapped");
-		return -EBUSY;
-	}
+	assert(pcm->setup);
+	assert(!pcm->mmap_channels);
 	err = pcm->ops->mmap(pcm);
 	if (err < 0)
 		return err;
@@ -277,6 +300,7 @@ int snd_pcm_mmap(snd_pcm_t *pcm)
 	pcm->mmap_channels = calloc(pcm->channels, sizeof(pcm->mmap_channels[0]));
 	if (!pcm->mmap_channels)
 		return -ENOMEM;
+	assert(!pcm->running_areas);
 	pcm->running_areas = calloc(pcm->channels, sizeof(pcm->running_areas[0]));
 	if (!pcm->running_areas) {
 		free(pcm->mmap_channels);
@@ -287,30 +311,99 @@ int snd_pcm_mmap(snd_pcm_t *pcm)
 		snd_pcm_channel_info_t *i = &pcm->mmap_channels[c];
 		i->channel = c;
 		err = snd_pcm_channel_info(pcm, i);
-		if (err < 0) {
-			free(pcm->mmap_channels);
-			free(pcm->running_areas);
-			pcm->mmap_channels = NULL;
-			pcm->running_areas = NULL;
+		if (err < 0)
 			return err;
-		}
 	}
 	for (c = 0; c < pcm->channels; ++c) {
 		snd_pcm_channel_info_t *i = &pcm->mmap_channels[c];
 		snd_pcm_channel_area_t *a = &pcm->running_areas[c];
-		char *ptr;
-		size_t size;
 		unsigned int c1;
-		if (i->addr) {
-        		a->addr = i->addr;
-        		a->first = i->first;
-        		a->step = i->step;
-		        continue;
-                }
-                size = i->first + i->step * (pcm->buffer_size - 1) + pcm->sample_bits;
+		if (!i->addr) {
+			char *ptr;
+			size_t size = i->first + i->step * (pcm->buffer_size - 1) + pcm->sample_bits;
+			for (c1 = c + 1; c1 < pcm->channels; ++c1) {
+				snd_pcm_channel_info_t *i1 = &pcm->mmap_channels[c1];
+				size_t s;
+				if (i1->type != i->type)
+					continue;
+				switch (i1->type) {
+				case SND_PCM_AREA_MMAP:
+					if (i1->u.mmap.fd != i->u.mmap.fd ||
+					    i1->u.mmap.offset != i->u.mmap.offset)
+						continue;
+					break;
+				case SND_PCM_AREA_SHM:
+					if (i1->u.shm.shmid != i->u.shm.shmid)
+						continue;
+					break;
+				default:
+					assert(0);
+				}
+				s = i1->first + i1->step * (pcm->buffer_size - 1) + pcm->sample_bits;
+				if (s > size)
+					size = s;
+			}
+			size = (size + 7) / 8;
+			size = page_align(size);
+			switch (i->type) {
+			case SND_PCM_AREA_MMAP:
+				ptr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_FILE|MAP_SHARED, i->u.mmap.fd, i->u.mmap.offset);
+				if (ptr == MAP_FAILED) {
+					SYSERR("mmap failed");
+					return -errno;
+				}
+				i->addr = ptr;
+				break;
+			case SND_PCM_AREA_SHM:
+				if (i->u.shm.shmid < 0) {
+					int id;
+					id = shmget(IPC_PRIVATE, size, 0666);
+					if (id < 0) {
+						SYSERR("shmget failed");
+						return -errno;
+					}
+					i->u.shm.shmid = id;
+					ptr = shmat(i->u.shm.shmid, 0, 0);
+					if (ptr == (void *) -1) {
+						SYSERR("shmat failed");
+						return -errno;
+					}
+					/* automatically remove segment if not used */
+					if (shmctl(id, IPC_RMID, NULL) < 0){
+						SYSERR("shmctl mark remove failed");
+						return -errno;
+					}
+					i->u.shm.area = snd_shm_area_create(id, ptr);
+					if (i->u.shm.area == NULL) {
+						SYSERR("snd_shm_area_create failed");
+						return -ENOMEM;
+					}
+					if (pcm->access == SND_PCM_ACCESS_MMAP_INTERLEAVED ||
+					    pcm->access == SND_PCM_ACCESS_RW_INTERLEAVED) {
+					    	unsigned int c1;
+						for (c1 = c + 1; c1 < pcm->channels; c1++) {
+							snd_pcm_channel_info_t *i1 = &pcm->mmap_channels[c1];
+							if (i1->u.shm.shmid < 0) {
+								i1->u.shm.shmid = id;
+								i1->u.shm.area = snd_shm_area_share(i->u.shm.area);
+							}
+						}
+					}
+				} else {
+					ptr = shmat(i->u.shm.shmid, 0, 0);
+					if (ptr == (void*) -1) {
+						SYSERR("shmat failed");
+						return -errno;
+					}
+				}
+				i->addr = ptr;
+				break;
+			default:
+				assert(0);
+			}
+		}
 		for (c1 = c + 1; c1 < pcm->channels; ++c1) {
 			snd_pcm_channel_info_t *i1 = &pcm->mmap_channels[c1];
-			size_t s;
 			if (i1->type != i->type)
 				continue;
 			switch (i1->type) {
@@ -322,106 +415,6 @@ int snd_pcm_mmap(snd_pcm_t *pcm)
 			case SND_PCM_AREA_SHM:
 				if (i1->u.shm.shmid != i->u.shm.shmid)
 					continue;
-				break;
-			case SND_PCM_AREA_LOCAL:
-				break;
-			default:
-				assert(0);
-			}
-			s = i1->first + i1->step * (pcm->buffer_size - 1) + pcm->sample_bits;
-			if (s > size)
-				size = s;
-		}
-		size = (size + 7) / 8;
-		size = page_align(size);
-		switch (i->type) {
-		case SND_PCM_AREA_MMAP:
-			ptr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_FILE|MAP_SHARED, i->u.mmap.fd, i->u.mmap.offset);
-			if (ptr == MAP_FAILED) {
-				SYSERR("mmap failed");
-				return -errno;
-			}
-			i->addr = ptr;
-			break;
-		case SND_PCM_AREA_SHM:
-#ifdef HAVE_SYS_SHM_H
-			if (i->u.shm.shmid < 0) {
-				int id;
-				/* FIXME: safer permission? */
-				id = shmget(IPC_PRIVATE, size, 0666);
-				if (id < 0) {
-					SYSERR("shmget failed");
-					return -errno;
-				}
-				i->u.shm.shmid = id;
-				ptr = shmat(i->u.shm.shmid, 0, 0);
-				if (ptr == (void *) -1) {
-					SYSERR("shmat failed");
-					return -errno;
-				}
-				/* automatically remove segment if not used */
-				if (shmctl(id, IPC_RMID, NULL) < 0){
-					SYSERR("shmctl mark remove failed");
-					return -errno;
-				}
-				i->u.shm.area = snd_shm_area_create(id, ptr);
-				if (i->u.shm.area == NULL) {
-					SYSERR("snd_shm_area_create failed");
-					return -ENOMEM;
-				}
-				if (pcm->access == SND_PCM_ACCESS_MMAP_INTERLEAVED ||
-				    pcm->access == SND_PCM_ACCESS_RW_INTERLEAVED) {
-					unsigned int c1;
-					for (c1 = c + 1; c1 < pcm->channels; c1++) {
-						snd_pcm_channel_info_t *i1 = &pcm->mmap_channels[c1];
-						if (i1->u.shm.shmid < 0) {
-							i1->u.shm.shmid = id;
-							i1->u.shm.area = snd_shm_area_share(i->u.shm.area);
-						}
-					}
-				}
-			} else {
-				ptr = shmat(i->u.shm.shmid, 0, 0);
-				if (ptr == (void*) -1) {
-					SYSERR("shmat failed");
-					return -errno;
-				}
-			}
-			i->addr = ptr;
-			break;
-#else
-			SYSERR("shm support not available");
-			return -ENOSYS;
-#endif
-		case SND_PCM_AREA_LOCAL:
-			ptr = malloc(size);
-			if (ptr == NULL) {
-				SYSERR("malloc failed");
-				return -errno;
-			}
-			i->addr = ptr;
-			break;
-		default:
-			assert(0);
-		}
-		for (c1 = c + 1; c1 < pcm->channels; ++c1) {
-			snd_pcm_channel_info_t *i1 = &pcm->mmap_channels[c1];
-			if (i1->type != i->type)
-				continue;
-			switch (i1->type) {
-			case SND_PCM_AREA_MMAP:
-				if (i1->u.mmap.fd != i->u.mmap.fd ||
-                                    i1->u.mmap.offset != i->u.mmap.offset)
-					continue;
-				break;
-			case SND_PCM_AREA_SHM:
-				if (i1->u.shm.shmid != i->u.shm.shmid)
-					continue;
-				/* follow thru */
-			case SND_PCM_AREA_LOCAL:
-				if (pcm->access != SND_PCM_ACCESS_MMAP_INTERLEAVED &&
-				    pcm->access != SND_PCM_ACCESS_RW_INTERLEAVED)
-				        continue;
 				break;
 			default:
 				assert(0);
@@ -440,10 +433,7 @@ int snd_pcm_munmap(snd_pcm_t *pcm)
 	int err;
 	unsigned int c;
 	assert(pcm);
-	if (CHECK_SANITY(! pcm->mmap_channels)) {
-		SNDMSG("Not mmapped");
-		return -ENXIO;
-	}
+	assert(pcm->mmap_channels);
 	if (pcm->mmap_shadow)
 		return pcm->ops->munmap(pcm);
 	for (c = 0; c < pcm->channels; ++c) {
@@ -474,7 +464,6 @@ int snd_pcm_munmap(snd_pcm_t *pcm)
 			errno = 0;
 			break;
 		case SND_PCM_AREA_SHM:
-#ifdef HAVE_SYS_SHM_H
 			if (i->u.shm.area) {
 				snd_shm_area_destroy(i->u.shm.area);
 				i->u.shm.area = NULL;
@@ -491,13 +480,6 @@ int snd_pcm_munmap(snd_pcm_t *pcm)
 				}
 			}
 			break;
-#else
-			SYSERR("shm support not available");
-			return -ENOSYS;
-#endif
-		case SND_PCM_AREA_LOCAL:
-			free(i->addr);
-			break;
 		default:
 			assert(0);
 		}
@@ -513,15 +495,14 @@ int snd_pcm_munmap(snd_pcm_t *pcm)
 	return 0;
 }
 
-snd_pcm_sframes_t snd_pcm_write_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t offset,
-				     snd_pcm_uframes_t size)
+snd_pcm_sframes_t snd_pcm_write_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t size)
 {
 	snd_pcm_uframes_t xfer = 0;
 	snd_pcm_sframes_t err = 0;
-	if (! size)
-		return 0;
+	assert(size > 0);
 	while (xfer < size) {
 		snd_pcm_uframes_t frames = size - xfer;
+		snd_pcm_uframes_t offset = snd_pcm_mmap_hw_offset(pcm);
 		snd_pcm_uframes_t cont = pcm->buffer_size - offset;
 		if (cont < frames)
 			frames = cont;
@@ -551,28 +532,27 @@ snd_pcm_sframes_t snd_pcm_write_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t offset,
 			break;
 		}
 		default:
-			SNDMSG("invalid access type %d", pcm->access);
-			return -EINVAL;
+			assert(0);
+			err = -EINVAL;
+			break;
 		}
 		if (err < 0)
 			break;
 		xfer += frames;
-		offset = (offset + frames) % pcm->buffer_size;
 	}
 	if (xfer > 0)
 		return xfer;
 	return err;
 }
 
-snd_pcm_sframes_t snd_pcm_read_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t offset,
-				    snd_pcm_uframes_t size)
+snd_pcm_sframes_t snd_pcm_read_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t size)
 {
 	snd_pcm_uframes_t xfer = 0;
 	snd_pcm_sframes_t err = 0;
-	if (! size)
-		return 0;
+	assert(size > 0);
 	while (xfer < size) {
 		snd_pcm_uframes_t frames = size - xfer;
+		snd_pcm_uframes_t offset = snd_pcm_mmap_hw_offset(pcm);
 		snd_pcm_uframes_t cont = pcm->buffer_size - offset;
 		if (cont < frames)
 			frames = cont;
@@ -599,16 +579,15 @@ snd_pcm_sframes_t snd_pcm_read_mmap(snd_pcm_t *pcm, snd_pcm_uframes_t offset,
 			err = _snd_pcm_readn(pcm->fast_op_arg, bufs, frames);
 			if (err >= 0)
 				frames = err;
-			break;
 		}
 		default:
-			SNDMSG("invalid access type %d", pcm->access);
-			return -EINVAL;
+			assert(0);
+			err = -EINVAL;
+			break;
 		}
 		if (err < 0)
 			break;
 		xfer += frames;
-		offset = (offset + frames) % pcm->buffer_size;
 	}
 	if (xfer > 0)
 		return xfer;

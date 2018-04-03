@@ -8,4 +8,4 @@ noinst_HEADERS = alisp_local.h
 
 all: libalisp.la
 
-AM_CPPFLAGS=-I$(top_srcdir)/include
+INCLUDES=-I$(top_srcdir)/include

@@ -2,7 +2,7 @@
  * \file pcm/pcm_simple.c
  * \ingroup PCM_Simple
  * \brief PCM Simple Interface
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2004
  */
 /*
@@ -89,7 +89,7 @@ static int set_hw_params(snd_pcm_t *pcm,
 			return err;
 		if (periods == 1)
 			return -EINVAL;
-		if (period_time) {
+		if (*period_time == 0) {
 			err = INTERNAL(snd_pcm_hw_params_get_period_time)(hw_params, period_time, NULL);
 			if (err < 0)
 				return err;
@@ -134,26 +134,15 @@ static int set_sw_params(snd_pcm_t *pcm,
 	}
 	if (err < 0)
 		return err;
+	err = snd_pcm_sw_params_set_xfer_align(pcm, sw_params, 1);
+	if (err < 0)
+		return err;
 	err = snd_pcm_sw_params(pcm, sw_params);
 	if (err < 0)
 		return err;
 	return 0;
 }
 
-/**
- * \brief Set up a simple PCM
- * \param pcm PCM handle
- * \param rate Sample rate
- * \param channels Number of channels
- * \param format PCM format
- * \param subformat PCM subformat
- * \param latency Latency type
- * \param access PCM acceess type
- * \param xrun_type XRUN type
- * \return 0 if successful, or a negative error code
- *
- * \warning The simple PCM API may be broken in the current release.
- */
 int snd_spcm_init(snd_pcm_t *pcm,
 		  unsigned int rate,
 		  unsigned int channels,
@@ -193,22 +182,6 @@ int snd_spcm_init(snd_pcm_t *pcm,
 	return 0;
 }
 
-/**
- * \brief Initialize simple PCMs in the duplex mode
- * \param playback_pcm PCM handle for playback
- * \param capture_pcm PCM handle for capture
- * \param rate Sample rate
- * \param channels Number of channels
- * \param format PCM format
- * \param subformat PCM subformat
- * \param latency Latency type
- * \param access PCM acceess type
- * \param xrun_type XRUN type
- * \param duplex_type Duplex mode
- * \return 0 if successful, or a negative error code
- *
- * \warning The simple PCM API may be broken in the current release.
- */
 int snd_spcm_init_duplex(snd_pcm_t *playback_pcm,
 			 snd_pcm_t *capture_pcm,
 			 unsigned int rate,
@@ -277,16 +250,6 @@ int snd_spcm_init_duplex(snd_pcm_t *playback_pcm,
 	return 0;
 }
 
-/**
- * \brief Get the set up of simple PCM
- * \param pcm PCM handle
- * \param rate Pointer to store the current sample rate
- * \param buffer_size Pointer to store the current buffer size
- * \param period_size Pointer to store the current period size
- * \return 0 if successful, or a negative error code
- *
- * \warning The simple PCM API may be broken in the current release.
- */
 int snd_spcm_init_get_params(snd_pcm_t *pcm,
 			     unsigned int *rate,
 			     snd_pcm_uframes_t *buffer_size,

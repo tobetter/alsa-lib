@@ -35,6 +35,7 @@
 #include <math.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
+#include <sys/shm.h>
 #include <pthread.h>
 #include "pcm_local.h"
 
@@ -127,8 +128,6 @@ static snd_pcm_uframes_t snd_pcm_share_slave_avail(snd_pcm_share_slave_t *slave)
 		avail += pcm->buffer_size;
 	if (avail < 0)
 		avail += pcm->boundary;
-	else if ((snd_pcm_uframes_t) avail >= pcm->boundary)
-		avail -= pcm->boundary;
 	return avail;
 }
 
@@ -137,15 +136,18 @@ static snd_pcm_uframes_t snd_pcm_share_slave_avail(snd_pcm_share_slave_t *slave)
 static snd_pcm_uframes_t _snd_pcm_share_slave_forward(snd_pcm_share_slave_t *slave)
 {
 	struct list_head *i;
-	snd_pcm_uframes_t buffer_size;
+	snd_pcm_uframes_t buffer_size, boundary;
+	snd_pcm_uframes_t slave_appl_ptr;
 	snd_pcm_sframes_t frames, safety_frames;
 	snd_pcm_sframes_t min_frames, max_frames;
 	snd_pcm_uframes_t avail, slave_avail;
 	snd_pcm_uframes_t slave_hw_avail;
 	slave_avail = snd_pcm_share_slave_avail(slave);
+	boundary = slave->pcm->boundary;
 	buffer_size = slave->pcm->buffer_size;
 	min_frames = slave_avail;
 	max_frames = 0;
+	slave_appl_ptr = *slave->pcm->appl.ptr;
 	list_for_each(i, &slave->clients) {
 		snd_pcm_share_t *share = list_entry(i, snd_pcm_share_t, list);
 		snd_pcm_t *pcm = share->pcm;
@@ -236,13 +238,8 @@ static snd_pcm_uframes_t _snd_pcm_share_missing(snd_pcm_t *pcm)
 				missing = 1;
 			}
 			err = snd_pcm_mmap_commit(spcm, snd_pcm_mmap_offset(spcm), frames);
-			if (err < 0) {
-				SYSMSG("snd_pcm_mmap_commit error");
-				return INT_MAX;
-			}
-			if (err != frames)
-				SYSMSG("commit returns %ld for size %ld", err, frames);
-			slave_avail -= err;
+			assert(err == frames);
+			slave_avail -= frames;
 		} else {
 			if (safety_missing == 0)
 				missing = 1;
@@ -281,8 +278,8 @@ static snd_pcm_uframes_t _snd_pcm_share_missing(snd_pcm_t *pcm)
 		running = 1;
 		break;
 	default:
-		SNDERR("invalid shared PCM state %d", share->state);
-		return INT_MAX;
+		assert(0);
+		break;
 	}
 
  update_poll:
@@ -360,17 +357,10 @@ static void *snd_pcm_share_thread(void *data)
 	pfd[0].fd = slave->poll[0];
 	pfd[0].events = POLLIN;
 	err = snd_pcm_poll_descriptors(spcm, &pfd[1], 1);
-	if (err != 1) {
-		SNDERR("invalid poll descriptors %d", err);
-		return NULL;
-	}
+	assert(err == 1);
 	Pthread_mutex_lock(&slave->mutex);
 	err = pipe(slave->poll);
-	if (err < 0) {
-		SYSERR("can't create a pipe");
-		Pthread_mutex_unlock(&slave->mutex);
-		return NULL;
-	}
+	assert(err >= 0);
 	while (slave->open_count > 0) {
 		snd_pcm_uframes_t missing;
 		// printf("begin min_missing\n");
@@ -393,11 +383,7 @@ static void *snd_pcm_share_thread(void *data)
 			if ((snd_pcm_uframes_t)avail_min != spcm->avail_min) {
 				snd_pcm_sw_params_set_avail_min(spcm, &slave->sw_params, avail_min);
 				err = snd_pcm_sw_params(spcm, &slave->sw_params);
-				if (err < 0) {
-					SYSERR("snd_pcm_sw_params error");
-					Pthread_mutex_unlock(&slave->mutex);
-					return NULL;
-				}
+				assert(err >= 0);
 			}
 			slave->polling = 1;
 			Pthread_mutex_unlock(&slave->mutex);
@@ -447,10 +433,7 @@ static void _snd_pcm_share_update(snd_pcm_t *pcm)
 			int err;
 			snd_pcm_sw_params_set_avail_min(spcm, &slave->sw_params, avail_min);
 			err = snd_pcm_sw_params(spcm, &slave->sw_params);
-			if (err < 0) {
-				SYSERR("snd_pcm_sw_params error");
-				return;
-			}
+			assert(err >= 0);
 		}
 	}
 }
@@ -539,7 +522,8 @@ static int snd_pcm_share_hw_refine_schange(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_
 			      SND_PCM_HW_PARBIT_PERIOD_TIME |
 			      SND_PCM_HW_PARBIT_BUFFER_SIZE |
 			      SND_PCM_HW_PARBIT_BUFFER_TIME |
-			      SND_PCM_HW_PARBIT_PERIODS);
+			      SND_PCM_HW_PARBIT_PERIODS |
+			      SND_PCM_HW_PARBIT_TICK_TIME);
 	const snd_pcm_access_mask_t *access_mask = snd_pcm_hw_param_get_mask(params, SND_PCM_HW_PARAM_ACCESS);
 	if (!snd_pcm_access_mask_test(access_mask, SND_PCM_ACCESS_RW_INTERLEAVED) &&
 	    !snd_pcm_access_mask_test(access_mask, SND_PCM_ACCESS_RW_NONINTERLEAVED) &&
@@ -569,7 +553,8 @@ static int snd_pcm_share_hw_refine_cchange(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_
 			      SND_PCM_HW_PARBIT_PERIOD_TIME |
 			      SND_PCM_HW_PARBIT_BUFFER_SIZE |
 			      SND_PCM_HW_PARBIT_BUFFER_TIME |
-			      SND_PCM_HW_PARBIT_PERIODS);
+			      SND_PCM_HW_PARBIT_PERIODS |
+			      SND_PCM_HW_PARBIT_TICK_TIME);
 	snd_pcm_access_mask_t access_mask;
 	const snd_pcm_access_mask_t *saccess_mask = snd_pcm_hw_param_get_mask(sparams, SND_PCM_HW_PARAM_ACCESS);
 	snd_pcm_access_mask_any(&access_mask);
@@ -598,7 +583,7 @@ static int snd_pcm_share_hw_refine_slave(snd_pcm_t *pcm, snd_pcm_hw_params_t *pa
 static int snd_pcm_share_hw_params_slave(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 {
 	snd_pcm_share_t *share = pcm->private_data;
-	return _snd_pcm_hw_params_internal(share->slave->pcm, params);
+	return _snd_pcm_hw_params(share->slave->pcm, params);
 }
 
 static int snd_pcm_share_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
@@ -637,6 +622,11 @@ static int snd_pcm_share_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			goto _err;
 		err = _snd_pcm_hw_param_set(params, SND_PCM_HW_PARAM_BUFFER_SIZE,
 					    spcm->buffer_size, 0);
+		if (err < 0)
+			goto _err;
+		err = _snd_pcm_hw_param_set_minmax(params, SND_PCM_HW_PARAM_TICK_TIME,
+						   spcm->tick_time, 0,
+						   spcm->tick_time, 1);
 	_err:
 		if (err < 0) {
 			SNDERR("slave is already running with incompatible setup");
@@ -798,18 +788,6 @@ static snd_pcm_sframes_t snd_pcm_share_avail_update(snd_pcm_t *pcm)
 	return avail;
 }
 
-static int snd_pcm_share_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
-				    snd_htimestamp_t *tstamp)
-{
-	snd_pcm_share_t *share = pcm->private_data;
-	snd_pcm_share_slave_t *slave = share->slave;
-	int err;
-	Pthread_mutex_lock(&slave->mutex);
-	err = snd_pcm_htimestamp(slave->pcm, avail, tstamp);
-	Pthread_mutex_unlock(&slave->mutex);
-	return err;
-}
-
 /* Call it with mutex held */
 static snd_pcm_sframes_t _snd_pcm_share_mmap_commit(snd_pcm_t *pcm,
 						    snd_pcm_uframes_t offset ATTRIBUTE_UNUSED,
@@ -840,14 +818,7 @@ static snd_pcm_sframes_t _snd_pcm_share_mmap_commit(snd_pcm_t *pcm,
 		if (frames > 0) {
 			snd_pcm_sframes_t err;
 			err = snd_pcm_mmap_commit(spcm, snd_pcm_mmap_offset(spcm), frames);
-			if (err < 0) {
-				SYSMSG("snd_pcm_mmap_commit error");
-				return err;
-			}
-			if (err != frames) {
-				SYSMSG("commit returns %ld for size %ld", err, frames);
-				return err;
-			}
+			assert(err == frames);
 		}
 		_snd_pcm_share_update(pcm);
 	}
@@ -919,6 +890,7 @@ static int snd_pcm_share_start(snd_pcm_t *pcm)
 	snd_pcm_share_t *share = pcm->private_data;
 	snd_pcm_share_slave_t *slave = share->slave;
 	snd_pcm_t *spcm = slave->pcm;
+	struct timeval tv;
 	int err = 0;
 	if (share->state != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
@@ -974,7 +946,9 @@ static int snd_pcm_share_start(snd_pcm_t *pcm)
 	}
 	slave->running_count++;
 	_snd_pcm_share_update(pcm);
-	gettimestamp(&share->trigger_tstamp, pcm->tstamp_type);
+	gettimeofday(&tv, 0);
+	share->trigger_tstamp.tv_sec = tv.tv_sec;
+	share->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
  _end:
 	Pthread_mutex_unlock(&slave->mutex);
 	return err;
@@ -1039,17 +1013,6 @@ static snd_pcm_sframes_t _snd_pcm_share_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t
 	return n;
 }
 
-static snd_pcm_sframes_t snd_pcm_share_rewindable(snd_pcm_t *pcm)
-{
-	snd_pcm_share_t *share = pcm->private_data;
-	snd_pcm_share_slave_t *slave = share->slave;
-	snd_pcm_sframes_t ret;
-	Pthread_mutex_lock(&slave->mutex);
-	ret = snd_pcm_rewindable(slave->pcm);
-	Pthread_mutex_unlock(&slave->mutex);
-	return ret;
-}
-
 static snd_pcm_sframes_t snd_pcm_share_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_share_t *share = pcm->private_data;
@@ -1096,17 +1059,6 @@ static snd_pcm_sframes_t _snd_pcm_share_forward(snd_pcm_t *pcm, snd_pcm_uframes_
 	return n;
 }
 
-static snd_pcm_sframes_t snd_pcm_share_forwardable(snd_pcm_t *pcm)
-{
-	snd_pcm_share_t *share = pcm->private_data;
-	snd_pcm_share_slave_t *slave = share->slave;
-	snd_pcm_sframes_t ret;
-	Pthread_mutex_lock(&slave->mutex);
-	ret = snd_pcm_forwardable(slave->pcm);
-	Pthread_mutex_unlock(&slave->mutex);
-	return ret;
-}
-
 static snd_pcm_sframes_t snd_pcm_share_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_share_t *share = pcm->private_data;
@@ -1123,13 +1075,16 @@ static void _snd_pcm_share_stop(snd_pcm_t *pcm, snd_pcm_state_t state)
 {
 	snd_pcm_share_t *share = pcm->private_data;
 	snd_pcm_share_slave_t *slave = share->slave;
+	struct timeval tv;
 #if 0
 	if (!pcm->mmap_channels) {
 		/* PCM closing already begun in the main thread */
 		return;
 	}
 #endif
-	gettimestamp(&share->trigger_tstamp, pcm->tstamp_type);
+	gettimeofday(&tv, 0);
+	share->trigger_tstamp.tv_sec = tv.tv_sec;
+	share->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE) {
 		snd_pcm_areas_copy(pcm->stopped_areas, 0,
 				   pcm->running_areas, 0,
@@ -1297,18 +1252,18 @@ static void snd_pcm_share_dump(snd_pcm_t *pcm, snd_output_t *out)
 	snd_pcm_share_slave_t *slave = share->slave;
 	unsigned int k;
 	snd_output_printf(out, "Share PCM\n");
-	snd_output_printf(out, "  Channel bindings:\n");
+	snd_output_printf(out, "\nChannel bindings:\n");
 	for (k = 0; k < share->channels; ++k)
-		snd_output_printf(out, "    %d: %d\n", k, share->slave_channels[k]);
+		snd_output_printf(out, "%d: %d\n", k, share->slave_channels[k]);
 	if (pcm->setup) {
-		snd_output_printf(out, "Its setup is:\n");
+		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
 	snd_pcm_dump(slave->pcm, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_share_ops = {
+static snd_pcm_ops_t snd_pcm_share_ops = {
 	.close = snd_pcm_share_close,
 	.info = snd_pcm_share_info,
 	.hw_refine = snd_pcm_share_hw_refine,
@@ -1323,7 +1278,7 @@ static const snd_pcm_ops_t snd_pcm_share_ops = {
 	.munmap = snd_pcm_share_munmap,
 };
 
-static const snd_pcm_fast_ops_t snd_pcm_share_fast_ops = {
+static snd_pcm_fast_ops_t snd_pcm_share_fast_ops = {
 	.status = snd_pcm_share_status,
 	.state = snd_pcm_share_state,
 	.hwsync = snd_pcm_share_hwsync,
@@ -1338,13 +1293,11 @@ static const snd_pcm_fast_ops_t snd_pcm_share_fast_ops = {
 	.writen = snd_pcm_mmap_writen,
 	.readi = snd_pcm_mmap_readi,
 	.readn = snd_pcm_mmap_readn,
-	.rewindable = snd_pcm_share_rewindable,
 	.rewind = snd_pcm_share_rewind,
-	.forwardable = snd_pcm_share_forwardable,
 	.forward = snd_pcm_share_forward,
 	.resume = snd_pcm_share_resume,
+	.poll_ask = NULL, /* FIXME */
 	.avail_update = snd_pcm_share_avail_update,
-	.htimestamp = snd_pcm_share_htimestamp,
 	.mmap_commit = snd_pcm_share_mmap_commit,
 };
 
@@ -1529,7 +1482,6 @@ int snd_pcm_share_open(snd_pcm_t **pcmp, const char *name, const char *sname,
 	pcm->private_data = share;
 	pcm->poll_fd = share->client_socket;
 	pcm->poll_events = stream == SND_PCM_STREAM_PLAYBACK ? POLLOUT : POLLIN;
-	pcm->tstamp_type = slave->pcm->tstamp_type;
 	snd_pcm_set_hw_ptr(pcm, &share->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &share->appl_ptr, -1, 0);
 
@@ -1714,8 +1666,10 @@ int _snd_pcm_share_open(snd_pcm_t **pcmp, const char *name,
 				 speriod_time, sbuffer_time,
 				 channels, channels_map, stream, mode);
 _free:
-	free(channels_map);
-	free((char *)sname);
+	if (channels_map)
+		free(channels_map);
+	if (sname)
+		free((char *)sname);
 	return err;
 }
 #ifndef DOC_HIDDEN

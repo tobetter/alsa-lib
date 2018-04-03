@@ -1,6 +1,6 @@
 /*
  *  PCM Symbols
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *   This library is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU Lesser General Public License as
@@ -33,7 +33,6 @@ extern const char *_snd_module_pcm_meter;
 extern const char *_snd_module_pcm_mulaw;
 extern const char *_snd_module_pcm_multi;
 extern const char *_snd_module_pcm_null;
-extern const char *_snd_module_pcm_empty;
 extern const char *_snd_module_pcm_plug;
 extern const char *_snd_module_pcm_rate;
 extern const char *_snd_module_pcm_route;
@@ -46,19 +45,36 @@ extern const char *_snd_module_pcm_dsnoop;
 extern const char *_snd_module_pcm_dshare;
 extern const char *_snd_module_pcm_asym;
 extern const char *_snd_module_pcm_iec958;
-extern const char *_snd_module_pcm_softvol;
-extern const char *_snd_module_pcm_extplug;
-extern const char *_snd_module_pcm_ioplug;
-extern const char *_snd_module_pcm_mmap_emul;
 
 static const char **snd_pcm_open_objects[] = {
+	&_snd_module_pcm_adpcm,
+	&_snd_module_pcm_alaw,
+	&_snd_module_pcm_copy,
+	&_snd_module_pcm_file,
+	&_snd_module_pcm_hooks,
 	&_snd_module_pcm_hw,
-#include "pcm_symbols_list.c"
+	&_snd_module_pcm_linear,
+	&_snd_module_pcm_meter,
+	&_snd_module_pcm_mulaw,
+	&_snd_module_pcm_multi,
+	&_snd_module_pcm_null,
+	&_snd_module_pcm_plug,
+	&_snd_module_pcm_rate,
+	&_snd_module_pcm_route,
+	&_snd_module_pcm_share,
+	&_snd_module_pcm_shm,
+	&_snd_module_pcm_lfloat,
+	&_snd_module_pcm_ladspa,
+	&_snd_module_pcm_dmix,
+	&_snd_module_pcm_dsnoop,
+	&_snd_module_pcm_dshare,
+	&_snd_module_pcm_asym,
+	&_snd_module_pcm_iec958
 };
 	
 void *snd_pcm_open_symbols(void)
 {
-	return snd_pcm_open_objects;
+	return (void *)snd_pcm_open_objects[0];
 }
 
 #endif /* !PIC */

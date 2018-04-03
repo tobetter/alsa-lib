@@ -1,6 +1,6 @@
 /*
  *  Hardware dependent Interface - main file for hardware access
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -32,7 +32,7 @@
 const char *_snd_module_hwdep_hw = "";
 #endif
 
-#define SNDRV_FILE_HWDEP	ALSA_DEVICE_DIRECTORY "hwC%iD%i"
+#define SNDRV_FILE_HWDEP	"/dev/snd/hwC%iD%i"
 #define SNDRV_HWDEP_VERSION_MAX	SNDRV_PROTOCOL_VERSION(1, 0, 1)
 
 static int snd_hwdep_hw_close(snd_hwdep_t *hwdep)
@@ -94,7 +94,7 @@ static ssize_t snd_hwdep_hw_read(snd_hwdep_t *hwdep, void *buffer, size_t size)
 	return result;
 }
 
-static const snd_hwdep_ops_t snd_hwdep_hw_ops = {
+static snd_hwdep_ops_t snd_hwdep_hw_ops = {
 	.close = snd_hwdep_hw_close,
 	.nonblock = snd_hwdep_hw_nonblock,
 	.info = snd_hwdep_hw_info,
@@ -106,22 +106,31 @@ static const snd_hwdep_ops_t snd_hwdep_hw_ops = {
 int snd_hwdep_hw_open(snd_hwdep_t **handle, const char *name, int card, int device, int mode)
 {
 	int fd, ver, ret;
-	char filename[sizeof(SNDRV_FILE_HWDEP) + 20];
+	char filename[32];
 	snd_hwdep_t *hwdep;
 	assert(handle);
 
 	*handle = NULL;
 	
-	if (card < 0 || card >= SND_MAX_CARDS)
+	if (card < 0 || card >= 32)
 		return -EINVAL;
 	sprintf(filename, SNDRV_FILE_HWDEP, card, device);
-	fd = snd_open_device(filename, mode);
-	if (fd < 0) {
+	if ((fd = open(filename, mode)) < 0) {
 		snd_card_load(card);
-		fd = snd_open_device(filename, mode);
-		if (fd < 0)
+		if ((fd = open(filename, mode)) < 0)
 			return -errno;
 	}
+#if 0
+	/*
+	 * this is bogus, an application have to care about open filedescriptors
+	 */
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+		SYSERR("fcntl FD_CLOEXEC failed");
+		ret = -errno;
+		close(fd);
+		return ret;
+	}
+#endif
 	if (ioctl(fd, SNDRV_HWDEP_IOCTL_PVERSION, &ver) < 0) {
 		ret = -errno;
 		close(fd);
@@ -158,7 +167,9 @@ int _snd_hwdep_hw_open(snd_hwdep_t **hwdep, char *name,
 		const char *id;
 		if (snd_config_get_id(n, &id) < 0)
 			continue;
-		if (_snd_conf_generic_id(id))
+		if (strcmp(id, "comment") == 0)
+			continue;
+		if (strcmp(id, "type") == 0)
 			continue;
 		if (strcmp(id, "card") == 0) {
 			err = snd_config_get_integer(n, &card);

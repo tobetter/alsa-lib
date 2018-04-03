@@ -5,71 +5,21 @@ alsaincludedir = ${includedir}/alsa
 
 alsainclude_HEADERS = asoundlib.h asoundef.h \
 		      version.h global.h input.h output.h error.h \
-		      conf.h control.h iatomic.h
+		      conf.h pcm.h pcm_plugin.h rawmidi.h timer.h \
+		      hwdep.h control.h mixer.h \
+		      seq_event.h seq.h seqmid.h seq_midi_event.h \
+		      conv.h instr.h iatomic.h \
+		      pcm_ordinary.h mixer_ordinary.h \
+		      alisp.h
 
-if BUILD_CTL_PLUGIN_EXT
-alsainclude_HEADERS += control_external.h
-endif
+noinst_HEADERS = sys.h search.h list.h aserver.h local.h alsa-symbols.h
 
-if BUILD_PCM
-alsainclude_HEADERS += pcm.h pcm_old.h timer.h
-if BUILD_PCM_PLUGIN
-alsainclude_HEADERS += pcm_plugin.h
-endif
-if BUILD_PCM_PLUGIN_RATE
-alsainclude_HEADERS += pcm_rate.h
-endif
-if BUILD_PCM_PLUGIN_EXTPLUG
-alsainclude_HEADERS += pcm_external.h pcm_extplug.h
-endif
-if BUILD_PCM_PLUGIN_IOPLUG
-if !BUILD_PCM_PLUGIN_EXTPLUG
-alsainclude_HEADERS += pcm_external.h
-endif
-alsainclude_HEADERS += pcm_ioplug.h
-endif
-endif
+CLEANFILES = stamp-vh version.h alsa
 
-if BUILD_RAWMIDI
-alsainclude_HEADERS += rawmidi.h
-endif
-
-if BUILD_HWDEP
-alsainclude_HEADERS += hwdep.h
-endif
-
-if BUILD_MIXER
-alsainclude_HEADERS += mixer.h mixer_abst.h
-endif
-
-if BUILD_SEQ
-alsainclude_HEADERS += seq_event.h seq.h seqmid.h seq_midi_event.h
-endif
-
-if BUILD_UCM
-alsainclude_HEADERS += use-case.h
-endif
-
-if BUILD_TOPOLOGY
-alsainclude_HEADERS += topology.h
-endif
-
-if BUILD_ALISP
-alsainclude_HEADERS += alisp.h
-endif
-
-noinst_HEADERS = alsa sys.h search.h list.h aserver.h local.h alsa-symbols.h \
-	asoundlib-head.h asoundlib-tail.h
-
-DISTCLEANFILES = stamp-vh version.h alsa asoundlib.h
-
-alsa:
-	ln -s $(top_srcdir)/include alsa
-
-version.h: stamp-vh alsa
+version.h: stamp-vh
 	@:
 
-stamp-vh: $(top_builddir)/configure.ac
+stamp-vh: $(top_builddir)/configure.in
 	@echo "/*" > ver.tmp
 	@echo " *  version.h" >> ver.tmp
 	@echo " */" >> ver.tmp
@@ -91,8 +41,8 @@ stamp-vh: $(top_builddir)/configure.ac
               echo timestamp > stamp-vh)
 	-@rm -f ver.tmp
 
-AM_CPPFLAGS=-I$(top_srcdir)/include
+INCLUDES=-I$(top_srcdir)/include
 
 install-data-hook:
 	test -d $(DESTDIR)$(sysincludedir) || mkdir -p $(DESTDIR)$(sysincludedir)
-	$(INSTALL_DATA) $(srcdir)/sys.h $(DESTDIR)$(sysincludedir)/asoundlib.h
+	$(INSTALL_DATA) sys.h $(DESTDIR)$(sysincludedir)/asoundlib.h

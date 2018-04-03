@@ -1,13 +1,13 @@
 /**
  * \file timer/timer_query.c
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2001
  *
  * Timer Query Interface is designed to obtain identification of timers.
  */
 /*
  *  Timer Query Interface - main file
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -26,6 +26,13 @@
  *
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <dlfcn.h>
+#include <sys/ioctl.h>
 #include "timer_local.h"
 
 static int snd_timer_query_open_conf(snd_timer_query_t **timer,
@@ -43,7 +50,7 @@ static int snd_timer_query_open_conf(snd_timer_query_t **timer,
 #ifndef PIC
 	extern void *snd_timer_query_open_symbols(void);
 #endif
-	void *h = NULL;
+	void *h;
 	if (snd_config_get_type(timer_conf) != SND_CONFIG_TYPE_COMPOUND) {
 		if (name)
 			SNDERR("Invalid type for TIMER %s definition", name);
@@ -70,7 +77,6 @@ static int snd_timer_query_open_conf(snd_timer_query_t **timer,
 	if (err >= 0) {
 		if (snd_config_get_type(type_conf) != SND_CONFIG_TYPE_COMPOUND) {
 			SNDERR("Invalid type for TIMER type %s definition", str);
-			err = -EINVAL;
 			goto _err;
 		}
 		snd_config_for_each(i, next, type_conf) {
@@ -123,14 +129,7 @@ static int snd_timer_query_open_conf(snd_timer_query_t **timer,
        _err:
 	if (type_conf)
 		snd_config_delete(type_conf);
-	if (! err) {
-		err = open_func(timer, name, timer_root, timer_conf, mode);
-		if (err < 0)
-			snd_dlclose(h);
-		else
-			(*timer)->dl_handle = h;
-	}
-	return err;
+	return err >= 0 ? open_func(timer, name, timer_root, timer_conf, mode) : err;
 }
 
 static int snd_timer_query_open_noupdate(snd_timer_query_t **timer, snd_config_t *root, const char *name, int mode)
@@ -197,12 +196,12 @@ int snd_timer_query_close(snd_timer_query_t *timer)
 {
 	int err;
   	assert(timer);
-	err = timer->ops->close(timer);
-	if (timer->dl_handle)
-		snd_dlclose(timer->dl_handle);
-	free(timer->name);
+	if ((err = timer->ops->close(timer)) < 0)
+		return err;
+	if (timer->name)
+		free(timer->name);
 	free(timer);
-	return err;
+	return 0;
 }
 
 /**
@@ -219,158 +218,6 @@ int snd_timer_query_next_device(snd_timer_query_t *timer, snd_timer_id_t *tid)
   	assert(timer);
   	assert(tid);
 	return timer->ops->next_device(timer, tid);
-}
-
-/**
- * \brief get size of the snd_timer_ginfo_t structure in bytes
- * \return size of the snd_timer_ginfo_t structure in bytes
- */
-size_t snd_timer_ginfo_sizeof(void)
-{
-	return sizeof(snd_timer_ginfo_t);
-}
-
-/**
- * \brief allocate a new snd_timer_ginfo_t structure
- * \param info returned pointer
- * \return 0 on success otherwise a negative error code if fails
- *
- * Allocates a new snd_timer_info_t structure using the standard
- * malloc C library function.
- */
-int snd_timer_ginfo_malloc(snd_timer_ginfo_t **info)
-{
-	assert(info);
-	*info = calloc(1, sizeof(snd_timer_ginfo_t));
-	if (!*info)
-		return -ENOMEM;
-	return 0;
-}
-
-/**
- * \brief frees the snd_timer_ginfo_t structure
- * \param info pointer to the snd_timer_ginfo_t structure to free
- *
- * Frees the given snd_timer_info_t structure using the standard
- * free C library function.
- */
-void snd_timer_ginfo_free(snd_timer_ginfo_t *info)
-{
-	assert(info);
-	free(info);  
-}
-  
-/**
- * \brief copy one snd_timer_info_t structure to another
- * \param dst destination snd_timer_info_t structure
- * \param src source snd_timer_info_t structure
- */
-void snd_timer_ginfo_copy(snd_timer_ginfo_t *dst, const snd_timer_ginfo_t *src)
-{
-	assert(dst && src);
-	*dst = *src;
-}
-
-/**
- * \brief set timer identification
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \param tid pointer to #snd_timer_id_t structure
- * \return zero on success otherwise a negative error number
- */
-int snd_timer_ginfo_set_tid(snd_timer_ginfo_t *obj, snd_timer_id_t *tid)
-{
-	obj->tid = *((snd_timer_id_t *)tid);
-	return 0;
-}
-
-/**
- * \brief get timer identification
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return pointer to snd_timer_id_t
- */
-snd_timer_id_t *snd_timer_ginfo_get_tid(snd_timer_ginfo_t *obj)
-{
-	return (snd_timer_id_t *)&obj->tid;
-}
-
-/**
- * \brief get timer flags
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return timer flags
- */
-unsigned int snd_timer_ginfo_get_flags(snd_timer_ginfo_t *obj)
-{
-	return obj->flags;
-}
-
-/**
- * \brief get associated card with timer
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return associated card
- */
-int snd_timer_ginfo_get_card(snd_timer_ginfo_t *obj)
-{
-	return obj->card;
-}
-
-/**
- * \brief get timer identification
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return timer identification
- */
-char *snd_timer_ginfo_get_id(snd_timer_ginfo_t *obj)
-{
-	return (char *)obj->id;
-}
-
-/**
- * \brief get timer name
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return timer name
- */
-char *snd_timer_ginfo_get_name(snd_timer_ginfo_t *obj)
-{
-	return (char *)obj->name;
-}
-
-/**
- * \brief get timer resolution in ns
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return timer resolution in ns
- */
-unsigned long snd_timer_ginfo_get_resolution(snd_timer_ginfo_t *obj)
-{
-	return obj->resolution;
-}
-
-/**
- * \brief get timer minimal resolution in ns
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return timer minimal resolution in ns
- */
-unsigned long snd_timer_ginfo_get_resolution_min(snd_timer_ginfo_t *obj)
-{
-	return obj->resolution_min;
-}
-
-/**
- * \brief get timer maximal resolution in ns
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return timer maximal resolution in ns
- */
-unsigned long snd_timer_ginfo_get_resolution_max(snd_timer_ginfo_t *obj)
-{
-	return obj->resolution_max;
-}
-
-/**
- * \brief get current timer clients
- * \param obj pointer to #snd_timer_ginfo_t structure
- * \return current timer clients
- */
-unsigned int snd_timer_ginfo_get_clients(snd_timer_ginfo_t *obj)
-{
-	return obj->clients;
 }
 
 /**
@@ -438,7 +285,7 @@ size_t snd_timer_id_sizeof()
 
 /**
  * \brief allocate a new snd_timer_id_t structure
- * \param info returned pointer
+ * \param ptr returned pointer
  * \return 0 on success otherwise a negative error code if fails
  *
  * Allocates a new snd_timer_id_t structure using the standard
@@ -512,7 +359,7 @@ void snd_timer_id_set_sclass(snd_timer_id_t * tid, int dev_sclass)
 
 /**
  * \brief get timer sub-class
- * \param tid pointer to #snd_timer_id_t structure
+ * \param params pointer to #snd_timer_id_t structure
  * \return timer sub-class
  */
 int snd_timer_id_get_sclass(snd_timer_id_t * tid)
@@ -534,7 +381,7 @@ void snd_timer_id_set_card(snd_timer_id_t * tid, int card)
 
 /**
  * \brief get timer card
- * \param tid pointer to #snd_timer_id_t structure
+ * \param params pointer to #snd_timer_id_t structure
  * \return timer card number
  */
 int snd_timer_id_get_card(snd_timer_id_t * tid)
@@ -556,7 +403,7 @@ void snd_timer_id_set_device(snd_timer_id_t * tid, int device)
 
 /**
  * \brief get timer device
- * \param tid pointer to #snd_timer_id_t structure
+ * \param params pointer to #snd_timer_id_t structure
  * \return timer device number
  */
 int snd_timer_id_get_device(snd_timer_id_t * tid)
@@ -578,7 +425,7 @@ void snd_timer_id_set_subdevice(snd_timer_id_t * tid, int subdevice)
 
 /**
  * \brief get timer subdevice
- * \param tid pointer to #snd_timer_id_t structure
+ * \param params pointer to #snd_timer_id_t structure
  * \return timer subdevice number
  */
 int snd_timer_id_get_subdevice(snd_timer_id_t * tid)

@@ -1,6 +1,6 @@
 /*
  *  Timer interface - local header file
- *  Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -19,11 +19,11 @@
  *
  */
 
-#include "local.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <limits.h>
-#include <sys/ioctl.h>
+#include "local.h"
 
-#ifndef DOC_HIDDEN
 typedef struct {
 	int (*close)(snd_timer_t *timer);
 	int (*nonblock)(snd_timer_t *timer, int nonblock);
@@ -39,15 +39,15 @@ typedef struct {
 
 struct _snd_timer {
 	unsigned int version;
-	void *dl_handle;
 	char *name;
 	snd_timer_type_t type;
 	int mode;
 	int poll_fd;
-	const snd_timer_ops_t *ops;
+	snd_timer_ops_t *ops;
 	void *private_data;
-	struct list_head async_handlers;
 };
+
+int snd_timer_hw_open(snd_timer_t **handle, const char *name, int dev_class, int dev_sclass, int card, int device, int subdevice, int mode);
 
 typedef struct {
 	int (*close)(snd_timer_query_t *timer);
@@ -58,17 +58,13 @@ typedef struct {
 } snd_timer_query_ops_t;
 
 struct _snd_timer_query {
-	void *dl_handle;
 	char *name;
 	snd_timer_type_t type;
 	int mode;
 	int poll_fd;
-	const snd_timer_query_ops_t *ops;
+	snd_timer_query_ops_t *ops;
 	void *private_data;
 };
-#endif /* DOC_HIDDEN */
-
-int snd_timer_hw_open(snd_timer_t **handle, const char *name, int dev_class, int dev_sclass, int card, int device, int subdevice, int mode);
 
 int snd_timer_query_hw_open(snd_timer_query_t **handle, const char *name, int mode);
 

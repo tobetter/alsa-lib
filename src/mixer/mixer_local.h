@@ -1,6 +1,6 @@
 /*
  *  Mixer Interface - local header file
- *  Copyright (c) 2000 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2000 by Jaroslav Kysela <perex@suse.cz>
  *  Copyright (c) 2001 by Abramo Bagnara <abramo@alsa-project.org>
  *
  *
@@ -42,10 +42,15 @@ typedef struct list_head *bag_iterator_t;
 #define bag_for_each(pos, bag) list_for_each(pos, bag)
 #define bag_for_each_safe(pos, next, bag) list_for_each_safe(pos, next, bag)
 
+#define MIXER_COMPARE_WEIGHT_SIMPLE_BASE	0
+#define MIXER_COMPARE_WEIGHT_NEXT_BASE		10000000
+#define MIXER_COMPARE_WEIGHT_NOT_FOUND		1000000000
+
 struct _snd_mixer_class {
 	struct list_head list;
 	snd_mixer_t *mixer;
-	snd_mixer_event_t event;
+	int (*event)(snd_mixer_class_t *class, unsigned int mask,
+		     snd_hctl_elem_t *helem, snd_mixer_elem_t *melem);
 	void *private_data;		
 	void (*private_free)(snd_mixer_class_t *class);
 	snd_mixer_compare_t compare;
@@ -77,6 +82,19 @@ struct _snd_mixer {
 };
 
 struct _snd_mixer_selem_id {
-	char name[60];
+	unsigned char name[60];
 	unsigned int index;
 };
+
+int snd_mixer_class_register(snd_mixer_class_t *class, snd_mixer_t *mixer);
+int snd_mixer_add_elem(snd_mixer_t *mixer, snd_mixer_elem_t *elem);
+int snd_mixer_remove_elem(snd_mixer_t *mixer, snd_mixer_elem_t *elem);
+int snd_mixer_elem_add(snd_mixer_elem_t *elem, snd_mixer_class_t *class);
+int snd_mixer_elem_remove(snd_mixer_elem_t *elem);
+int snd_mixer_elem_info(snd_mixer_elem_t *elem);
+int snd_mixer_elem_value(snd_mixer_elem_t *elem);
+int snd_mixer_elem_attach(snd_mixer_elem_t *melem,
+			  snd_hctl_elem_t *helem);
+int snd_mixer_elem_detach(snd_mixer_elem_t *melem,
+			  snd_hctl_elem_t *helem);
+int snd_mixer_elem_empty(snd_mixer_elem_t *melem);

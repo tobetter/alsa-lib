@@ -1,7 +1,7 @@
 /**
  * \file timer/timer.c
  * \brief Timer Interface
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 1998-2001
  *
  * Timer Interface is designed to access timers.
@@ -9,7 +9,7 @@
  */
 /*
  *  Timer Interface - main file
- *  Copyright (c) 1998-2001 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998-2001 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -67,9 +67,15 @@ This example shows opening a timer device and reading of timer events.
  * \anchor example_test_timer
  */
 
-#include "timer_local.h"
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <dlfcn.h>
 #include <signal.h>
+#include <sys/ioctl.h>
+#include "timer_local.h"
 
 static int snd_timer_open_conf(snd_timer_t **timer,
 			       const char *name, snd_config_t *timer_root,
@@ -86,7 +92,7 @@ static int snd_timer_open_conf(snd_timer_t **timer,
 #ifndef PIC
 	extern void *snd_timer_open_symbols(void);
 #endif
-	void *h = NULL;
+	void *h;
 	if (snd_config_get_type(timer_conf) != SND_CONFIG_TYPE_COMPOUND) {
 		if (name)
 			SNDERR("Invalid type for TIMER %s definition", name);
@@ -165,14 +171,7 @@ static int snd_timer_open_conf(snd_timer_t **timer,
        _err:
 	if (type_conf)
 		snd_config_delete(type_conf);
-	if (! err) {
-		err = open_func(timer, name, timer_root, timer_conf, mode);
-		if (err < 0)
-			snd_dlclose(h);
-		else
-			(*timer)->dl_handle = h;
-	}
-	return err;
+	return err >= 0 ? open_func(timer, name, timer_root, timer_conf, mode) : err;
 }
 
 static int snd_timer_open_noupdate(snd_timer_t **timer, snd_config_t *root, const char *name, int mode)
@@ -239,16 +238,12 @@ int snd_timer_close(snd_timer_t *timer)
 {
 	int err;
   	assert(timer);
-	while (!list_empty(&timer->async_handlers)) {
-		snd_async_handler_t *h = list_entry(timer->async_handlers.next, snd_async_handler_t, hlist);
-		snd_async_del_handler(h);
-	}
-	err = timer->ops->close(timer);
-	if (timer->dl_handle)
-		snd_dlclose(timer->dl_handle);
-	free(timer->name);
+	if ((err = timer->ops->close(timer)) < 0)
+		return err;
+	if (timer->name)
+		free(timer->name);
 	free(timer);
-	return err;
+	return 0;
 }
 
 /**
@@ -277,55 +272,6 @@ snd_timer_type_t snd_timer_type(snd_timer_t *timer)
 	assert(timer);
 	return timer->type;
 }
-
-/**
- * \brief Add an async handler for a timer
- * \param handler Returned handler handle
- * \param timer timer handle
- * \param callback Callback function
- * \param private_data Callback private data
- * \return 0 otherwise a negative error code on failure
- *
- * The asynchronous callback is called when new timer event occurs.
- */
-int snd_async_add_timer_handler(snd_async_handler_t **handler, snd_timer_t *timer,
-				snd_async_callback_t callback, void *private_data)
-{
-	int err;
-	int was_empty;
-	snd_async_handler_t *h;
-	err = snd_async_add_handler(&h, timer->poll_fd,
-				    callback, private_data);
-	if (err < 0)
-		return err;
-	h->type = SND_ASYNC_HANDLER_TIMER;
-	h->u.timer = timer;
-	was_empty = list_empty(&timer->async_handlers);
-	list_add_tail(&h->hlist, &timer->async_handlers);
-	if (was_empty) {
-		err = snd_timer_async(timer, snd_async_handler_get_signo(h), getpid());
-		if (err < 0) {
-			snd_async_del_handler(h);
-			return err;
-		}
-	}
-	*handler = h;
-	return 0;
-}
-
-/**
- * \brief Return timer handle related to an async handler
- * \param handler Async handler handle
- * \return timer handle
- */
-snd_timer_t *snd_async_handler_get_timer(snd_async_handler_t *handler)
-{
-	if (handler->type != SND_ASYNC_HANDLER_TIMER) {
-		SNDMSG("invalid handler type %d", handler->type);
-		return NULL;
-	}
-	return handler->u.timer;
-}                                                            
 
 /**
  * \brief get count of poll descriptors for timer handle
@@ -437,7 +383,7 @@ size_t snd_timer_info_sizeof()
 
 /**
  * \brief allocate a new snd_timer_info_t structure
- * \param info returned pointer
+ * \param ptr returned pointer
  * \return 0 on success otherwise a negative error code if fails
  *
  * Allocates a new snd_timer_info_t structure using the standard
@@ -506,7 +452,7 @@ int snd_timer_info_get_card(snd_timer_info_t * info)
 const char *snd_timer_info_get_id(snd_timer_info_t * info)
 {
 	assert(info);
-	return (const char *)info->id;
+	return info->id;
 }
 
 /**
@@ -517,7 +463,7 @@ const char *snd_timer_info_get_id(snd_timer_info_t * info)
 const char *snd_timer_info_get_name(snd_timer_info_t * info)
 {
 	assert(info);
-	return (const char *)info->name;
+	return info->name;
 }
 
 
@@ -556,7 +502,7 @@ size_t snd_timer_params_sizeof()
 
 /**
  * \brief allocate a new snd_timer_params_t structure
- * \param params returned pointer
+ * \param ptr returned pointer
  * \return 0 on success otherwise a negative error code if fails
  *
  * Allocates a new snd_timer_params_t structure using the standard
@@ -598,7 +544,6 @@ void snd_timer_params_copy(snd_timer_params_t *dst, const snd_timer_params_t *sr
 /**
  * \brief set timer auto start
  * \param params pointer to #snd_timer_params_t structure
- * \param auto_start The boolean value to set
  */
 int snd_timer_params_set_auto_start(snd_timer_params_t * params, int auto_start)
 {
@@ -624,7 +569,6 @@ int snd_timer_params_get_auto_start(snd_timer_params_t * params)
 /**
  * \brief set timer exclusive use
  * \param params pointer to #snd_timer_params_t structure
- * \param exclusive The boolean value to set
  */
 #ifndef DOXYGEN
 int INTERNAL(snd_timer_params_set_exclusive)(snd_timer_params_t * params, int exclusive)
@@ -660,7 +604,6 @@ use_default_symbol_version(__snd_timer_params_get_exclusive, snd_timer_params_ge
 /**
  * \brief set timer early event
  * \param params pointer to #snd_timer_params_t structure
- * \param early_event The boolean value to set
  */
 int snd_timer_params_set_early_event(snd_timer_params_t * params, int early_event)
 {
@@ -686,7 +629,6 @@ int snd_timer_params_get_early_event(snd_timer_params_t * params)
 /**
  * \brief set timer ticks
  * \param params pointer to #snd_timer_params_t structure
- * \param ticks Ticks to set
  */
 void snd_timer_params_set_ticks(snd_timer_params_t * params, long ticks)
 {
@@ -708,7 +650,6 @@ long snd_timer_params_get_ticks(snd_timer_params_t * params)
 /**
  * \brief set timer queue size (32-1024)
  * \param params pointer to #snd_timer_params_t structure
- * \param queue_size The queue size to set
  */
 void snd_timer_params_set_queue_size(snd_timer_params_t * params, long queue_size)
 {
@@ -730,7 +671,6 @@ long snd_timer_params_get_queue_size(snd_timer_params_t * params)
 /**
  * \brief set timer event filter
  * \param params pointer to #snd_timer_params_t structure
- * \param filter The event filter bits to set
  */
 #ifndef DOXYGEN
 void INTERNAL(snd_timer_params_set_filter)(snd_timer_params_t * params, unsigned int filter)
@@ -783,7 +723,7 @@ size_t snd_timer_status_sizeof()
 
 /**
  * \brief allocate a new snd_timer_status_t structure
- * \param status returned pointer
+ * \param ptr returned pointer
  * \return 0 on success otherwise a negative error code if fails
  *
  * Allocates a new snd_timer_status_t structure using the standard
@@ -936,7 +876,7 @@ ssize_t snd_timer_read(snd_timer_t *timer, void *buffer, size_t size)
 	assert(timer);
 	assert(((timer->mode & O_ACCMODE) == O_RDONLY) || ((timer->mode & O_ACCMODE) == O_RDWR));
 	assert(buffer || size == 0);
-	return (timer->ops->read)(timer, buffer, size);
+	return timer->ops->read(timer, buffer, size);
 }
 
 /**

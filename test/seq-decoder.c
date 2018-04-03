@@ -42,7 +42,6 @@ static char *event_names[256] = {
 	[SND_SEQ_EVENT_PORT_CHANGE]=	"Port Change",
 	[SND_SEQ_EVENT_PORT_SUBSCRIBED]=	"Port Subscribed",
 	[SND_SEQ_EVENT_PORT_UNSUBSCRIBED]=	"Port Unsubscribed",
-#if 0
 	[SND_SEQ_EVENT_SAMPLE]=	"Sample",
 	[SND_SEQ_EVENT_SAMPLE_CLUSTER]=	"Sample Cluster",
 	[SND_SEQ_EVENT_SAMPLE_START]=	"Sample Start",
@@ -52,7 +51,6 @@ static char *event_names[256] = {
 	[SND_SEQ_EVENT_SAMPLE_LOOP]=	"Sample Loop",
 	[SND_SEQ_EVENT_SAMPLE_POSITION]=	"Sample Position",
 	[SND_SEQ_EVENT_SAMPLE_PRIVATE1]=	"Sample Private1",
-#endif
 	[SND_SEQ_EVENT_USR0]=	"User 0",
 	[SND_SEQ_EVENT_USR1]=	"User 1",
 	[SND_SEQ_EVENT_USR2]=	"User 2",
@@ -63,7 +61,6 @@ static char *event_names[256] = {
 	[SND_SEQ_EVENT_USR7]=	"User 7",
 	[SND_SEQ_EVENT_USR8]=	"User 8",
 	[SND_SEQ_EVENT_USR9]=	"User 9",
-#if 0
 	[SND_SEQ_EVENT_INSTR_BEGIN]=	"Instr Begin",
 	[SND_SEQ_EVENT_INSTR_END]=	"Instr End",
 	[SND_SEQ_EVENT_INSTR_INFO]=	"Instr Info",
@@ -83,7 +80,6 @@ static char *event_names[256] = {
 	[SND_SEQ_EVENT_INSTR_CLUSTER_GET]=	"Instr Cluster Get",
 	[SND_SEQ_EVENT_INSTR_CLUSTER_RESULT]=	"Instr Cluster Result",
 	[SND_SEQ_EVENT_INSTR_CHANGE]=	"Instr Change",
-#endif
 	[SND_SEQ_EVENT_SYSEX]=	"Sysex",
 	[SND_SEQ_EVENT_BOUNCE]=	"Bounce",
 	[SND_SEQ_EVENT_USR_VAR0]=	"User Var0",
@@ -245,9 +241,7 @@ int decode_event(snd_seq_event_t * ev)
 	return 0;
 }
 
-void event_decoder_start_timer(snd_seq_t *handle, int queue,
-			       int client ATTRIBUTE_UNUSED,
-			       int port ATTRIBUTE_UNUSED)
+void event_decoder_start_timer(snd_seq_t *handle, int queue, int client, int port)
 {
 	int err;
 

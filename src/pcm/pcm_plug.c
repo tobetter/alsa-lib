@@ -45,12 +45,12 @@ enum snd_pcm_plug_route_policy {
 };
 
 typedef struct {
-	snd_pcm_generic_t gen;
 	snd_pcm_t *req_slave;
+	int close_slave;
+	snd_pcm_t *slave;
 	snd_pcm_format_t sformat;
 	int schannels;
 	int srate;
-	const snd_config_t *rate_converter;
 	enum snd_pcm_plug_route_policy route_policy;
 	snd_pcm_route_ttable_entry_t *ttable;
 	int ttable_ok;
@@ -63,9 +63,13 @@ static int snd_pcm_plug_close(snd_pcm_t *pcm)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
 	int err, result = 0;
-	free(plug->ttable);
-	assert(plug->gen.slave == plug->req_slave);
-	if (plug->gen.close_slave) {
+	if (plug->ttable)
+		free(plug->ttable);
+	if (plug->slave != plug->req_slave) {
+		SNDERR("plug slaves mismatch");
+		return -EINVAL;
+	}
+	if (plug->close_slave) {
 		snd_pcm_unlink_hw_ptr(pcm, plug->req_slave);
 		snd_pcm_unlink_appl_ptr(pcm, plug->req_slave);
 		err = snd_pcm_close(plug->req_slave);
@@ -74,6 +78,24 @@ static int snd_pcm_plug_close(snd_pcm_t *pcm)
 	}
 	free(plug);
 	return result;
+}
+
+static int snd_pcm_plug_nonblock(snd_pcm_t *pcm, int nonblock)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	return snd_pcm_nonblock(plug->slave, nonblock);
+}
+
+static int snd_pcm_plug_async(snd_pcm_t *pcm, int sig, pid_t pid)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	return snd_pcm_async(plug->slave, sig, pid);
+}
+
+static int snd_pcm_plug_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	return snd_pcm_poll_descriptors_revents(plug->slave, pfds, nfds, revents);
 }
 
 static int snd_pcm_plug_info(snd_pcm_t *pcm, snd_pcm_info_t *info)
@@ -87,7 +109,7 @@ static int snd_pcm_plug_info(snd_pcm_t *pcm, snd_pcm_info_t *info)
 	return 0;
 }
 
-static const snd_pcm_format_t linear_preferred_formats[] = {
+static snd_pcm_format_t linear_preferred_formats[] = {
 #ifdef SND_LITTLE_ENDIAN
 	SND_PCM_FORMAT_S16_LE,
 	SND_PCM_FORMAT_U16_LE,
@@ -169,28 +191,13 @@ static const snd_pcm_format_t linear_preferred_formats[] = {
 #endif
 };
 
-#if defined(BUILD_PCM_PLUGIN_MULAW) || \
-	defined(BUILD_PCM_PLUGIN_ALAW) || \
-	defined(BUILD_PCM_PLUGIN_ADPCM)
-#define BUILD_PCM_NONLINEAR
-#endif
-
-#ifdef BUILD_PCM_NONLINEAR
-static const snd_pcm_format_t nonlinear_preferred_formats[] = {
-#ifdef BUILD_PCM_PLUGIN_MULAW
+static snd_pcm_format_t nonlinear_preferred_formats[] = {
 	SND_PCM_FORMAT_MU_LAW,
-#endif
-#ifdef BUILD_PCM_PLUGIN_ALAW
 	SND_PCM_FORMAT_A_LAW,
-#endif
-#ifdef BUILD_PCM_PLUGIN_ADPCM
 	SND_PCM_FORMAT_IMA_ADPCM,
-#endif
 };
-#endif
 
-#ifdef BUILD_PCM_PLUGIN_LFLOAT
-static const snd_pcm_format_t float_preferred_formats[] = {
+static snd_pcm_format_t float_preferred_formats[] = {
 #ifdef SND_LITTLE_ENDIAN
 	SND_PCM_FORMAT_FLOAT_LE,
 	SND_PCM_FORMAT_FLOAT64_LE,
@@ -203,9 +210,8 @@ static const snd_pcm_format_t float_preferred_formats[] = {
 	SND_PCM_FORMAT_FLOAT64_LE,
 #endif
 };
-#endif
 
-static const char linear_format_widths[32] = {
+static char linear_format_widths[32] = {
 	0, 0, 0, 0, 0, 0, 0, 1,
 	0, 0, 0, 0, 0, 0, 0, 1,
 	0, 1, 0, 1, 0, 0, 0, 1,
@@ -239,28 +245,16 @@ static snd_pcm_format_t snd_pcm_plug_slave_format(snd_pcm_format_t format, const
 	int w, w1, u, e;
 	snd_pcm_format_t f;
 	snd_pcm_format_mask_t lin = { SND_PCM_FMTBIT_LINEAR };
-	snd_pcm_format_mask_t fl = {
-#ifdef BUILD_PCM_PLUGIN_LFLOAT
-		SND_PCM_FMTBIT_FLOAT
-#else
-		{ 0 }
-#endif
-	};
+	snd_pcm_format_mask_t fl = { SND_PCM_FMTBIT_FLOAT };
 	if (snd_pcm_format_mask_test(format_mask, format))
 		return format;
 	if (!snd_pcm_format_mask_test(&lin, format) &&
 	    !snd_pcm_format_mask_test(&fl, format)) {
 		unsigned int i;
 		switch (format) {
-#ifdef BUILD_PCM_PLUGIN_MULAW
 		case SND_PCM_FORMAT_MU_LAW:
-#endif
-#ifdef BUILD_PCM_PLUGIN_ALAW
 		case SND_PCM_FORMAT_A_LAW:
-#endif
-#ifdef BUILD_PCM_PLUGIN_ADPCM
 		case SND_PCM_FORMAT_IMA_ADPCM:
-#endif
 			for (i = 0; i < sizeof(linear_preferred_formats) / sizeof(linear_preferred_formats[0]); ++i) {
 				snd_pcm_format_t f = linear_preferred_formats[i];
 				if (snd_pcm_format_mask_test(format_mask, f))
@@ -275,17 +269,14 @@ static snd_pcm_format_t snd_pcm_plug_slave_format(snd_pcm_format_t format, const
 	snd_mask_intersect(&lin, format_mask);
 	snd_mask_intersect(&fl, format_mask);
 	if (snd_mask_empty(&lin) && snd_mask_empty(&fl)) {
-#ifdef BUILD_PCM_NONLINEAR
 		unsigned int i;
 		for (i = 0; i < sizeof(nonlinear_preferred_formats) / sizeof(nonlinear_preferred_formats[0]); ++i) {
 			snd_pcm_format_t f = nonlinear_preferred_formats[i];
 			if (snd_pcm_format_mask_test(format_mask, f))
 				return f;
 		}
-#endif
 		return SND_PCM_FORMAT_UNKNOWN;
 	}
-#ifdef BUILD_PCM_PLUGIN_LFLOAT
 	if (snd_pcm_format_float(format)) {
 		if (snd_pcm_format_mask_test(&fl, format)) {
 			unsigned int i;
@@ -298,17 +289,13 @@ static snd_pcm_format_t snd_pcm_plug_slave_format(snd_pcm_format_t format, const
 		w = 32;
 		u = 0;
 		e = snd_pcm_format_big_endian(format);
-	} else
-#endif
-	if (snd_mask_empty(&lin)) {
-#ifdef BUILD_PCM_PLUGIN_LFLOAT
+	} else if (snd_mask_empty(&lin)) {
 		unsigned int i;
 		for (i = 0; i < sizeof(float_preferred_formats) / sizeof(float_preferred_formats[0]); ++i) {
 			snd_pcm_format_t f = float_preferred_formats[i];
 			if (snd_pcm_format_mask_test(format_mask, f))
 				return f;
 		}
-#endif
 		return SND_PCM_FORMAT_UNKNOWN;
 	} else {
 		w = snd_pcm_format_width(format);
@@ -333,35 +320,31 @@ static void snd_pcm_plug_clear(snd_pcm_t *pcm)
 	snd_pcm_plug_t *plug = pcm->private_data;
 	snd_pcm_t *slave = plug->req_slave;
 	/* Clear old plugins */
-	if (plug->gen.slave != slave) {
-		snd_pcm_unlink_hw_ptr(pcm, plug->gen.slave);
-		snd_pcm_unlink_appl_ptr(pcm, plug->gen.slave);
-		snd_pcm_close(plug->gen.slave);
-		plug->gen.slave = slave;
+	if (plug->slave != slave) {
+		snd_pcm_unlink_hw_ptr(pcm, plug->slave);
+		snd_pcm_unlink_appl_ptr(pcm, plug->slave);
+		snd_pcm_close(plug->slave);
+		plug->slave = slave;
 		pcm->fast_ops = slave->fast_ops;
 		pcm->fast_op_arg = slave->fast_op_arg;
 	}
 }
 
-#ifndef DOC_HIDDEN
 typedef struct {
 	snd_pcm_access_t access;
 	snd_pcm_format_t format;
 	unsigned int channels;
 	unsigned int rate;
 } snd_pcm_plug_params_t;
-#endif
 
-#ifdef BUILD_PCM_PLUGIN_RATE
 static int snd_pcm_plug_change_rate(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_plug_params_t *clt, snd_pcm_plug_params_t *slv)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
 	int err;
+	assert(snd_pcm_format_linear(slv->format));
 	if (clt->rate == slv->rate)
 		return 0;
-	assert(snd_pcm_format_linear(slv->format));
-	err = snd_pcm_rate_open(new, NULL, slv->format, slv->rate, plug->rate_converter,
-				plug->gen.slave, plug->gen.slave != plug->req_slave);
+	err = snd_pcm_rate_open(new, NULL, slv->format, slv->rate, plug->slave, plug->slave != plug->req_slave);
 	if (err < 0)
 		return err;
 	slv->access = clt->access;
@@ -370,22 +353,19 @@ static int snd_pcm_plug_change_rate(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_plu
 		slv->format = clt->format;
 	return 1;
 }
-#endif
 
-#ifdef BUILD_PCM_PLUGIN_ROUTE
 static int snd_pcm_plug_change_channels(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_plug_params_t *clt, snd_pcm_plug_params_t *slv)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
 	unsigned int tt_ssize, tt_cused, tt_sused;
 	snd_pcm_route_ttable_entry_t *ttable;
 	int err;
-	if (clt->channels == slv->channels &&
-	    (!plug->ttable || plug->ttable_ok))
+	assert(snd_pcm_format_linear(slv->format));
+	if (clt->channels == slv->channels && !plug->ttable)
 		return 0;
 	if (clt->rate != slv->rate &&
 	    clt->channels > slv->channels)
 		return 0;
-	assert(snd_pcm_format_linear(slv->format));
 	tt_ssize = slv->channels;
 	tt_cused = clt->channels;
 	tt_sused = slv->channels;
@@ -464,7 +444,7 @@ static int snd_pcm_plug_change_channels(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm
 			break;
 		}
 	}
-	err = snd_pcm_route_open(new, NULL, slv->format, (int) slv->channels, ttable, tt_ssize, tt_cused, tt_sused, plug->gen.slave, plug->gen.slave != plug->req_slave);
+	err = snd_pcm_route_open(new, NULL, slv->format, (int) slv->channels, ttable, tt_ssize, tt_cused, tt_sused, plug->slave, plug->slave != plug->req_slave);
 	if (err < 0)
 		return err;
 	slv->channels = clt->channels;
@@ -473,7 +453,6 @@ static int snd_pcm_plug_change_channels(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm
 		slv->format = clt->format;
 	return 1;
 }
-#endif
 
 static int snd_pcm_plug_change_format(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_plug_params_t *clt, snd_pcm_plug_params_t *slv)
 {
@@ -481,87 +460,71 @@ static int snd_pcm_plug_change_format(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_p
 	int err;
 	snd_pcm_format_t cfmt;
 	int (*f)(snd_pcm_t **_pcm, const char *name, snd_pcm_format_t sformat, snd_pcm_t *slave, int close_slave);
-
-	/* No conversion is needed */
-	if (clt->format == slv->format &&
-	    clt->rate == slv->rate &&
-	    clt->channels == slv->channels &&
-	    (!plug->ttable || plug->ttable_ok))
-		return 0;
-
 	if (snd_pcm_format_linear(slv->format)) {
 		/* Conversion is done in another plugin */
-		if (clt->rate != slv->rate ||
-		    clt->channels != slv->channels ||
-		    (plug->ttable && !plug->ttable_ok))
+		if (clt->format == slv->format ||
+		    clt->rate != slv->rate ||
+		    clt->channels != slv->channels)
 			return 0;
 		cfmt = clt->format;
 		switch (clt->format) {
-#ifdef BUILD_PCM_PLUGIN_MULAW
 		case SND_PCM_FORMAT_MU_LAW:
 			f = snd_pcm_mulaw_open;
 			break;
-#endif
-#ifdef BUILD_PCM_PLUGIN_ALAW
 		case SND_PCM_FORMAT_A_LAW:
 			f = snd_pcm_alaw_open;
 			break;
-#endif
-#ifdef BUILD_PCM_PLUGIN_ADPCM
 		case SND_PCM_FORMAT_IMA_ADPCM:
 			f = snd_pcm_adpcm_open;
 			break;
-#endif
 		default:
-#ifdef BUILD_PCM_PLUGIN_LFLOAT
-			if (snd_pcm_format_float(clt->format))
+			if (snd_pcm_format_float(clt->format)) {
 				f = snd_pcm_lfloat_open;
-
-			else
-#endif
+			} else {
+				assert(snd_pcm_format_linear(clt->format));
 				f = snd_pcm_linear_open;
+			}
 			break;
 		}
-#ifdef BUILD_PCM_PLUGIN_LFLOAT
 	} else if (snd_pcm_format_float(slv->format)) {
-		if (snd_pcm_format_linear(clt->format)) {
-			cfmt = clt->format;
+		/* Conversion is done in another plugin */
+		if (clt->format == slv->format &&
+		    clt->rate == slv->rate &&
+		    clt->channels == slv->channels)
+			return 0;
+		cfmt = clt->format;
+		if (snd_pcm_format_linear(clt->format))
 			f = snd_pcm_lfloat_open;
-		} else if (clt->rate != slv->rate || clt->channels != slv->channels ||
-			   (plug->ttable && !plug->ttable_ok)) {
-			cfmt = SND_PCM_FORMAT_S16;
-			f = snd_pcm_lfloat_open;
-		} else
+		else {
+			assert(0);	/* TODO */
 			return -EINVAL;
-#endif
-#ifdef BUILD_PCM_NONLINEAR
+		}
 	} else {
+		/* No conversion is needed */
+		if (clt->format == slv->format &&
+		    clt->rate == slv->rate &&
+		    clt->channels == clt->channels)
+			return 0;
 		switch (slv->format) {
-#ifdef BUILD_PCM_PLUGIN_MULAW
 		case SND_PCM_FORMAT_MU_LAW:
 			f = snd_pcm_mulaw_open;
 			break;
-#endif
-#ifdef BUILD_PCM_PLUGIN_ALAW
 		case SND_PCM_FORMAT_A_LAW:
 			f = snd_pcm_alaw_open;
 			break;
-#endif
-#ifdef BUILD_PCM_PLUGIN_ADPCM
 		case SND_PCM_FORMAT_IMA_ADPCM:
 			f = snd_pcm_adpcm_open;
 			break;
-#endif
 		default:
+			assert(0);
 			return -EINVAL;
 		}
 		if (snd_pcm_format_linear(clt->format))
 			cfmt = clt->format;
 		else
 			cfmt = SND_PCM_FORMAT_S16;
-#endif /* NONLINEAR */
 	}
-	err = f(new, NULL, slv->format, plug->gen.slave, plug->gen.slave != plug->req_slave);
+	err = f(new, NULL, slv->format, plug->slave, plug->slave != plug->req_slave);
 	if (err < 0)
 		return err;
 	slv->format = cfmt;
@@ -575,70 +538,23 @@ static int snd_pcm_plug_change_access(snd_pcm_t *pcm, snd_pcm_t **new, snd_pcm_p
 	int err;
 	if (clt->access == slv->access)
 		return 0;
-	err = snd_pcm_copy_open(new, NULL, plug->gen.slave, plug->gen.slave != plug->req_slave);
+	err = snd_pcm_copy_open(new, NULL, plug->slave, plug->slave != plug->req_slave);
 	if (err < 0)
 		return err;
 	slv->access = clt->access;
 	return 1;
 }
 
-#ifdef BUILD_PCM_PLUGIN_MMAP_EMUL
-static int snd_pcm_plug_change_mmap(snd_pcm_t *pcm, snd_pcm_t **new,
-				    snd_pcm_plug_params_t *clt,
-				    snd_pcm_plug_params_t *slv)
-{
-	snd_pcm_plug_t *plug = pcm->private_data;
-	int err;
-
-	if (clt->access == slv->access)
-		return 0;
-
-	switch (slv->access) {
-	case SND_PCM_ACCESS_MMAP_INTERLEAVED:
-	case SND_PCM_ACCESS_MMAP_NONINTERLEAVED:
-	case SND_PCM_ACCESS_MMAP_COMPLEX:
-		return 0;
-	default:
-		break;
-	}
-
-	err = __snd_pcm_mmap_emul_open(new, NULL, plug->gen.slave,
-				       plug->gen.slave != plug->req_slave);
-	if (err < 0)
-		return err;
-	switch (slv->access) {
-	case SND_PCM_ACCESS_RW_INTERLEAVED:
-		slv->access = SND_PCM_ACCESS_MMAP_INTERLEAVED;
-		break;
-	case SND_PCM_ACCESS_RW_NONINTERLEAVED:
-		slv->access = SND_PCM_ACCESS_MMAP_NONINTERLEAVED;
-		break;
-	default:
-		break;
-	}
-	return 1;
-}
-#endif
-
 static int snd_pcm_plug_insert_plugins(snd_pcm_t *pcm,
 				       snd_pcm_plug_params_t *client,
 				       snd_pcm_plug_params_t *slave)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
-	static int (*const funcs[])(snd_pcm_t *_pcm, snd_pcm_t **new, snd_pcm_plug_params_t *s, snd_pcm_plug_params_t *d) = {
-#ifdef BUILD_PCM_PLUGIN_MMAP_EMUL
-		snd_pcm_plug_change_mmap,
-#endif
+	int (*funcs[])(snd_pcm_t *_pcm, snd_pcm_t **new, snd_pcm_plug_params_t *s, snd_pcm_plug_params_t *d) = {
 		snd_pcm_plug_change_format,
-#ifdef BUILD_PCM_PLUGIN_ROUTE
 		snd_pcm_plug_change_channels,
-#endif
-#ifdef BUILD_PCM_PLUGIN_RATE
 		snd_pcm_plug_change_rate,
-#endif
-#ifdef BUILD_PCM_PLUGIN_ROUTE
 		snd_pcm_plug_change_channels,
-#endif
 		snd_pcm_plug_change_format,
 		snd_pcm_plug_change_access
 	};
@@ -648,21 +564,36 @@ static int snd_pcm_plug_insert_plugins(snd_pcm_t *pcm,
 	while (client->format != p.format ||
 	       client->channels != p.channels ||
 	       client->rate != p.rate ||
-	       client->access != p.access ||
-	       (plug->ttable && !plug->ttable_ok)) {
+	       client->access != p.access) {
 		snd_pcm_t *new;
 		int err;
-		if (k >= sizeof(funcs)/sizeof(*funcs))
-			return -EINVAL;
+		assert(k < sizeof(funcs)/sizeof(*funcs));
 		err = funcs[k](pcm, &new, client, &p);
 		if (err < 0) {
 			snd_pcm_plug_clear(pcm);
 			return err;
 		}
 		if (err) {
-			plug->gen.slave = new;
+			plug->slave = new;
+			pcm->fast_ops = new->fast_ops;
+			pcm->fast_op_arg = new->fast_op_arg;
 		}
 		k++;
+	}
+	/* it's exception, user specified ttable, but no reduction/expand */
+	if (plug->ttable && !plug->ttable_ok) {
+		snd_pcm_t *new;
+		int err;
+		err = snd_pcm_plug_change_channels(pcm, &new, client, &p);
+		if (err < 0) {
+			snd_pcm_plug_clear(pcm);
+			return err;
+		}
+		assert(err);
+		assert(plug->ttable_ok);
+		plug->slave = new;
+		pcm->fast_ops = new->fast_ops;
+		pcm->fast_op_arg = new->fast_op_arg;
 	}
 	return 0;
 }
@@ -716,53 +647,6 @@ static int snd_pcm_plug_hw_refine_sprepare(snd_pcm_t *pcm, snd_pcm_hw_params_t *
 	return 0;
 }
 
-static int check_access_change(snd_pcm_hw_params_t *cparams,
-			       snd_pcm_hw_params_t *sparams)
-{
-	snd_pcm_access_mask_t *smask;
-#ifdef BUILD_PCM_PLUGIN_MMAP_EMUL
-	const snd_pcm_access_mask_t *cmask;
-	snd_pcm_access_mask_t mask;
-#endif
-
-	smask = (snd_pcm_access_mask_t *)
-		snd_pcm_hw_param_get_mask(sparams,
-					  SND_PCM_HW_PARAM_ACCESS);
-	if (snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_MMAP_INTERLEAVED) ||
-	    snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED) ||
-	    snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_MMAP_COMPLEX))
-		return 0; /* OK, we have mmap support */
-#ifdef BUILD_PCM_PLUGIN_MMAP_EMUL
-	/* no mmap support - we need mmap emulation */
-
-	if (!snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_RW_INTERLEAVED) &&
-	    !snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_RW_NONINTERLEAVED)) 
-		return -EINVAL; /* even no RW access?  no way! */
-
-	cmask = (const snd_pcm_access_mask_t *)
-		snd_pcm_hw_param_get_mask(cparams,
-					  SND_PCM_HW_PARAM_ACCESS);
-	snd_mask_none(&mask);
-	if (snd_pcm_access_mask_test(cmask, SND_PCM_ACCESS_RW_INTERLEAVED) ||
-	    snd_pcm_access_mask_test(cmask, SND_PCM_ACCESS_MMAP_INTERLEAVED)) {
-		if (snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_RW_INTERLEAVED))
-			snd_pcm_access_mask_set(&mask,
-						SND_PCM_ACCESS_RW_INTERLEAVED);
-	}
-	if (snd_pcm_access_mask_test(cmask, SND_PCM_ACCESS_RW_NONINTERLEAVED) ||
-	    snd_pcm_access_mask_test(cmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED)) {
-		if (snd_pcm_access_mask_test(smask, SND_PCM_ACCESS_RW_NONINTERLEAVED))
-			snd_pcm_access_mask_set(&mask,
-						SND_PCM_ACCESS_RW_NONINTERLEAVED);
-	}
-	if (!snd_mask_empty(&mask))
-		*smask = mask; /* prefer the straight conversion */
-	return 0;
-#else
-	return -EINVAL;
-#endif
-}
-
 static int snd_pcm_plug_hw_refine_schange(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
 					  snd_pcm_hw_params_t *sparams)
 {
@@ -777,9 +661,7 @@ static int snd_pcm_plug_hw_refine_schange(snd_pcm_t *pcm, snd_pcm_hw_params_t *p
 	snd_interval_t t, buffer_size;
 	const snd_interval_t *srate, *crate;
 
-	if (plug->srate == -2 ||
-	    (pcm->mode & SND_PCM_NO_AUTO_RESAMPLE) ||
-	    (params->flags & SND_PCM_HW_PARAMS_NORESAMPLE))
+	if (plug->srate == -2)
 		links |= SND_PCM_HW_PARBIT_RATE;
 	else {
 		err = snd_pcm_hw_param_refine_multiple(slave, sparams, SND_PCM_HW_PARAM_RATE, params);
@@ -787,14 +669,14 @@ static int snd_pcm_plug_hw_refine_schange(snd_pcm_t *pcm, snd_pcm_hw_params_t *p
 			return err;
 	}
 	
-	if (plug->schannels == -2 || (pcm->mode & SND_PCM_NO_AUTO_CHANNELS))
+	if (plug->schannels == -2)
 		links |= SND_PCM_HW_PARBIT_CHANNELS;
 	else {
 		err = snd_pcm_hw_param_refine_near(slave, sparams, SND_PCM_HW_PARAM_CHANNELS, params);
 		if (err < 0)
 			return err;
 	}
-	if (plug->sformat == -2 || (pcm->mode & SND_PCM_NO_AUTO_FORMAT))
+	if (plug->sformat == -2)
 		links |= SND_PCM_HW_PARBIT_FORMAT;
 	else {
 		format_mask = snd_pcm_hw_param_get_mask(params, SND_PCM_HW_PARAM_FORMAT);
@@ -834,15 +716,18 @@ static int snd_pcm_plug_hw_refine_schange(snd_pcm_t *pcm, snd_pcm_hw_params_t *p
 			return -EINVAL;
 	}
 
-	if (snd_pcm_hw_param_never_eq(params, SND_PCM_HW_PARAM_ACCESS, sparams)) {
-		err = check_access_change(params, sparams);
-		if (err < 0) {
-			SNDERR("Unable to find an usable access for '%s'",
-			       pcm->name);
-			return err;
+	if (snd_pcm_hw_param_never_eq(params, SND_PCM_HW_PARAM_FORMAT, sparams) ||
+	    snd_pcm_hw_param_never_eq(params, SND_PCM_HW_PARAM_CHANNELS, sparams) ||
+	    snd_pcm_hw_param_never_eq(params, SND_PCM_HW_PARAM_RATE, sparams) ||
+	    snd_pcm_hw_param_never_eq(params, SND_PCM_HW_PARAM_ACCESS, sparams)) {
+		snd_pcm_access_mask_t access_mask = { SND_PCM_ACCBIT_MMAP };
+		_snd_pcm_hw_param_set_mask(sparams, SND_PCM_HW_PARAM_ACCESS,
+					   &access_mask);
+		if (snd_pcm_access_mask_empty(snd_pcm_hw_param_get_mask(sparams, SND_PCM_HW_PARAM_ACCESS))) {
+			SNDERR("Unable to find an usable access for '%s'", pcm->name);
+			return -EINVAL;
 		}
 	}
-
 	if ((links & SND_PCM_HW_PARBIT_RATE) ||
 	    snd_pcm_hw_param_always_eq(params, SND_PCM_HW_PARAM_RATE, sparams))
 		links |= (SND_PCM_HW_PARBIT_PERIOD_SIZE |
@@ -878,10 +763,10 @@ static int snd_pcm_plug_hw_refine_cchange(snd_pcm_t *pcm ATTRIBUTE_UNUSED,
 	const snd_interval_t *sbuffer_size;
 	const snd_interval_t *srate, *crate;
 
-	if (plug->schannels == -2 || (pcm->mode & SND_PCM_NO_AUTO_CHANNELS))
+	if (plug->schannels == -2)
 		links |= SND_PCM_HW_PARBIT_CHANNELS;
 
-	if (plug->sformat == -2 || (pcm->mode & SND_PCM_NO_AUTO_FORMAT))
+	if (plug->sformat == -2)
 		links |= SND_PCM_HW_PARBIT_FORMAT;
 	else {
 		format_mask = snd_pcm_hw_param_get_mask(params,
@@ -924,9 +809,7 @@ static int snd_pcm_plug_hw_refine_cchange(snd_pcm_t *pcm ATTRIBUTE_UNUSED,
 			return err;
 	}
 
-	if (plug->srate == -2 ||
-	    (pcm->mode & SND_PCM_NO_AUTO_RESAMPLE) ||
-	    (params->flags & SND_PCM_HW_PARAMS_NORESAMPLE))
+	if (plug->srate == -2)
 		links |= SND_PCM_HW_PARBIT_RATE;
 	else {
 		unsigned int rate_min, srate_min;
@@ -1023,17 +906,14 @@ static int snd_pcm_plug_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		if (err < 0)
 			return err;
 	}
-	slave = plug->gen.slave;
-	err = _snd_pcm_hw_params_internal(slave, params);
+	slave = plug->slave;
+	err = _snd_pcm_hw_params(slave, params);
 	if (err < 0) {
 		snd_pcm_plug_clear(pcm);
 		return err;
 	}
 	snd_pcm_unlink_hw_ptr(pcm, plug->req_slave);
 	snd_pcm_unlink_appl_ptr(pcm, plug->req_slave);
-
-	pcm->fast_ops = slave->fast_ops;
-	pcm->fast_op_arg = slave->fast_op_arg;
 	snd_pcm_link_hw_ptr(pcm, slave);
 	snd_pcm_link_appl_ptr(pcm, slave);
 	return 0;
@@ -1042,35 +922,65 @@ static int snd_pcm_plug_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 static int snd_pcm_plug_hw_free(snd_pcm_t *pcm)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
-	snd_pcm_t *slave = plug->gen.slave;
+	snd_pcm_t *slave = plug->slave;
 	int err = snd_pcm_hw_free(slave);
 	snd_pcm_plug_clear(pcm);
 	return err;
+}
+
+static int snd_pcm_plug_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	return snd_pcm_sw_params(plug->slave, params);
+}
+
+static int snd_pcm_plug_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *info)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	return snd_pcm_channel_info(plug->slave, info);
+}
+
+static int snd_pcm_plug_mmap(snd_pcm_t *pcm)
+{
+	snd_pcm_plug_t *plug = pcm->private_data;
+	pcm->mmap_channels = plug->slave->mmap_channels;
+	pcm->running_areas = plug->slave->running_areas;
+	pcm->stopped_areas = plug->slave->stopped_areas;
+	pcm->mmap_shadow = 1;
+	return 0;
+}
+
+static int snd_pcm_plug_munmap(snd_pcm_t *pcm)
+{
+	// snd_pcm_plug_t *plug = pcm->private_data;
+	pcm->mmap_channels = NULL;
+	pcm->running_areas = NULL;
+	pcm->stopped_areas = NULL;
+	pcm->mmap_shadow = 0;
+	return 0;
 }
 
 static void snd_pcm_plug_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
 	snd_output_printf(out, "Plug PCM: ");
-	snd_pcm_dump(plug->gen.slave, out);
+	snd_pcm_dump(plug->slave, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_plug_ops = {
+static snd_pcm_ops_t snd_pcm_plug_ops = {
 	.close = snd_pcm_plug_close,
 	.info = snd_pcm_plug_info,
 	.hw_refine = snd_pcm_plug_hw_refine,
 	.hw_params = snd_pcm_plug_hw_params,
 	.hw_free = snd_pcm_plug_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
-	.channel_info = snd_pcm_generic_channel_info,
+	.sw_params = snd_pcm_plug_sw_params,
+	.channel_info = snd_pcm_plug_channel_info,
 	.dump = snd_pcm_plug_dump,
-	.nonblock = snd_pcm_generic_nonblock,
-	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_generic_mmap,
-	.munmap = snd_pcm_generic_munmap,
-	.query_chmaps = snd_pcm_generic_query_chmaps,
-	.get_chmap = snd_pcm_generic_get_chmap,
-	.set_chmap = snd_pcm_generic_set_chmap,
+	.nonblock = snd_pcm_plug_nonblock,
+	.async = snd_pcm_plug_async,
+	.poll_revents = snd_pcm_plug_poll_revents,
+	.mmap = snd_pcm_plug_mmap,
+	.munmap = snd_pcm_plug_munmap,
 };
 
 /**
@@ -1088,7 +998,6 @@ static const snd_pcm_ops_t snd_pcm_plug_ops = {
 int snd_pcm_plug_open(snd_pcm_t **pcmp,
 		      const char *name,
 		      snd_pcm_format_t sformat, int schannels, int srate,
-		      const snd_config_t *rate_converter,
 		      enum snd_pcm_plug_route_policy route_policy,
 		      snd_pcm_route_ttable_entry_t *ttable,
 		      unsigned int tt_ssize,
@@ -1106,9 +1015,8 @@ int snd_pcm_plug_open(snd_pcm_t **pcmp,
 	plug->sformat = sformat;
 	plug->schannels = schannels;
 	plug->srate = srate;
-	plug->rate_converter = rate_converter;
-	plug->gen.slave = plug->req_slave = slave;
-	plug->gen.close_slave = close_slave;
+	plug->slave = plug->req_slave = slave;
+	plug->close_slave = close_slave;
 	plug->route_policy = route_policy;
 	plug->ttable = ttable;
 	plug->tt_ssize = tt_ssize;
@@ -1126,8 +1034,6 @@ int snd_pcm_plug_open(snd_pcm_t **pcmp,
 	pcm->private_data = plug;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
-	pcm->mmap_shadow = 1;
-	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_link_hw_ptr(pcm, slave);
 	snd_pcm_link_appl_ptr(pcm, slave);
 	*pcmp = pcm;
@@ -1165,11 +1071,6 @@ pcm.name {
 			SCHANNEL REAL	# route value (0.0 - 1.0)
 		}
 	}
-	rate_converter STR	# type of rate converter
-	# or
-	rate_converter [ STR1 STR2 ... ]
-				# type of rate converter
-				# default value is taken from defaults.pcm.rate_converter
 }
 \endcode
 
@@ -1210,8 +1111,6 @@ int _snd_pcm_plug_open(snd_pcm_t **pcmp, const char *name,
 	unsigned int cused, sused;
 	snd_pcm_format_t sformat = SND_PCM_FORMAT_UNKNOWN;
 	int schannels = -1, srate = -1;
-	const snd_config_t *rate_converter = NULL;
-
 	snd_config_for_each(i, next, conf) {
 		snd_config_t *n = snd_config_iterator_entry(i);
 		const char *id;
@@ -1223,7 +1122,6 @@ int _snd_pcm_plug_open(snd_pcm_t **pcmp, const char *name,
 			slave = n;
 			continue;
 		}
-#ifdef BUILD_PCM_PLUGIN_ROUTE
 		if (strcmp(id, "ttable") == 0) {
 			route_policy = PLUG_ROUTE_POLICY_NONE;
 			if (snd_config_get_type(n) != SND_CONFIG_TYPE_COMPOUND) {
@@ -1251,13 +1149,6 @@ int _snd_pcm_plug_open(snd_pcm_t **pcmp, const char *name,
 				route_policy = PLUG_ROUTE_POLICY_DUP;
 			continue;
 		}
-#endif
-#ifdef BUILD_PCM_PLUGIN_RATE
-		if (strcmp(id, "rate_converter") == 0) {
-			rate_converter = n;
-			continue;
-		}
-#endif
 		SNDERR("Unknown field %s", id);
 		return -EINVAL;
 	}
@@ -1271,7 +1162,6 @@ int _snd_pcm_plug_open(snd_pcm_t **pcmp, const char *name,
 				 SND_PCM_HW_PARAM_RATE, SCONF_UNCHANGED, &srate);
 	if (err < 0)
 		return err;
-#ifdef BUILD_PCM_PLUGIN_ROUTE
 	if (tt) {
 		err = snd_pcm_route_determine_ttable(tt, &csize, &ssize);
 		if (err < 0) {
@@ -1289,18 +1179,12 @@ int _snd_pcm_plug_open(snd_pcm_t **pcmp, const char *name,
 			return err;
 		}
 	}
-#endif
 	
-#ifdef BUILD_PCM_PLUGIN_RATE
-	if (! rate_converter)
-		rate_converter = snd_pcm_rate_get_default_converter(root);
-#endif
-
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;
-	err = snd_pcm_plug_open(pcmp, name, sformat, schannels, srate, rate_converter,
+	err = snd_pcm_plug_open(pcmp, name, sformat, schannels, srate,
 				route_policy, ttable, ssize, cused, sused, spcm, 1);
 	if (err < 0)
 		snd_pcm_close(spcm);

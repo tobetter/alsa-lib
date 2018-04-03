@@ -44,7 +44,7 @@ void snd_async_init(void)
 }
 #else
 /** async signal number */
-static const int snd_async_signo = SIGIO;
+static int snd_async_signo = SIGIO;
 #endif
 
 static LIST_HEAD(snd_async_handlers);
@@ -151,11 +151,9 @@ int snd_async_del_handler(snd_async_handler_t *handler)
 	if (!list_empty(&handler->hlist))
 		goto _end;
 	switch (handler->type) {
-#ifdef BUILD_PCM
 	case SND_ASYNC_HANDLER_PCM:
 		err = snd_pcm_async(handler->u.pcm, -1, 1);
 		break;
-#endif
 	case SND_ASYNC_HANDLER_CTL:
 		err = snd_ctl_async(handler->u.ctl, -1, 1);
 		break;

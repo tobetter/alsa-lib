@@ -1,15 +1,9 @@
-SUBDIRS=cards pcm alsa.conf.d ucm topology
+SUBDIRS=cards pcm
 
-cfg_files = alsa.conf
-if BUILD_ALISP
-cfg_files += sndo-mixer.alisp
-endif
-if BUILD_MODULES
-cfg_files += smixer.conf
-endif
+cfg_files = alsa.conf \
+	sndo-mixer.alisp
 
 EXTRA_DIST = $(cfg_files)
 
-alsaconfigdir = @ALSA_CONFIG_DIR@
-alsadir = $(alsaconfigdir)
+alsadir = $(datadir)/alsa
 alsa_DATA = $(cfg_files)

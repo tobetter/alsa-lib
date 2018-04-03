@@ -5,4 +5,4 @@ noinst_HEADERS = hwdep_local.h
 all: libhwdep.la
 
 
-AM_CPPFLAGS=-I$(top_srcdir)/include
+INCLUDES=-I$(top_srcdir)/include

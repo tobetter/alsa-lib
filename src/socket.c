@@ -1,5 +1,5 @@
 /**
- * \file socket.c
+ * \file pcm/socket.c
  * \brief Socket helper routines
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \date 2003
@@ -33,10 +33,6 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/un.h>
-#include <netinet/in.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <netdb.h>
 #include "local.h"
 
 #ifndef DOC_HIDDEN

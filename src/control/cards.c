@@ -1,12 +1,12 @@
 /**
  * \file control/cards.c
  * \brief Basic Soundcard Operations
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 1998-2001
  */
 /*
  *  Soundcard Operations - main file
- *  Copyright (c) 1998 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 1998 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -35,45 +35,9 @@
 #include "control_local.h"
 
 #ifndef DOC_HIDDEN
-#define SND_FILE_CONTROL	ALSA_DEVICE_DIRECTORY "controlC%i"
-#define SND_FILE_LOAD		ALOAD_DEVICE_DIRECTORY "aloadC%i"
+#define SND_FILE_CONTROL	"/dev/snd/controlC%i"
+#define SND_FILE_LOAD		"/dev/aloadC%i"
 #endif
-
-static int snd_card_load2(const char *control)
-{
-	int open_dev;
-	snd_ctl_card_info_t info;
-
-	open_dev = snd_open_device(control, O_RDONLY);
-	if (open_dev >= 0) {
-		if (ioctl(open_dev, SNDRV_CTL_IOCTL_CARD_INFO, &info) < 0) {
-			int err = -errno;
-			close(open_dev);
-			return err;
-		}
-		close(open_dev);
-		return info.card;
-	} else {
-		return -errno;
-	}
-}
-
-static int snd_card_load1(int card)
-{
-	int res;
-	char control[sizeof(SND_FILE_CONTROL) + 10];
-
-	sprintf(control, SND_FILE_CONTROL, card);
-	res = snd_card_load2(control);
-#ifdef SUPPORT_ALOAD
-	if (res < 0) {
-		char aload[sizeof(SND_FILE_LOAD) + 10];
-		sprintf(aload, SND_FILE_LOAD, card);
-		res = snd_card_load2(aload);
-	}
-#endif
-	return res;
-}
 
 /**
  * \brief Try to load the driver for a card.
@@ -82,7 +46,21 @@ static int snd_card_load1(int card)
  */
 int snd_card_load(int card)
 {
-	return !!(snd_card_load1(card) >= 0);
+	int open_dev;
+	char control[32];
+
+	sprintf(control, SND_FILE_CONTROL, card);
+
+	if ((open_dev=open(control, O_RDONLY)) < 0) {
+		char aload[32];
+		sprintf(aload, SND_FILE_LOAD, card);
+		open_dev = open(aload, O_RDONLY);
+	}
+	if (open_dev >= 0) {
+		close (open_dev);
+		return 0;
+	}
+	return open_dev ? 1 : 0;
 }
 
 /**
@@ -103,8 +81,8 @@ int snd_card_next(int *rcard)
 		return -EINVAL;
 	card = *rcard;
 	card = card < 0 ? 0 : card + 1;
-	for (; card < SND_MAX_CARDS; card++) {
-		if (snd_card_load(card)) {
+	for (; card < 32; card++) {
+		if (!snd_card_load(card)) {
 			*rcard = card;
 			return 0;
 		}
@@ -120,11 +98,10 @@ int snd_card_next(int *rcard)
  *
  * The accepted format is an integer value in ASCII representation
  * or the card identifier (the id parameter for sound-card drivers).
- * The control device name like /dev/snd/controlC0 is accepted, too.
  */
 int snd_card_get_index(const char *string)
 {
-	int card, err;
+	int card;
 	snd_ctl_t *handle;
 	snd_ctl_card_info_t info;
 
@@ -132,22 +109,16 @@ int snd_card_get_index(const char *string)
 		return -EINVAL;
 	if ((isdigit(*string) && *(string + 1) == 0) ||
 	    (isdigit(*string) && isdigit(*(string + 1)) && *(string + 2) == 0)) {
-		if (sscanf(string, "%i", &card) != 1)
+		sscanf(string, "%i", &card);
+		if (card < 0 || card > 31)
 			return -EINVAL;
-		if (card < 0 || card >= SND_MAX_CARDS)
-			return -EINVAL;
-		err = snd_card_load1(card);
-		if (err >= 0)
+	        if (snd_card_load(card) >= 0)
 			return card;
-		return err;
+		return -EINVAL;
 	}
-	if (string[0] == '/')	/* device name */
-		return snd_card_load2(string);
-	for (card = 0; card < SND_MAX_CARDS; card++) {
-#ifdef SUPPORT_ALOAD
-		if (! snd_card_load(card))
+	for (card = 0; card < 32; card++) {
+		if (snd_card_load(card) < 0)
 			continue;
-#endif
 		if (snd_ctl_hw_open(&handle, NULL, card, 0) < 0)
 			continue;
 		if (snd_ctl_card_info(handle, &info) < 0) {
@@ -155,7 +126,7 @@ int snd_card_get_index(const char *string)
 			continue;
 		}
 		snd_ctl_close(handle);
-		if (!strcmp((const char *)info.id, string))
+		if (!strcmp(info.id, string))
 			return card;
 	}
 	return -ENODEV;
@@ -166,9 +137,6 @@ int snd_card_get_index(const char *string)
  * \param card Card number
  * \param name Result - card name corresponding to card number
  * \result zero if success, otherwise a negative error code
- *
- * The value returned in name is allocated with strdup and should be
- * freed when no longer used.
  */
 int snd_card_get_name(int card, char **name)
 {
@@ -185,7 +153,7 @@ int snd_card_get_name(int card, char **name)
 		return err;
 	}
 	snd_ctl_close(handle);
-	*name = strdup((const char *)info.name);
+	*name = strdup(info.name);
 	if (*name == NULL)
 		return -ENOMEM;
 	return 0;
@@ -196,9 +164,6 @@ int snd_card_get_name(int card, char **name)
  * \param card Card number
  * \param name Result - card long name corresponding to card number
  * \result zero if success, otherwise a negative error code
- *
- * The value returned in name is allocated with strdup and should be
- * freed when no longer used.
  */
 int snd_card_get_longname(int card, char **name)
 {
@@ -215,7 +180,7 @@ int snd_card_get_longname(int card, char **name)
 		return err;
 	}
 	snd_ctl_close(handle);
-	*name = strdup((const char *)info.longname);
+	*name = strdup(info.longname);
 	if (*name == NULL)
 		return -ENOMEM;
 	return 0;

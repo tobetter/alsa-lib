@@ -44,7 +44,7 @@ typedef struct _snd_output_ops {
 
 struct _snd_output {
 	snd_output_type_t type;
-	const snd_output_ops_t *ops;
+	snd_output_ops_t *ops;
 	void *private_data;
 };
 #endif
@@ -132,7 +132,7 @@ typedef struct _snd_output_stdio {
 	FILE *fp;
 } snd_output_stdio_t;
 
-static int snd_output_stdio_close(snd_output_t *output)
+static int snd_output_stdio_close(snd_output_t *output ATTRIBUTE_UNUSED)
 {
 	snd_output_stdio_t *stdio = output->private_data;
 	if (stdio->close)
@@ -165,7 +165,7 @@ static int snd_output_stdio_flush(snd_output_t *output)
 	return fflush(stdio->fp);
 }
 
-static const snd_output_ops_t snd_output_stdio_ops = {
+static snd_output_ops_t snd_output_stdio_ops = {
 	.close		= snd_output_stdio_close,
 	.print		= snd_output_stdio_print,
 	.puts		= snd_output_stdio_puts,
@@ -181,7 +181,7 @@ static const snd_output_ops_t snd_output_stdio_ops = {
  *                at the address specified by \p outputp.
  * \param fp The \c FILE pointer to write to. Characters are written
  *           to the file starting at the current file position.
- * \param _close Close flag. Set this to 1 if #snd_output_close should close
+ * \param close Close flag. Set this to 1 if #snd_output_close should close
  *              \p fp by calling \c fclose.
  * \return Zero if successful, otherwise a negative error code.
  */
@@ -237,7 +237,7 @@ typedef struct _snd_output_buffer {
 	size_t size;
 } snd_output_buffer_t;
 
-static int snd_output_buffer_close(snd_output_t *output)
+static int snd_output_buffer_close(snd_output_t *output ATTRIBUTE_UNUSED)
 {
 	snd_output_buffer_t *buffer = output->private_data;
 	free(buffer->buf);
@@ -250,20 +250,15 @@ static int snd_output_buffer_need(snd_output_t *output, size_t size)
 	snd_output_buffer_t *buffer = output->private_data;
 	size_t _free = buffer->alloc - buffer->size;
 	size_t alloc;
-	unsigned char *buf;
-
 	if (_free >= size)
 		return _free;
 	if (buffer->alloc == 0)
 		alloc = 256;
 	else
-		alloc = buffer->alloc;
-	while (alloc < buffer->size + size)
-		alloc *= 2;
-	buf = realloc(buffer->buf, alloc);
-	if (!buf)
+		alloc = buffer->alloc * 2;
+	buffer->buf = realloc(buffer->buf, alloc);
+	if (!buffer->buf)
 		return -ENOMEM;
-	buffer->buf = buf;
 	buffer->alloc = alloc;
 	return buffer->alloc - buffer->size;
 }
@@ -276,7 +271,7 @@ static int snd_output_buffer_print(snd_output_t *output, const char *format, va_
 	result = snd_output_buffer_need(output, size);
 	if (result < 0)
 		return result;
-	result = vsnprintf((char *)buffer->buf + buffer->size, size, format, args);
+	result = vsnprintf(buffer->buf + buffer->size, size, format, args);
 	assert(result >= 0);
 	if ((size_t)result <= size) {
 		buffer->size += result;
@@ -286,9 +281,8 @@ static int snd_output_buffer_print(snd_output_t *output, const char *format, va_
 	result = snd_output_buffer_need(output, size);
 	if (result < 0)
 		return result;
-	result = vsnprintf((char *)buffer->buf + buffer->size, result, format, args);
+	result = vsprintf(buffer->buf + buffer->size, format, args);
 	assert(result == (int)size);
-	buffer->size += result;
 	return result;
 }
 
@@ -323,7 +317,7 @@ static int snd_output_buffer_flush(snd_output_t *output ATTRIBUTE_UNUSED)
 	return 0;
 }
 
-static const snd_output_ops_t snd_output_buffer_ops = {
+static snd_output_ops_t snd_output_buffer_ops = {
 	.close		= snd_output_buffer_close,
 	.print		= snd_output_buffer_print,
 	.puts		= snd_output_buffer_puts,
@@ -333,7 +327,7 @@ static const snd_output_ops_t snd_output_buffer_ops = {
 #endif
 
 /**
- * \brief Returns the address of the buffer of a #SND_OUTPUT_BUFFER output handle.
+ * \brief Returns the address of the buffer of a #SND_OUTPUT_TYPE_BUFFER output handle.
  * \param output The output handle.
  * \param buf The functions puts the current address of the buffer at the
  *            address specified by \p buf.
@@ -345,7 +339,7 @@ static const snd_output_ops_t snd_output_buffer_ops = {
 size_t snd_output_buffer_string(snd_output_t *output, char **buf)
 {
 	snd_output_buffer_t *buffer = output->private_data;
-	*buf = (char *)buffer->buf;
+	*buf = buffer->buf;
 	return buffer->size;
 }
 

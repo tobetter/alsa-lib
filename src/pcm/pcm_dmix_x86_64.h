@@ -7,7 +7,7 @@
  */
 /*
  *  PCM - Direct Stream Mixing
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
  *                        Takashi Iwai <tiwai@suse.de>
  *
  *
@@ -30,10 +30,10 @@
 /*
  *  MMX optimized
  */
-static void MIX_AREAS_16(unsigned int size,
-			 volatile signed short *dst, signed short *src,
-			 volatile signed int *sum, size_t dst_step,
-			 size_t src_step, size_t sum_step)
+static void MIX_AREAS1(unsigned int size,
+		       volatile signed short *dst, signed short *src,
+		       volatile signed int *sum, size_t dst_step,
+		       size_t src_step, size_t sum_step)
 {
 	unsigned long long old_rbx;
 
@@ -79,9 +79,9 @@ static void MIX_AREAS_16(unsigned int size,
 		"\t" LOCK_PREFIX "cmpxchgw %%cx, (%%rdi)\n"
 		"\tmovswl (%%rsi), %%ecx\n"
 		"\tjnz 2f\n"
-		"\t" XSUB " %%edx, %%ecx\n"
+		"\tsubl %%edx, %%ecx\n"
 		"2:"
-		"\t" LOCK_PREFIX XADD " %%ecx, (%%rbx)\n"
+		"\t" LOCK_PREFIX "addl %%ecx, (%%rbx)\n"
 
 		/*
 		 *   do {
@@ -125,10 +125,10 @@ static void MIX_AREAS_16(unsigned int size,
 /*
  *  32-bit version (24-bit resolution)
  */
-static void MIX_AREAS_32(unsigned int size,
-			 volatile signed int *dst, signed int *src,
-			 volatile signed int *sum, size_t dst_step,
-			 size_t src_step, size_t sum_step)
+static void MIX_AREAS2(unsigned int size,
+		       volatile signed int *dst, signed int *src,
+		       volatile signed int *sum, size_t dst_step,
+		       size_t src_step, size_t sum_step)
 {
 	unsigned long long old_rbx;
 
@@ -176,14 +176,14 @@ static void MIX_AREAS_32(unsigned int size,
 		"\tmovl (%%rsi), %%ecx\n"
 		/* sample >>= 8 */
 		"\tsarl $8, %%ecx\n"
-		"\t" XSUB " %%edx, %%ecx\n"
+		"\tsubl %%edx, %%ecx\n"
 		"\tjmp 21f\n"
 		"2:"
 		"\tmovl (%%rsi), %%ecx\n"
 		/* sample >>= 8 */
 		"\tsarl $8, %%ecx\n"
 		"21:"
-		"\t" LOCK_PREFIX XADD " %%ecx, (%%rbx)\n"
+		"\t" LOCK_PREFIX "addl %%ecx, (%%rbx)\n"
 
 		/*
 		 *   do {
@@ -237,105 +237,3 @@ static void MIX_AREAS_32(unsigned int size,
 	);
 }
 
-/*
- *  24-bit version
- */
-static void MIX_AREAS_24(unsigned int size,
-			 volatile unsigned char *dst, unsigned char *src,
-			 volatile signed int *sum, size_t dst_step,
-			 size_t src_step, size_t sum_step)
-{
-	unsigned long long old_rbx;
-
-	/*
-	 *  RSI - src
-	 *  RDI - dst
-	 *  RBX - sum
-	 *  ECX - old sample
-	 *  EAX - sample / temporary
-	 *  EDX - temporary
-	 */
-	__asm__ __volatile__ (
-		"\n"
-
-		"\tmovq %%rbx, %7\n"
-		/*
-		 *  initialization, load ESI, EDI, EBX registers
-		 */
-		"\tmovq %1, %%rdi\n"
-		"\tmovq %2, %%rsi\n"
-		"\tmovq %3, %%rbx\n"
-
-		/*
-		 * while (size-- > 0) {
-		 */
-		"\tcmpl $0, %0\n"
-		"jz 6f\n"
-
-		"\t.p2align 4,,15\n"
-
-		"1:"
-
-		/*
-		 *   sample = *src;
-		 *   sum_sample = *sum;
-		 *   if (test_and_set_bit(0, dst) == 0)
-		 *     sample -= sum_sample;
-		 *   *sum += sample;
-		 */
-		"\tmovsbl 2(%%rsi), %%eax\n"
-		"\tmovzwl (%%rsi), %%ecx\n"
-		"\tmovl (%%rbx), %%edx\n"
-		"\tsall $16, %%eax\n"
-		"\torl %%eax, %%ecx\n"
-		"\t" LOCK_PREFIX "btsw $0, (%%rdi)\n"
-		"\tjc 2f\n"
-		"\t" XSUB " %%edx, %%ecx\n"
-		"2:"
-		"\t" LOCK_PREFIX XADD " %%ecx, (%%rbx)\n"
-
-		/*
-		 *   do {
-		 *     sample = old_sample = *sum;
-		 *     saturate(sample);
-		 *     *dst = sample | 1;
-		 *   } while (old_sample != *sum);
-		 */
-
-		"3:"
-		"\tmovl (%%rbx), %%ecx\n"
-
-		"\tmovl $0x7fffff, %%eax\n"
-		"\tmovl $-0x7fffff, %%edx\n"
-		"\tcmpl %%eax, %%ecx\n"
-		"\tcmovng %%ecx, %%eax\n"
-		"\tcmpl %%edx, %%ecx\n"
-		"\tcmovl %%edx, %%eax\n"
-
-		"\torl $1, %%eax\n"
-		"\tmovw %%ax, (%%rdi)\n"
-		"\tshrl $16, %%eax\n"
-		"\tmovb %%al, 2(%%rdi)\n"
-	
-		"\tcmpl %%ecx, (%%rbx)\n"
-		"\tjnz 3b\n"
-
-		/*
-		 * while (size-- > 0)
-		 */
-		"\tadd %4, %%rdi\n"
-		"\tadd %5, %%rsi\n"
-		"\tadd %6, %%rbx\n"
-		"\tdecl %0\n"
-		"\tjnz 1b\n"
-		
-		"6:"
-		"\tmovq %7, %%rbx\n"
-
-		: /* no output regs */
-		: "m" (size), "m" (dst), "m" (src),
-		  "m" (sum), "m" (dst_step), "m" (src_step),
-		  "m" (sum_step), "m" (old_rbx)
-		: "rsi", "rdi", "edx", "ecx", "eax"
-	);
-}

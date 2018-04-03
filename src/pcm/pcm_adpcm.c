@@ -4,14 +4,14 @@
  * \brief PCM Ima-ADPCM Conversion Plugin Interface
  * \author Abramo Bagnara <abramo@alsa-project.org>
  * \author Uros Bizjak <uros@kss-loka.si>
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2000-2001
  */
 /*
  *  PCM - Ima-ADPCM conversion
  *  Copyright (c) 2000 by Abramo Bagnara <abramo@alsa-project.org>
  *  Copyright (c) 1999 by Uros Bizjak <uros@kss-loka.si>
- *                        Jaroslav Kysela <perex@perex.cz>
+ *                        Jaroslav Kysela <perex@suse.cz>
  *
  *  Based on Version 1.2, 18-Dec-92 implementation of Intel/DVI ADPCM code
  *  by Jack Jansen, CWI, Amsterdam <Jack.Jansen@cwi.nl>, Copyright 1992
@@ -60,8 +60,6 @@ IMA compatibility project proceedings, Vol 2, Issue 2, May 1992.
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
-#include "plugin_ops.h"
-
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_adpcm = "";
@@ -89,10 +87,10 @@ typedef struct {
 #endif
 
 /* First table lookup for Ima-ADPCM quantizer */
-static const char IndexAdjust[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
+static char IndexAdjust[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
 
 /* Second table lookup for Ima-ADPCM quantizer */
-static const short StepSize[89] = {
+static short StepSize[89] = {
 	7, 8, 9, 10, 11, 12, 13, 14, 16, 17,
 	19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
 	50, 55, 60, 66, 73, 80, 88, 97, 107, 118,
@@ -403,7 +401,7 @@ static int snd_pcm_adpcm_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 				       snd_pcm_adpcm_hw_refine_cchange,
 				       snd_pcm_adpcm_hw_refine_sprepare,
 				       snd_pcm_adpcm_hw_refine_schange,
-				       snd_pcm_generic_hw_refine);
+				       snd_pcm_plugin_hw_refine_slave);
 }
 
 static int snd_pcm_adpcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
@@ -414,7 +412,7 @@ static int snd_pcm_adpcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 					  snd_pcm_adpcm_hw_refine_cchange,
 					  snd_pcm_adpcm_hw_refine_sprepare,
 					  snd_pcm_adpcm_hw_refine_schange,
-					  snd_pcm_generic_hw_params);
+					  snd_pcm_plugin_hw_params_slave);
 	if (err < 0)
 		return err;
 
@@ -440,7 +438,7 @@ static int snd_pcm_adpcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 		}
 	}
 	assert(!adpcm->states);
-	adpcm->states = malloc(adpcm->plug.gen.slave->channels * sizeof(*adpcm->states));
+	adpcm->states = malloc(adpcm->plug.slave->channels * sizeof(*adpcm->states));
 	if (adpcm->states == NULL)
 		return -ENOMEM;
 	return 0;
@@ -449,9 +447,11 @@ static int snd_pcm_adpcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 static int snd_pcm_adpcm_hw_free(snd_pcm_t *pcm)
 {
 	snd_pcm_adpcm_t *adpcm = pcm->private_data;
-	free(adpcm->states);
-	adpcm->states = NULL;
-	return snd_pcm_hw_free(adpcm->plug.gen.slave);
+	if (adpcm->states) {
+		free(adpcm->states);
+		adpcm->states = 0;
+	}
+	return snd_pcm_hw_free(adpcm->plug.slave);
 }
 
 static int snd_pcm_adpcm_init(snd_pcm_t *pcm)
@@ -515,25 +515,23 @@ static void snd_pcm_adpcm_dump(snd_pcm_t *pcm, snd_output_t *out)
 		snd_pcm_dump_setup(pcm, out);
 	}
 	snd_output_printf(out, "Slave: ");
-	snd_pcm_dump(adpcm->plug.gen.slave, out);
+	snd_pcm_dump(adpcm->plug.slave, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_adpcm_ops = {
-	.close = snd_pcm_generic_close,
-	.info = snd_pcm_generic_info,
+static snd_pcm_ops_t snd_pcm_adpcm_ops = {
+	.close = snd_pcm_plugin_close,
+	.info = snd_pcm_plugin_info,
 	.hw_refine = snd_pcm_adpcm_hw_refine,
 	.hw_params = snd_pcm_adpcm_hw_params,
 	.hw_free = snd_pcm_adpcm_hw_free,
-	.sw_params = snd_pcm_generic_sw_params,
-	.channel_info = snd_pcm_generic_channel_info,
+	.sw_params = snd_pcm_plugin_sw_params,
+	.channel_info = snd_pcm_plugin_channel_info,
 	.dump = snd_pcm_adpcm_dump,
-	.nonblock = snd_pcm_generic_nonblock,
-	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_generic_mmap,
-	.munmap = snd_pcm_generic_munmap,
-	.query_chmaps = snd_pcm_generic_query_chmaps,
-	.get_chmap = snd_pcm_generic_get_chmap,
-	.set_chmap = snd_pcm_generic_set_chmap,
+	.nonblock = snd_pcm_plugin_nonblock,
+	.async = snd_pcm_plugin_async,
+	.poll_revents = snd_pcm_plugin_poll_revents,
+	.mmap = snd_pcm_plugin_mmap,
+	.munmap = snd_pcm_plugin_munmap,
 };
 
 /**
@@ -566,8 +564,8 @@ int snd_pcm_adpcm_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sfor
 	adpcm->plug.read = snd_pcm_adpcm_read_areas;
 	adpcm->plug.write = snd_pcm_adpcm_write_areas;
 	adpcm->plug.init = snd_pcm_adpcm_init;
-	adpcm->plug.gen.slave = slave;
-	adpcm->plug.gen.close_slave = close_slave;
+	adpcm->plug.slave = slave;
+	adpcm->plug.close_slave = close_slave;
 
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_ADPCM, name, slave->stream, slave->mode);
 	if (err < 0) {
@@ -579,7 +577,6 @@ int snd_pcm_adpcm_open(snd_pcm_t **pcmp, const char *name, snd_pcm_format_t sfor
 	pcm->private_data = adpcm;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
-	pcm->tstamp_type = slave->tstamp_type;
 	snd_pcm_set_hw_ptr(pcm, &adpcm->plug.hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &adpcm->plug.appl_ptr, -1, 0);
 	*pcmp = pcm;
@@ -668,7 +665,7 @@ int _snd_pcm_adpcm_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("invalid slave format");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

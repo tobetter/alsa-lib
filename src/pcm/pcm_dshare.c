@@ -2,12 +2,12 @@
  * \file pcm/pcm_dshare.c
  * \ingroup PCM_Plugins
  * \brief PCM Direct Sharing of Channels Plugin Interface
- * \author Jaroslav Kysela <perex@perex.cz>
+ * \author Jaroslav Kysela <perex@suse.cz>
  * \date 2003
  */
 /*
  *  PCM - Direct Sharing of Channels
- *  Copyright (c) 2003 by Jaroslav Kysela <perex@perex.cz>
+ *  Copyright (c) 2003 by Jaroslav Kysela <perex@suse.cz>
  *
  *
  *   This library is free software; you can redistribute it and/or modify
@@ -34,7 +34,6 @@
 #include <string.h>
 #include <fcntl.h>
 #include <ctype.h>
-#include <grp.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -48,11 +47,6 @@
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_dshare = "";
-#endif
-
-#ifndef DOC_HIDDEN
-/* start is pending - this state happens when rate plugin does a delayed commit */
-#define STATE_RUN_PENDING	1024
 #endif
 
 static void do_silence(snd_pcm_t *pcm)
@@ -100,55 +94,30 @@ static void share_areas(snd_pcm_direct_t *dshare,
 /*
  *  synchronize shm ring buffer with hardware
  */
-static void snd_pcm_dshare_sync_area(snd_pcm_t *pcm)
+static void snd_pcm_dshare_sync_area(snd_pcm_t *pcm, snd_pcm_uframes_t size)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
-	snd_pcm_uframes_t slave_hw_ptr, slave_appl_ptr, slave_size;
-	snd_pcm_uframes_t appl_ptr, size;
+	snd_pcm_uframes_t appl_ptr, slave_appl_ptr, transfer;
 	const snd_pcm_channel_area_t *src_areas, *dst_areas;
 	
-	/* calculate the size to transfer */
-	size = dshare->appl_ptr - dshare->last_appl_ptr;
-	if (! size)
-		return;
-	slave_hw_ptr = dshare->slave_hw_ptr;
-	/* don't write on the last active period - this area may be cleared
-	 * by the driver during write operation...
-	 */
-	slave_hw_ptr -= slave_hw_ptr % dshare->slave_period_size;
-	slave_hw_ptr += dshare->slave_buffer_size;
-	if (dshare->slave_hw_ptr > dshare->slave_boundary)
-		slave_hw_ptr -= dshare->slave_boundary;
-	if (slave_hw_ptr < dshare->slave_appl_ptr)
-		slave_size = slave_hw_ptr + (dshare->slave_boundary - dshare->slave_appl_ptr);
-	else
-		slave_size = slave_hw_ptr - dshare->slave_appl_ptr;
-	if (slave_size < size)
-		size = slave_size;
-	if (! size)
-		return;
-
+	/* get the start of update area */
+	appl_ptr = dshare->appl_ptr - size;
+	if (appl_ptr > pcm->boundary)
+		appl_ptr += pcm->boundary;
+	appl_ptr %= pcm->buffer_size;
 	/* add sample areas here */
 	src_areas = snd_pcm_mmap_areas(pcm);
 	dst_areas = snd_pcm_mmap_areas(dshare->spcm);
-	appl_ptr = dshare->last_appl_ptr % pcm->buffer_size;
-	dshare->last_appl_ptr += size;
-	dshare->last_appl_ptr %= pcm->boundary;
-	slave_appl_ptr = dshare->slave_appl_ptr % dshare->slave_buffer_size;
+	slave_appl_ptr = dshare->slave_appl_ptr % dshare->shmptr->s.buffer_size;
 	dshare->slave_appl_ptr += size;
-	dshare->slave_appl_ptr %= dshare->slave_boundary;
-	for (;;) {
-		snd_pcm_uframes_t transfer = size;
-		if (appl_ptr + transfer > pcm->buffer_size)
-			transfer = pcm->buffer_size - appl_ptr;
-		if (slave_appl_ptr + transfer > dshare->slave_buffer_size)
-			transfer = dshare->slave_buffer_size - slave_appl_ptr;
-		share_areas(dshare, src_areas, dst_areas, appl_ptr, slave_appl_ptr, transfer);
+	dshare->slave_appl_ptr %= dshare->shmptr->s.boundary;
+	while (size > 0) {
+		transfer = appl_ptr + size > pcm->buffer_size ? pcm->buffer_size - appl_ptr : size;
+		transfer = slave_appl_ptr + transfer > dshare->shmptr->s.buffer_size ? dshare->shmptr->s.buffer_size - slave_appl_ptr : transfer;
 		size -= transfer;
-		if (! size)
-			break;
+		share_areas(dshare, src_areas, dst_areas, appl_ptr, slave_appl_ptr, transfer);
 		slave_appl_ptr += transfer;
-		slave_appl_ptr %= dshare->slave_buffer_size;
+		slave_appl_ptr %= dshare->shmptr->s.buffer_size;
 		appl_ptr += transfer;
 		appl_ptr %= pcm->buffer_size;
 	}
@@ -166,7 +135,7 @@ static int snd_pcm_dshare_sync_ptr(snd_pcm_t *pcm)
 	switch (snd_pcm_state(dshare->spcm)) {
 	case SND_PCM_STATE_DISCONNECTED:
 		dshare->state = SNDRV_PCM_STATE_DISCONNECTED;
-		return -ENODEV;
+		return -ENOTTY;
 	default:
 		break;
 	}
@@ -177,12 +146,8 @@ static int snd_pcm_dshare_sync_ptr(snd_pcm_t *pcm)
 	diff = slave_hw_ptr - old_slave_hw_ptr;
 	if (diff == 0)		/* fast path */
 		return 0;
-	if (dshare->state != SND_PCM_STATE_RUNNING &&
-	    dshare->state != SND_PCM_STATE_DRAINING)
-		/* not really started yet - don't update hw_ptr */
-		return 0;
 	if (diff < 0) {
-		slave_hw_ptr += dshare->slave_boundary;
+		slave_hw_ptr += dshare->shmptr->s.boundary;
 		diff = slave_hw_ptr - old_slave_hw_ptr;
 	}
 	dshare->hw_ptr += diff;
@@ -190,20 +155,17 @@ static int snd_pcm_dshare_sync_ptr(snd_pcm_t *pcm)
 	// printf("sync ptr diff = %li\n", diff);
 	if (pcm->stop_threshold >= pcm->boundary)	/* don't care */
 		return 0;
-	avail = snd_pcm_mmap_playback_avail(pcm);
+	if ((avail = snd_pcm_mmap_playback_avail(pcm)) >= pcm->stop_threshold) {
+		struct timeval tv;
+		gettimeofday(&tv, 0);
+		dshare->trigger_tstamp.tv_sec = tv.tv_sec;
+		dshare->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+		dshare->state = SND_PCM_STATE_XRUN;
+		dshare->avail_max = avail;
+		return -EPIPE;
+	}
 	if (avail > dshare->avail_max)
 		dshare->avail_max = avail;
-	if (avail >= pcm->stop_threshold) {
-		snd_timer_stop(dshare->timer);
-		gettimestamp(&dshare->trigger_tstamp, pcm->tstamp_type);
-		if (dshare->state == SND_PCM_STATE_RUNNING) {
-			dshare->state = SND_PCM_STATE_XRUN;
-			return -EPIPE;
-		}
-		dshare->state = SND_PCM_STATE_SETUP;
-		/* clear queue to remove pending poll events */
-		snd_pcm_direct_clear_timer_queue(dshare);
-	}
 	return 0;
 }
 
@@ -214,6 +176,7 @@ static int snd_pcm_dshare_sync_ptr(snd_pcm_t *pcm)
 static int snd_pcm_dshare_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
+	snd_pcm_state_t state;
 
 	switch (dshare->state) {
 	case SNDRV_PCM_STATE_DRAINING:
@@ -224,32 +187,28 @@ static int snd_pcm_dshare_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 		break;
 	}
 	memset(status, 0, sizeof(*status));
-	snd_pcm_status(dshare->spcm, status);
-	status->state = snd_pcm_state(dshare->spcm);
+	state = snd_pcm_state(dshare->spcm);
+	status->state = state == SND_PCM_STATE_RUNNING ? dshare->state : state;
 	status->trigger_tstamp = dshare->trigger_tstamp;
+	status->tstamp = snd_pcm_hw_fast_tstamp(dshare->spcm);
 	status->avail = snd_pcm_mmap_playback_avail(pcm);
 	status->avail_max = status->avail > dshare->avail_max ? status->avail : dshare->avail_max;
 	dshare->avail_max = 0;
-	status->delay = snd_pcm_mmap_playback_delay(pcm);
 	return 0;
 }
 
 static snd_pcm_state_t snd_pcm_dshare_state(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
-	snd_pcm_state_t state;
-	state = snd_pcm_state(dshare->spcm);
-	switch (state) {
-	case SND_PCM_STATE_XRUN:
+	switch (snd_pcm_state(dshare->spcm)) {
 	case SND_PCM_STATE_SUSPENDED:
+		return -ESTRPIPE;
 	case SND_PCM_STATE_DISCONNECTED:
-		dshare->state = state;
-		return state;
+		dshare->state = SNDRV_PCM_STATE_DISCONNECTED;
+		return -ENOTTY;
 	default:
 		break;
 	}
-	if (dshare->state == STATE_RUN_PENDING)
-		return SNDRV_PCM_STATE_RUNNING;
 	return dshare->state;
 }
 
@@ -264,16 +223,14 @@ static int snd_pcm_dshare_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
 		err = snd_pcm_dshare_sync_ptr(pcm);
 		if (err < 0)
 			return err;
-		/* fallthru */
 	case SNDRV_PCM_STATE_PREPARED:
 	case SNDRV_PCM_STATE_SUSPENDED:
-	case STATE_RUN_PENDING:
 		*delayp = snd_pcm_mmap_playback_hw_avail(pcm);
 		return 0;
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_DISCONNECTED:
-		return -ENODEV;
+		return -ENOTTY;
 	default:
 		return -EBADFD;
 	}
@@ -293,31 +250,30 @@ static int snd_pcm_dshare_hwsync(snd_pcm_t *pcm)
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_DISCONNECTED:
-		return -ENODEV;
+		return -ENOTTY;
 	default:
 		return -EBADFD;
 	}
+}
+
+static int snd_pcm_dshare_prepare(snd_pcm_t *pcm)
+{
+	snd_pcm_direct_t *dshare = pcm->private_data;
+
+	snd_pcm_direct_check_interleave(dshare, pcm);
+	// assert(pcm->boundary == dshare->shmptr->s.boundary);	/* for sure */
+	dshare->state = SND_PCM_STATE_PREPARED;
+	dshare->appl_ptr = 0;
+	dshare->hw_ptr = 0;
+	return 0;
 }
 
 static int snd_pcm_dshare_reset(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
 	dshare->hw_ptr %= pcm->period_size;
-	dshare->appl_ptr = dshare->last_appl_ptr = dshare->hw_ptr;
+	dshare->appl_ptr = dshare->hw_ptr;
 	dshare->slave_appl_ptr = dshare->slave_hw_ptr = *dshare->spcm->hw.ptr;
-	return 0;
-}
-
-static int snd_pcm_dshare_start_timer(snd_pcm_direct_t *dshare)
-{
-	int err;
-
-	snd_pcm_hwsync(dshare->spcm);
-	dshare->slave_appl_ptr = dshare->slave_hw_ptr = *dshare->spcm->hw.ptr;
-	err = snd_timer_start(dshare->timer);
-	if (err < 0)
-		return err;
-	dshare->state = SND_PCM_STATE_RUNNING;
 	return 0;
 }
 
@@ -325,21 +281,26 @@ static int snd_pcm_dshare_start(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
 	snd_pcm_sframes_t avail;
+	struct timeval tv;
 	int err;
 	
 	if (dshare->state != SND_PCM_STATE_PREPARED)
 		return -EBADFD;
+	err = snd_timer_start(dshare->timer);
+	if (err < 0)
+		return err;
+	dshare->state = SND_PCM_STATE_RUNNING;
+	snd_pcm_hwsync(dshare->spcm);
+	dshare->slave_appl_ptr = dshare->slave_hw_ptr = *dshare->spcm->hw.ptr;
 	avail = snd_pcm_mmap_playback_hw_avail(pcm);
-	if (avail == 0)
-		dshare->state = STATE_RUN_PENDING;
-	else if (avail < 0)
+	if (avail < 0)
 		return 0;
-	else {
-		if ((err = snd_pcm_dshare_start_timer(dshare)) < 0)
-			return err;
-		snd_pcm_dshare_sync_area(pcm);
-	}
-	gettimestamp(&dshare->trigger_tstamp, pcm->tstamp_type);
+	if (avail > (snd_pcm_sframes_t)pcm->buffer_size)
+		avail = pcm->buffer_size;
+	snd_pcm_dshare_sync_area(pcm, avail);
+	gettimeofday(&tv, 0);
+	dshare->trigger_tstamp.tv_sec = tv.tv_sec;
+	dshare->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
 	return 0;
 }
 
@@ -348,9 +309,9 @@ static int snd_pcm_dshare_drop(snd_pcm_t *pcm)
 	snd_pcm_direct_t *dshare = pcm->private_data;
 	if (dshare->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
-	dshare->state = SND_PCM_STATE_SETUP;
-	snd_pcm_direct_timer_stop(dshare);
+	snd_timer_stop(dshare->timer);
 	do_silence(pcm);
+	dshare->state = SND_PCM_STATE_SETUP;
 	return 0;
 }
 
@@ -360,93 +321,66 @@ static int snd_pcm_dshare_drain(snd_pcm_t *pcm)
 	snd_pcm_uframes_t stop_threshold;
 	int err;
 
-	switch (snd_pcm_state(dshare->spcm)) {
-	case SND_PCM_STATE_SUSPENDED:
-		return -ESTRPIPE;
-	default:
-		break;
-	}
-
 	if (dshare->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
-	if (pcm->mode & SND_PCM_NONBLOCK)
-		return -EAGAIN;
-	if (dshare->state == SND_PCM_STATE_PREPARED) {
-		if (snd_pcm_mmap_playback_hw_avail(pcm) > 0)
-			snd_pcm_dshare_start(pcm);
-		else {
-			snd_pcm_dshare_drop(pcm);
-			return 0;
-		}
-	}
-
-	if (dshare->state == SND_PCM_STATE_XRUN) {
-		snd_pcm_dshare_drop(pcm);
-		return 0;
-	}
-
 	stop_threshold = pcm->stop_threshold;
 	if (pcm->stop_threshold > pcm->buffer_size)
 		pcm->stop_threshold = pcm->buffer_size;
-	dshare->state = SND_PCM_STATE_DRAINING;
-	do {
+	while (dshare->state == SND_PCM_STATE_RUNNING) {
 		err = snd_pcm_dshare_sync_ptr(pcm);
-		if (err < 0) {
-			snd_pcm_dshare_drop(pcm);
+		if (err < 0)
 			break;
-		}
-		if (dshare->state == SND_PCM_STATE_DRAINING) {
-			snd_pcm_dshare_sync_area(pcm);
-			snd_pcm_wait_nocheck(pcm, -1);
-			snd_pcm_direct_clear_timer_queue(dshare); /* force poll to wait */
-
-			switch (snd_pcm_state(dshare->spcm)) {
-			case SND_PCM_STATE_SUSPENDED:
-				return -ESTRPIPE;
-			default:
-				break;
-			}
-		}
-	} while (dshare->state == SND_PCM_STATE_DRAINING);
+		if (pcm->mode & SND_PCM_NONBLOCK)
+			return -EAGAIN;
+		snd_pcm_wait(pcm, -1);
+	}
 	pcm->stop_threshold = stop_threshold;
+	return snd_pcm_dshare_drop(pcm);
+}
+
+static int snd_pcm_dshare_pause(snd_pcm_t *pcm, int enable)
+{
+	snd_pcm_direct_t *dshare = pcm->private_data;
+        if (enable) {
+		if (dshare->state != SND_PCM_STATE_RUNNING)
+			return -EBADFD;
+		dshare->state = SND_PCM_STATE_PAUSED;
+		snd_timer_stop(dshare->timer);
+		do_silence(pcm);
+	} else {
+		if (dshare->state != SND_PCM_STATE_PAUSED)
+			return -EBADFD;
+                dshare->state = SND_PCM_STATE_RUNNING;
+                snd_timer_start(dshare->timer);
+	}
 	return 0;
-}
-
-static int snd_pcm_dshare_pause(snd_pcm_t *pcm ATTRIBUTE_UNUSED, int enable ATTRIBUTE_UNUSED)
-{
-	return -EIO;
-}
-
-static snd_pcm_sframes_t snd_pcm_dshare_rewindable(snd_pcm_t *pcm)
-{
-	return snd_pcm_mmap_playback_hw_rewindable(pcm);
 }
 
 static snd_pcm_sframes_t snd_pcm_dshare_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
-	snd_pcm_sframes_t avail;
-
-	avail = snd_pcm_dshare_rewindable(pcm);
-	if (frames > (snd_pcm_uframes_t)avail)
-		frames = avail;
+	/* FIXME: substract samples from the mix ring buffer, too? */
 	snd_pcm_mmap_appl_backward(pcm, frames);
 	return frames;
-}
-
-static snd_pcm_sframes_t snd_pcm_dshare_forwardable(snd_pcm_t *pcm)
-{
-	return snd_pcm_mmap_playback_avail(pcm);
 }
 
 static snd_pcm_sframes_t snd_pcm_dshare_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_sframes_t avail;
 
-	avail = snd_pcm_dshare_forwardable(pcm);
+	avail = snd_pcm_mmap_avail(pcm);
+	if (avail < 0)
+		return 0;
 	if (frames > (snd_pcm_uframes_t)avail)
 		frames = avail;
 	snd_pcm_mmap_appl_forward(pcm, frames);
 	return frames;
+}
+
+static int snd_pcm_dshare_resume(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+{
+	// snd_pcm_direct_t *dshare = pcm->private_data;
+	// FIXME
+	return 0;
 }
 
 static snd_pcm_sframes_t snd_pcm_dshare_readi(snd_pcm_t *pcm ATTRIBUTE_UNUSED, void *buffer ATTRIBUTE_UNUSED, snd_pcm_uframes_t size ATTRIBUTE_UNUSED)
@@ -473,12 +407,14 @@ static int snd_pcm_dshare_close(snd_pcm_t *pcm)
  		snd_pcm_direct_server_discard(dshare);
  	if (dshare->client)
  		snd_pcm_direct_client_discard(dshare);
-	if (snd_pcm_direct_shm_discard(dshare)) {
-		if (snd_pcm_direct_semaphore_discard(dshare))
-			snd_pcm_direct_semaphore_final(dshare, DIRECT_IPC_SEM_CLIENT);
-	} else
-		snd_pcm_direct_semaphore_final(dshare, DIRECT_IPC_SEM_CLIENT);
-	free(dshare->bindings);
+ 	if (snd_pcm_direct_shm_discard(dshare) > 0) {
+ 		if (snd_pcm_direct_semaphore_discard(dshare) < 0)
+ 			snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
+ 	} else {
+		snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
+	}
+	if (dshare->bindings)
+		free(dshare->bindings);
 	pcm->private_data = NULL;
 	free(dshare);
 	return 0;
@@ -491,81 +427,45 @@ static snd_pcm_sframes_t snd_pcm_dshare_mmap_commit(snd_pcm_t *pcm,
 	snd_pcm_direct_t *dshare = pcm->private_data;
 	int err;
 
-	switch (snd_pcm_state(dshare->spcm)) {
-	case SND_PCM_STATE_XRUN:
-		return -EPIPE;
-	case SND_PCM_STATE_SUSPENDED:
-		return -ESTRPIPE;
-	default:
-		break;
-	}
-	if (! size)
-		return 0;
 	snd_pcm_mmap_appl_forward(pcm, size);
-	if (dshare->state == STATE_RUN_PENDING) {
-		if ((err = snd_pcm_dshare_start_timer(dshare)) < 0)
+	if (dshare->state == SND_PCM_STATE_RUNNING) {
+		err = snd_pcm_dshare_sync_ptr(pcm);
+		if (err < 0)
 			return err;
-	} else if (dshare->state == SND_PCM_STATE_RUNNING ||
-		   dshare->state == SND_PCM_STATE_DRAINING)
-		snd_pcm_dshare_sync_ptr(pcm);
-	if (dshare->state == SND_PCM_STATE_RUNNING ||
-	    dshare->state == SND_PCM_STATE_DRAINING) {
 		/* ok, we commit the changes after the validation of area */
 		/* it's intended, although the result might be crappy */
-		snd_pcm_dshare_sync_area(pcm);
-		/* clear timer queue to avoid a bogus return from poll */
-		if (snd_pcm_mmap_playback_avail(pcm) < pcm->avail_min)
-			snd_pcm_direct_clear_timer_queue(dshare);
+		snd_pcm_dshare_sync_area(pcm, size);
 	}
 	return size;
 }
 
-static snd_pcm_sframes_t snd_pcm_dshare_avail_update(snd_pcm_t *pcm)
+static snd_pcm_sframes_t snd_pcm_dshare_avail_update(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
+	int err;
 	
-	if (dshare->state == SND_PCM_STATE_RUNNING ||
-	    dshare->state == SND_PCM_STATE_DRAINING)
-		snd_pcm_dshare_sync_ptr(pcm);
-	return snd_pcm_mmap_playback_avail(pcm);
-}
-
-static int snd_pcm_dshare_htimestamp(snd_pcm_t *pcm,
-				     snd_pcm_uframes_t *avail,
-				     snd_htimestamp_t *tstamp)
-{
-	snd_pcm_direct_t *dshare = pcm->private_data;
-	snd_pcm_uframes_t avail1;
-	int ok = 0;
-	
-	while (1) {
-		if (dshare->state == SND_PCM_STATE_RUNNING ||
-		    dshare->state == SND_PCM_STATE_DRAINING)
-			snd_pcm_dshare_sync_ptr(pcm);
-		avail1 = snd_pcm_mmap_playback_avail(pcm);
-		if (ok && *avail == avail1)
-			break;
-		*avail = avail1;
-		*tstamp = snd_pcm_hw_fast_tstamp(dshare->spcm);
-		ok = 1;
+	if (dshare->state == SND_PCM_STATE_RUNNING) {
+		err = snd_pcm_dshare_sync_ptr(pcm);
+		if (err < 0)
+			return err;
 	}
-	return 0;
+	return snd_pcm_mmap_playback_avail(pcm);
 }
 
 static void snd_pcm_dshare_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
 
-	snd_output_printf(out, "Direct Share PCM\n");
+	snd_output_printf(out, "Direct Stream Mixing PCM\n");
 	if (pcm->setup) {
-		snd_output_printf(out, "Its setup is:\n");
+		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 	if (dshare->spcm)
 		snd_pcm_dump(dshare->spcm, out);
 }
 
-static const snd_pcm_ops_t snd_pcm_dshare_ops = {
+static snd_pcm_ops_t snd_pcm_dshare_ops = {
 	.close = snd_pcm_dshare_close,
 	.info = snd_pcm_direct_info,
 	.hw_refine = snd_pcm_direct_hw_refine,
@@ -576,49 +476,43 @@ static const snd_pcm_ops_t snd_pcm_dshare_ops = {
 	.dump = snd_pcm_dshare_dump,
 	.nonblock = snd_pcm_direct_nonblock,
 	.async = snd_pcm_direct_async,
+	.poll_revents = snd_pcm_direct_poll_revents,
 	.mmap = snd_pcm_direct_mmap,
 	.munmap = snd_pcm_direct_munmap,
-	.get_chmap = snd_pcm_direct_get_chmap,
-	.set_chmap = snd_pcm_direct_set_chmap,
 };
 
-static const snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
+static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
 	.status = snd_pcm_dshare_status,
 	.state = snd_pcm_dshare_state,
 	.hwsync = snd_pcm_dshare_hwsync,
 	.delay = snd_pcm_dshare_delay,
-	.prepare = snd_pcm_direct_prepare,
+	.prepare = snd_pcm_dshare_prepare,
 	.reset = snd_pcm_dshare_reset,
 	.start = snd_pcm_dshare_start,
 	.drop = snd_pcm_dshare_drop,
 	.drain = snd_pcm_dshare_drain,
 	.pause = snd_pcm_dshare_pause,
-	.rewindable = snd_pcm_dshare_rewindable,
 	.rewind = snd_pcm_dshare_rewind,
-	.forwardable = snd_pcm_dshare_forwardable,
 	.forward = snd_pcm_dshare_forward,
-	.resume = snd_pcm_direct_resume,
-	.link = NULL,
-	.link_slaves = NULL,
-	.unlink = NULL,
+	.resume = snd_pcm_dshare_resume,
+	.poll_ask = NULL,
 	.writei = snd_pcm_mmap_writei,
 	.writen = snd_pcm_mmap_writen,
 	.readi = snd_pcm_dshare_readi,
 	.readn = snd_pcm_dshare_readn,
 	.avail_update = snd_pcm_dshare_avail_update,
 	.mmap_commit = snd_pcm_dshare_mmap_commit,
-	.htimestamp = snd_pcm_dshare_htimestamp,
-	.poll_descriptors = NULL,
-	.poll_descriptors_count = NULL,
-	.poll_revents = snd_pcm_direct_poll_revents,
 };
 
 /**
  * \brief Creates a new dshare PCM
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
- * \param opts Direct PCM configurations
+ * \param ipc_key IPC key for semaphore and shared memory
+ * \param ipc_mode IPC permissions for semaphore and shared memory
  * \param params Parameters for slave
+ * \param bindings Channel bindings
+ * \param slowptr Slow but more precise pointer updates
  * \param root Configuration root
  * \param sconf Slave configuration
  * \param stream PCM Direction (stream)
@@ -629,8 +523,10 @@ static const snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
-			struct snd_pcm_direct_open_conf *opts,
+			key_t ipc_key, mode_t ipc_perm,
 			struct slave_params *params,
+			snd_config_t *bindings,
+			int slowptr,
 			snd_config_t *root, snd_config_t *sconf,
 			snd_pcm_stream_t stream, int mode)
 {
@@ -650,41 +546,40 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	dshare = calloc(1, sizeof(snd_pcm_direct_t));
 	if (!dshare) {
 		ret = -ENOMEM;
-		goto _err_nosem;
+		goto _err;
 	}
 	
-	ret = snd_pcm_direct_parse_bindings(dshare, params, opts->bindings);
+	ret = snd_pcm_direct_parse_bindings(dshare, bindings);
 	if (ret < 0)
-		goto _err_nosem;
+		goto _err;
 		
 	if (!dshare->bindings) {
 		SNDERR("dshare: specify bindings!!!");
 		ret = -EINVAL;
-		goto _err_nosem;
+		goto _err;
 	}
 	
-	dshare->ipc_key = opts->ipc_key;
-	dshare->ipc_perm = opts->ipc_perm;
-	dshare->ipc_gid = opts->ipc_gid;
+	dshare->ipc_key = ipc_key;
+	dshare->ipc_perm = ipc_perm;
 	dshare->semid = -1;
 	dshare->shmid = -1;
 
 	ret = snd_pcm_new(&pcm, dshare->type = SND_PCM_TYPE_DSHARE, name, stream, mode);
 	if (ret < 0)
-		goto _err_nosem;
+		goto _err;
 
 	while (1) {
 		ret = snd_pcm_direct_semaphore_create_or_connect(dshare);
 		if (ret < 0) {
 			SNDERR("unable to create IPC semaphore");
-			goto _err_nosem;
+			goto _err;
 		}
 	
 		ret = snd_pcm_direct_semaphore_down(dshare, DIRECT_IPC_SEM_CLIENT);
 		if (ret < 0) {
 			snd_pcm_direct_semaphore_discard(dshare);
 			if (--fail_sem_loop <= 0)
-				goto _err_nosem;
+				goto _err;
 			continue;
 		}
 		break;
@@ -700,15 +595,11 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	pcm->fast_ops = &snd_pcm_dshare_fast_ops;
 	pcm->private_data = dshare;
 	dshare->state = SND_PCM_STATE_OPEN;
-	dshare->slowptr = opts->slowptr;
-	dshare->max_periods = opts->max_periods;
+	dshare->slowptr = slowptr;
 	dshare->sync_ptr = snd_pcm_dshare_sync_ptr;
 
 	if (first_instance) {
-		/* recursion is already checked in
-		   snd_pcm_direct_get_slave_ipc_offset() */
-		ret = snd_pcm_open_slave(&spcm, root, sconf, stream,
-					 mode | SND_PCM_NONBLOCK, NULL);
+		ret = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
 		if (ret < 0) {
 			SNDERR("unable to open slave");
 			goto _err;
@@ -727,53 +618,39 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 
 		dshare->spcm = spcm;
 		
-		if (dshare->shmptr->use_server) {
-			ret = snd_pcm_direct_server_create(dshare);
-			if (ret < 0) {
-				SNDERR("unable to create server");
-				goto _err;
-			}
+		ret = snd_pcm_direct_server_create(dshare);
+		if (ret < 0) {
+			SNDERR("unable to create server");
+			goto _err;
 		}
 
 		dshare->shmptr->type = spcm->type;
 	} else {
-		if (dshare->shmptr->use_server) {
-			/* up semaphore to avoid deadlock */
-			snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
-			ret = snd_pcm_direct_client_connect(dshare);
-			if (ret < 0) {
-				SNDERR("unable to connect client");
-				goto _err_nosem;
-			}
-			
-			snd_pcm_direct_semaphore_down(dshare, DIRECT_IPC_SEM_CLIENT);
-			ret = snd_pcm_direct_open_secondary_client(&spcm, dshare, "dshare_client");
-			if (ret < 0)
-				goto _err;
-
-		} else {
-
-			ret = snd_pcm_open_slave(&spcm, root, sconf, stream,
-						 mode | SND_PCM_NONBLOCK |
-						 SND_PCM_APPEND,
-						 NULL);
-			if (ret < 0) {
-				SNDERR("unable to open slave");
-				goto _err;
-			}
-			if (snd_pcm_type(spcm) != SND_PCM_TYPE_HW) {
-				SNDERR("dshare plugin can be only connected to hw plugin");
-				ret = -EINVAL;
-				goto _err;
-			}
-		
-			ret = snd_pcm_direct_initialize_secondary_slave(dshare, spcm, params);
-			if (ret < 0) {
-				SNDERR("unable to initialize slave");
-				goto _err;
-			}
+		ret = snd_pcm_direct_client_connect(dshare);
+		if (ret < 0) {
+			SNDERR("unable to connect client");
+			return ret;
 		}
-
+			
+		ret = snd_pcm_hw_open_fd(&spcm, "dshare_client", dshare->hw_fd, 0, 0);
+		if (ret < 0) {
+			SNDERR("unable to open hardware");
+			goto _err;
+		}
+		
+		spcm->donot_close = 1;
+		spcm->setup = 1;
+		spcm->buffer_size = dshare->shmptr->s.buffer_size;
+		spcm->sample_bits = dshare->shmptr->s.sample_bits;
+		spcm->channels = dshare->shmptr->s.channels;
+		spcm->format = dshare->shmptr->s.format;
+		spcm->boundary = dshare->shmptr->s.boundary;
+		spcm->info = dshare->shmptr->s.info;
+		ret = snd_pcm_mmap(spcm);
+		if (ret < 0) {
+			SNDERR("unable to mmap channels");
+			goto _err;
+		}
 		dshare->spcm = spcm;
 	}
 
@@ -795,7 +672,7 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 
 	pcm->poll_fd = dshare->poll_fd;
 	pcm->poll_events = POLLIN;	/* it's different than other plugins */
-	pcm->tstamp_type = spcm->tstamp_type;
+		
 	pcm->mmap_rw = 1;
 	snd_pcm_set_hw_ptr(pcm, &dshare->hw_ptr, -1, 0);
 	snd_pcm_set_appl_ptr(pcm, &dshare->appl_ptr, -1, 0);
@@ -806,23 +683,27 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	return 0;
 	
  _err:
-	if (dshare->shmptr)
-		dshare->shmptr->u.dshare.chn_mask &= ~dshare->u.dshare.chn_mask;
-	if (dshare->timer)
-		snd_timer_close(dshare->timer);
-	if (dshare->server)
-		snd_pcm_direct_server_discard(dshare);
-	if (dshare->client)
-		snd_pcm_direct_client_discard(dshare);
-	if (spcm)
-		snd_pcm_close(spcm);
-	if (dshare->shmid >= 0)
-		snd_pcm_direct_shm_discard(dshare);
-	if (snd_pcm_direct_semaphore_discard(dshare) < 0)
-		snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
- _err_nosem:
 	if (dshare) {
-		free(dshare->bindings);
+		if (dshare->shmptr)
+			dshare->shmptr->u.dshare.chn_mask &= ~dshare->u.dshare.chn_mask;
+	 	if (dshare->timer)
+ 			snd_timer_close(dshare->timer);
+ 		if (dshare->server)
+ 			snd_pcm_direct_server_discard(dshare);
+ 		if (dshare->client)
+ 			snd_pcm_direct_client_discard(dshare);
+ 		if (spcm)
+ 			snd_pcm_close(spcm);
+ 		if (dshare->shmid >= 0) {
+ 			if (snd_pcm_direct_shm_discard(dshare) > 0) {
+			 	if (dshare->semid >= 0) {
+ 					if (snd_pcm_direct_semaphore_discard(dshare) < 0)
+ 						snd_pcm_direct_semaphore_up(dshare, DIRECT_IPC_SEM_CLIENT);
+ 				}
+ 			}
+ 		}
+ 		if (dshare->bindings)
+ 			free(dshare->bindings);
 		free(dshare);
 	}
 	if (pcm)
@@ -896,26 +777,109 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 		       snd_config_t *root, snd_config_t *conf,
 		       snd_pcm_stream_t stream, int mode)
 {
-	snd_config_t *sconf;
+	snd_config_iterator_t i, next;
+	snd_config_t *slave = NULL, *bindings = NULL, *sconf;
 	struct slave_params params;
-	struct snd_pcm_direct_open_conf dopen;
-	int bsize, psize;
+	int bsize, psize, ipc_key_add_uid = 0, slowptr = 0;
+	key_t ipc_key = 0;
+	mode_t ipc_perm = 0600;
+	
 	int err;
-
-	err = snd_pcm_direct_parse_open_conf(root, conf, stream, &dopen);
-	if (err < 0)
-		return err;
-
+	snd_config_for_each(i, next, conf) {
+		snd_config_t *n = snd_config_iterator_entry(i);
+		const char *id;
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+		if (snd_pcm_conf_generic_id(id))
+			continue;
+		if (strcmp(id, "ipc_key") == 0) {
+			long key;
+			err = snd_config_get_integer(n, &key);
+			if (err < 0) {
+				SNDERR("The field ipc_key must be an integer type");
+				return err;
+			}
+			ipc_key = key;
+			continue;
+		}
+		if (strcmp(id, "ipc_perm") == 0) {
+			char *perm;
+			char *endp;
+			err = snd_config_get_ascii(n, &perm);
+			if (err < 0) {
+				SNDERR("The field ipc_perm must be a valid file permission");
+				return err;
+			}
+			if (isdigit(*perm) == 0) {
+				SNDERR("The field ipc_perm must be a valid file permission");
+				return -EINVAL;
+			}
+			ipc_perm = strtol(perm, &endp, 8);
+			continue;
+		}
+		if (strcmp(id, "ipc_key_add_uid") == 0) {
+			char *tmp;
+			err = snd_config_get_ascii(n, &tmp);
+			if (err < 0) {
+				SNDERR("The field ipc_key_add_uid must be a boolean type");
+				return err;
+			}
+			err = snd_config_get_bool_ascii(tmp);
+			free(tmp);
+			if (err < 0) {
+				SNDERR("The field ipc_key_add_uid must be a boolean type");
+				return err;
+			}
+			ipc_key_add_uid = err;
+			continue;
+		}
+		if (strcmp(id, "slave") == 0) {
+			slave = n;
+			continue;
+		}
+		if (strcmp(id, "bindings") == 0) {
+			bindings = n;
+			continue;
+		}
+		if (strcmp(id, "slowptr") == 0) {
+			char *tmp;
+			err = snd_config_get_ascii(n, &tmp);
+			if (err < 0) {
+				SNDERR("The field slowptr must be a boolean type");
+				return err;
+			}
+			err = snd_config_get_bool_ascii(tmp);
+			free(tmp);
+			if (err < 0) {
+				SNDERR("The field slowptr must be a boolean type");
+				return err;
+			}
+			slowptr = err;
+			continue;
+		}
+		SNDERR("Unknown field %s", id);
+		return -EINVAL;
+	}
+	if (!slave) {
+		SNDERR("slave is not defined");
+		return -EINVAL;
+	}
+	if (ipc_key_add_uid)
+		ipc_key += getuid();
+	if (!ipc_key) {
+		SNDERR("Unique IPC key is not defined");
+		return -EINVAL;
+	}
 	/* the default settings, it might be invalid for some hardware */
 	params.format = SND_PCM_FORMAT_S16;
 	params.rate = 48000;
 	params.channels = 2;
-	params.period_time = -1;
+	params.period_time = 125000;	/* 0.125 seconds */
 	params.buffer_time = -1;
 	bsize = psize = -1;
 	params.periods = 3;
-	err = snd_pcm_slave_conf(root, dopen.slave, &sconf, 8,
-				 SND_PCM_HW_PARAM_FORMAT, SCONF_UNCHANGED, &params.format,
+	err = snd_pcm_slave_conf(root, slave, &sconf, 8,
+				 SND_PCM_HW_PARAM_FORMAT, 0, &params.format,
 				 SND_PCM_HW_PARAM_RATE, 0, &params.rate,
 				 SND_PCM_HW_PARAM_CHANNELS, 0, &params.channels,
 				 SND_PCM_HW_PARAM_PERIOD_TIME, 0, &params.period_time,
@@ -926,19 +890,11 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	if (err < 0)
 		return err;
 
-	/* set a reasonable default */
-	if (psize == -1 && params.period_time == -1)
-		params.period_time = 125000;	/* 0.125 seconds */
-
-	if (params.format == -2)
-		params.format = SND_PCM_FORMAT_UNKNOWN;
-
 	params.period_size = psize;
 	params.buffer_size = bsize;
-
-	err = snd_pcm_dshare_open(pcmp, name, &dopen, &params,
-				  root, sconf, stream, mode);
-	snd_config_delete(sconf);
+	err = snd_pcm_dshare_open(pcmp, name, ipc_key, ipc_perm, &params, bindings, slowptr, root, sconf, stream, mode);
+	if (err < 0)
+		snd_config_delete(sconf);
 	return err;
 }
 #ifndef DOC_HIDDEN

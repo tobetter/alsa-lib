@@ -32,7 +32,6 @@
 #include <string.h>
 #include <math.h>
 #include "pcm_local.h"
-#include "pcm_generic.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -45,7 +44,7 @@ typedef struct {
 	snd_pcm_t *pcm;
 	unsigned int channels_count;
 	int close_slave;
-	snd_pcm_t *linked;
+	int linked;
 } snd_pcm_multi_slave_t;
 
 typedef struct {
@@ -92,40 +91,6 @@ static int snd_pcm_multi_async(snd_pcm_t *pcm, int sig, pid_t pid)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
 	return snd_pcm_async(slave_0, sig, pid);
-}
-
-static int snd_pcm_multi_poll_descriptors_count(snd_pcm_t *pcm)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
-	return snd_pcm_poll_descriptors_count(slave_0);
-}
-
-static int snd_pcm_multi_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int space)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_t *slave;
-	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
-	int err;
-	unsigned int i;
-
-	for (i = 0; i < multi->slaves_count; ++i) {
-		slave = multi->slaves[i].pcm;
-		if (slave == slave_0)
-			continue;
-		err = snd_pcm_poll_descriptors(slave, pfds, space);
-		if (err < 0)
-			return err;
-	}
-	/* finally overwrite with master's pfds */
-	return snd_pcm_poll_descriptors(slave_0, pfds, space);
-}
-
-static int snd_pcm_multi_poll_revents(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_t *slave_0 = multi->slaves[multi->master_slave].pcm;
-	return snd_pcm_poll_descriptors_revents(slave_0, pfds, nfds, revents);
 }
 
 static int snd_pcm_multi_info(snd_pcm_t *pcm, snd_pcm_info_t *info)
@@ -313,25 +278,6 @@ static int snd_pcm_multi_hw_params_slave(snd_pcm_t *pcm,
 	return 0;
 }
 
-/* reset links to the normal state
- * slave #0 = trigger master
- * slave #1-(N-1) = trigger slaves, linked is set to #0
- */
-static void reset_links(snd_pcm_multi_t *multi)
-{
-	unsigned int i;
-
-	for (i = 0; i < multi->slaves_count; ++i) {
-		if (multi->slaves[i].linked)
-			snd_pcm_unlink(multi->slaves[i].linked);
-		multi->slaves[0].linked = NULL;
-		if (! i)
-			continue;
-		if (snd_pcm_link(multi->slaves[0].pcm, multi->slaves[i].pcm) >= 0)
-			multi->slaves[i].linked = multi->slaves[0].pcm;
-	}
-}
-
 static int snd_pcm_multi_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
@@ -349,7 +295,11 @@ static int snd_pcm_multi_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			return err;
 		}
 	}
-	reset_links(multi);
+	multi->slaves[0].linked = 0;
+	for (i = 1; i < multi->slaves_count; ++i) {
+		err = snd_pcm_link(multi->slaves[0].pcm, multi->slaves[i].pcm);
+		multi->slaves[i].linked = (err >= 0);
+	}
 	return 0;
 }
 
@@ -365,10 +315,10 @@ static int snd_pcm_multi_hw_free(snd_pcm_t *pcm)
 			err = e;
 		if (!multi->slaves[i].linked)
 			continue;
+		multi->slaves[i].linked = 0;
 		e = snd_pcm_unlink(slave);
 		if (e < 0)
 			err = e;
-		multi->slaves[i].linked = NULL;
 	}
 	return err;
 }
@@ -431,55 +381,41 @@ static snd_pcm_sframes_t snd_pcm_multi_avail_update(snd_pcm_t *pcm)
 	return ret;
 }
 
-static int snd_pcm_multi_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
-				    snd_htimestamp_t *tstamp)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_t *slave = multi->slaves[multi->master_slave].pcm;
-	return snd_pcm_htimestamp(slave, avail, tstamp);
-}
-
 static int snd_pcm_multi_prepare(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
-	int result = 0, err;
+	int err = 0;
 	unsigned int i;
 	for (i = 0; i < multi->slaves_count; ++i) {
-		/* We call prepare to each slave even if it's linked.
-		 * This is to make sure to sync non-mmaped control/status.
-		 */
+		if (multi->slaves[i].linked)
+			continue;
 		err = snd_pcm_prepare(multi->slaves[i].pcm);
 		if (err < 0)
-			result = err;
+			return err;
 	}
-	return result;
+	return err;
 }
 
 static int snd_pcm_multi_reset(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
-	int result = 0, err;
+	int err = 0;
 	unsigned int i;
 	for (i = 0; i < multi->slaves_count; ++i) {
-		/* Reset each slave, as well as in prepare */
+		if (multi->slaves[i].linked)
+			continue;
 		err = snd_pcm_reset(multi->slaves[i].pcm);
-		if (err < 0) 
-			result = err;
+		if (err < 0)
+			return err;
 	}
-	return result;
+	return err;
 }
 
-/* when the first slave PCM is linked, it means that the whole multi
- * plugin instance is linked manually to another PCM.  in this case,
- * we need to trigger the master.
- */
 static int snd_pcm_multi_start(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
-	if (multi->slaves[0].linked)
-		return snd_pcm_start(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -495,8 +431,6 @@ static int snd_pcm_multi_drop(snd_pcm_t *pcm)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
-	if (multi->slaves[0].linked)
-		return snd_pcm_drop(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -512,8 +446,6 @@ static int snd_pcm_multi_drain(snd_pcm_t *pcm)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
-	if (multi->slaves[0].linked)
-		return snd_pcm_drain(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -529,8 +461,6 @@ static int snd_pcm_multi_pause(snd_pcm_t *pcm, int enable)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
-	if (multi->slaves[0].linked)
-		return snd_pcm_pause(multi->slaves[0].linked, enable);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -553,42 +483,6 @@ static int snd_pcm_multi_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *in
 	err = snd_pcm_channel_info(multi->slaves[c->slave_idx].pcm, info);
 	info->channel = channel;
 	return err;
-}
-
-static snd_pcm_sframes_t snd_pcm_multi_rewindable(snd_pcm_t *pcm)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	unsigned int i;
-	snd_pcm_sframes_t frames = LONG_MAX;
-
-	for (i = 0; i < multi->slaves_count; ++i) {
-		snd_pcm_sframes_t f = snd_pcm_rewindable(multi->slaves[i].pcm);
-		if (f <= 0)
-			return f;
-		if (f < frames)
-			frames = f;
-	}
-
-	return frames;
-
-}
-
-static snd_pcm_sframes_t snd_pcm_multi_forwardable(snd_pcm_t *pcm)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	unsigned int i;
-	snd_pcm_sframes_t frames = LONG_MAX;
-
-	for (i = 0; i < multi->slaves_count; ++i) {
-		snd_pcm_sframes_t f = snd_pcm_forwardable(multi->slaves[i].pcm);
-		if (f <= 0)
-			return f;
-		if (f < frames)
-			frames = f;
-	}
-
-	return frames;
-
 }
 
 static snd_pcm_sframes_t snd_pcm_multi_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
@@ -656,8 +550,6 @@ static int snd_pcm_multi_resume(snd_pcm_t *pcm)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
-	if (multi->slaves[0].linked)
-		return snd_pcm_resume(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -668,50 +560,21 @@ static int snd_pcm_multi_resume(snd_pcm_t *pcm)
 	return err;
 }
 
-/* if a multi plugin instance is linked as slaves, every slave PCMs
- * including the first one has to be relinked to the given master.
- */
-static int snd_pcm_multi_link_slaves(snd_pcm_t *pcm, snd_pcm_t *master)
-{ 
+static int snd_pcm_multi_poll_ask(snd_pcm_t *pcm)
+{
 	snd_pcm_multi_t *multi = pcm->private_data;
+	snd_pcm_t *slave;
+	int err = 0;
 	unsigned int i;
-	int err;
-
 	for (i = 0; i < multi->slaves_count; ++i) {
-		snd_pcm_unlink(multi->slaves[i].pcm);
-		multi->slaves[i].linked = NULL;
-		err = snd_pcm_link(master, multi->slaves[i].pcm);
-		if (err < 0) {
-			reset_links(multi);
+		slave = multi->slaves[i].pcm;
+		if (slave->fast_ops->poll_ask == NULL)
+			continue;
+		err = slave->fast_ops->poll_ask(slave->fast_op_arg);
+		if (err < 0)
 			return err;
-		}
-		multi->slaves[i].linked = master;
 	}
-	return 0;
-}
-
-/* linking to a multi as a master is easy - simply link to the first
- * slave element as its own slaves are already linked.
- */
-static int snd_pcm_multi_link(snd_pcm_t *pcm1, snd_pcm_t *pcm2)
-{
-	snd_pcm_multi_t *multi = pcm1->private_data;
-	if (multi->slaves[0].pcm->fast_ops->link)
-		return multi->slaves[0].pcm->fast_ops->link(multi->slaves[0].pcm, pcm2);
-	return -ENOSYS;
-}
-
-static int snd_pcm_multi_unlink(snd_pcm_t *pcm)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	unsigned int i;
-
-	for (i = 0; i < multi->slaves_count; ++i) {
-		if (multi->slaves[i].linked)
-			snd_pcm_unlink(multi->slaves[i].linked);
-		multi->slaves[0].linked = NULL;
-	}
-	return 0;
+	return err;
 }
 
 static snd_pcm_sframes_t snd_pcm_multi_mmap_commit(snd_pcm_t *pcm,
@@ -734,182 +597,14 @@ static snd_pcm_sframes_t snd_pcm_multi_mmap_commit(snd_pcm_t *pcm,
 	return size;
 }
 
-static int snd_pcm_multi_munmap(snd_pcm_t *pcm)
+static int snd_pcm_multi_mmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 {
-	free(pcm->mmap_channels);
-	free(pcm->running_areas);
-	pcm->mmap_channels = NULL;
-	pcm->running_areas = NULL;
 	return 0;
 }
 
-static int snd_pcm_multi_mmap(snd_pcm_t *pcm)
+static int snd_pcm_multi_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 {
-	snd_pcm_multi_t *multi = pcm->private_data;
-	unsigned int c;
-
-	pcm->mmap_channels = calloc(pcm->channels,
-				    sizeof(pcm->mmap_channels[0]));
-	pcm->running_areas = calloc(pcm->channels,
-				    sizeof(pcm->running_areas[0]));
-	if (!pcm->mmap_channels || !pcm->running_areas) {
-		snd_pcm_multi_munmap(pcm);
-		return -ENOMEM;
-	}
-
-	/* Copy the slave mmapped buffer data */
-	for (c = 0; c < pcm->channels; c++) {
-		snd_pcm_multi_channel_t *chan = &multi->channels[c];
-		snd_pcm_t *slave;
-		if (chan->slave_idx < 0) {
-			snd_pcm_multi_munmap(pcm);
-			return -ENXIO;
-		}
-		slave = multi->slaves[chan->slave_idx].pcm;
-		pcm->mmap_channels[c] =
-			slave->mmap_channels[chan->slave_channel];
-		pcm->mmap_channels[c].channel = c;
-		pcm->running_areas[c] =
-			slave->running_areas[chan->slave_channel];
-	}
 	return 0;
-}
-
-static int snd_pcm_multi_may_wait_for_avail_min(snd_pcm_t *pcm, snd_pcm_uframes_t avail ATTRIBUTE_UNUSED)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_t *slave = multi->slaves[multi->master_slave].pcm;
-	return snd_pcm_may_wait_for_avail_min(slave, snd_pcm_mmap_avail(slave));
-}
-
-static snd_pcm_chmap_query_t **snd_pcm_multi_query_chmaps(snd_pcm_t *pcm)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_chmap_query_t **slave_maps[multi->slaves_count];
-	snd_pcm_chmap_query_t **maps;
-	unsigned int i;
-	int err = -ENOMEM;
-
-	memset(slave_maps, 0, sizeof(slave_maps));
-	maps = calloc(2, sizeof(*maps));
-	if (!maps)
-		return NULL;
-	maps[0] = calloc(multi->channels_count + 2, sizeof(int *));
-	if (!maps[0])
-		goto error;
-	maps[0]->type = SND_CHMAP_TYPE_FIXED;
-	maps[0]->map.channels = multi->channels_count;
-
-	for (i = 0; i < multi->slaves_count; i++) {
-		slave_maps[i] = snd_pcm_query_chmaps(multi->slaves[i].pcm);
-		if (!slave_maps[i])
-			goto error;
-	}
-
-	for (i = 0; i < multi->channels_count; i++) {
-		snd_pcm_multi_channel_t *bind = &multi->channels[i];
-		unsigned int slave_channels =
-			multi->slaves[bind->slave_idx].channels_count;
-		snd_pcm_chmap_query_t **p;
-
-		for (p = slave_maps[bind->slave_idx]; *p; p++) {
-			if ((*p)->map.channels == slave_channels) {
-				maps[0]->map.pos[i] =
-					(*p)->map.pos[bind->slave_channel];
-				break;
-			}
-		}
-	}
-	err = 0;
-
- error:
-	for (i = 0; i < multi->slaves_count; i++) {
-		if (slave_maps[i])
-			snd_pcm_free_chmaps(slave_maps[i]);
-	}
-
-	if (err) {
-		snd_pcm_free_chmaps(maps);
-		return NULL;
-	}
-
-	return maps;
-}
-
-static snd_pcm_chmap_t *snd_pcm_multi_get_chmap(snd_pcm_t *pcm)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_chmap_t *map;
-	snd_pcm_chmap_t *slave_maps[multi->slaves_count];
-	unsigned int i;
-	int err = -ENOMEM;
-
-	memset(slave_maps, 0, sizeof(slave_maps));
-	map = calloc(multi->channels_count + 1, sizeof(int));
-	if (!map)
-		return NULL;
-
-	for (i = 0; i < multi->slaves_count; i++) {
-		slave_maps[i] = snd_pcm_get_chmap(multi->slaves[i].pcm);
-		if (!slave_maps[i])
-			goto error;
-	}
-
-	map->channels = multi->channels_count;
-	for (i = 0; i < multi->channels_count; i++) {
-		snd_pcm_multi_channel_t *bind = &multi->channels[i];
-		map->pos[i] = slave_maps[bind->slave_idx]->pos[bind->slave_channel];
-	}
-	err = 0;
-
- error:
-	for (i = 0; i < multi->slaves_count; i++)
-		free(slave_maps[i]);
-
-	if (err) {
-		free(map);
-		return NULL;
-	}
-
-	return map;
-}
-
-static int snd_pcm_multi_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
-{
-	snd_pcm_multi_t *multi = pcm->private_data;
-	snd_pcm_chmap_t *slave_maps[multi->slaves_count];
-	unsigned int i;
-	int err = 0;
-
-	if (map->channels != multi->channels_count)
-		return -EINVAL;
-
-	for (i = 0; i < multi->slaves_count; i++) {
-		slave_maps[i] = calloc(multi->slaves[i].channels_count + 1,
-				       sizeof(int));
-		if (!slave_maps[i]) {
-			err = -ENOMEM;
-			goto error;
-		}
-	}
-
-	for (i = 0; i < multi->channels_count; i++) {
-		snd_pcm_multi_channel_t *bind = &multi->channels[i];
-		slave_maps[bind->slave_idx]->pos[bind->slave_channel] =
-			map->pos[i];
-	}
-
-	for (i = 0; i < multi->slaves_count; i++) {
-		err = snd_pcm_set_chmap(multi->slaves[i].pcm, slave_maps[i]);
-		if (err < 0)
-			goto error;
-	}
-
- error:
-	for (i = 0; i < multi->slaves_count; i++)
-		free(slave_maps[i]);
-
-	return err;
 }
 
 static void snd_pcm_multi_dump(snd_pcm_t *pcm, snd_output_t *out)
@@ -917,25 +612,25 @@ static void snd_pcm_multi_dump(snd_pcm_t *pcm, snd_output_t *out)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	unsigned int k;
 	snd_output_printf(out, "Multi PCM\n");
-	snd_output_printf(out, "  Channel bindings:\n");
+	snd_output_printf(out, "\nChannel bindings:\n");
 	for (k = 0; k < multi->channels_count; ++k) {
 		snd_pcm_multi_channel_t *c = &multi->channels[k];
 		if (c->slave_idx < 0)
 			continue;
-		snd_output_printf(out, "    %d: slave %d, channel %d\n", 
+		snd_output_printf(out, "%d: slave %d, channel %d\n", 
 			k, c->slave_idx, c->slave_channel);
 	}
 	if (pcm->setup) {
-		snd_output_printf(out, "Its setup is:\n");
+		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 	for (k = 0; k < multi->slaves_count; ++k) {
-		snd_output_printf(out, "Slave #%d: ", k);
+		snd_output_printf(out, "\nSlave #%d: ", k);
 		snd_pcm_dump(multi->slaves[k].pcm, out);
 	}
 }
 
-static const snd_pcm_ops_t snd_pcm_multi_ops = {
+static snd_pcm_ops_t snd_pcm_multi_ops = {
 	.close = snd_pcm_multi_close,
 	.info = snd_pcm_multi_info,
 	.hw_refine = snd_pcm_multi_hw_refine,
@@ -948,12 +643,9 @@ static const snd_pcm_ops_t snd_pcm_multi_ops = {
 	.async = snd_pcm_multi_async,
 	.mmap = snd_pcm_multi_mmap,
 	.munmap = snd_pcm_multi_munmap,
-	.query_chmaps = snd_pcm_multi_query_chmaps,
-	.get_chmap = snd_pcm_multi_get_chmap,
-	.set_chmap = snd_pcm_multi_set_chmap,
 };
 
-static const snd_pcm_fast_ops_t snd_pcm_multi_fast_ops = {
+static snd_pcm_fast_ops_t snd_pcm_multi_fast_ops = {
 	.status = snd_pcm_multi_status,
 	.state = snd_pcm_multi_state,
 	.hwsync = snd_pcm_multi_hwsync,
@@ -968,21 +660,12 @@ static const snd_pcm_fast_ops_t snd_pcm_multi_fast_ops = {
 	.writen = snd_pcm_mmap_writen,
 	.readi = snd_pcm_mmap_readi,
 	.readn = snd_pcm_mmap_readn,
-	.rewindable = snd_pcm_multi_rewindable,
 	.rewind = snd_pcm_multi_rewind,
-	.forwardable = snd_pcm_multi_forwardable,
 	.forward = snd_pcm_multi_forward,
 	.resume = snd_pcm_multi_resume,
-	.link = snd_pcm_multi_link,
-	.link_slaves = snd_pcm_multi_link_slaves,
-	.unlink = snd_pcm_multi_unlink,
+	.poll_ask = snd_pcm_multi_poll_ask,
 	.avail_update = snd_pcm_multi_avail_update,
 	.mmap_commit = snd_pcm_multi_mmap_commit,
-	.htimestamp = snd_pcm_multi_htimestamp,
-	.poll_descriptors_count = snd_pcm_multi_poll_descriptors_count,
-	.poll_descriptors = snd_pcm_multi_poll_descriptors,
-	.poll_revents = snd_pcm_multi_poll_revents,
-	.may_wait_for_avail_min = snd_pcm_multi_may_wait_for_avail_min,
 };
 
 /**
@@ -1013,7 +696,7 @@ int snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 	snd_pcm_multi_t *multi;
 	unsigned int i;
 	snd_pcm_stream_t stream;
-	char slave_map[64][64] = { { 0 } };
+	char slave_map[32][32] = { { 0 } };
 	int err;
 
 	assert(pcmp);
@@ -1039,7 +722,7 @@ int snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 	multi->channels = calloc(channels_count, sizeof(*multi->channels));
 	if (!multi->channels) {
 		free(multi->slaves);
-		free(multi);
+		free(multi->channels);
 		return -ENOMEM;
 	}
 	for (i = 0; i < slaves_count; ++i) {
@@ -1065,19 +748,15 @@ int snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_MULTI, name, stream,
 			  multi->slaves[0].pcm->mode);
 	if (err < 0) {
-		free(multi->slaves);
-		free(multi->channels);
 		free(multi);
 		return err;
 	}
 	pcm->mmap_rw = 1;
-	pcm->mmap_shadow = 1; /* has own mmap method */
 	pcm->ops = &snd_pcm_multi_ops;
 	pcm->fast_ops = &snd_pcm_multi_fast_ops;
 	pcm->private_data = multi;
 	pcm->poll_fd = multi->slaves[master_slave].pcm->poll_fd;
 	pcm->poll_events = multi->slaves[master_slave].pcm->poll_events;
-	pcm->tstamp_type = multi->slaves[master_slave].pcm->tstamp_type;
 	snd_pcm_link_hw_ptr(pcm, multi->slaves[master_slave].pcm);
 	snd_pcm_link_appl_ptr(pcm, multi->slaves[master_slave].pcm);
 	*pcmp = pcm;
@@ -1356,9 +1035,7 @@ int _snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 	}
 	
 	for (idx = 0; idx < slaves_count; ++idx) {
-		err = snd_pcm_open_slave(&slaves_pcm[idx], root,
-					 slaves_conf[idx], stream, mode,
-					 conf);
+		err = snd_pcm_open_slave(&slaves_pcm[idx], root, slaves_conf[idx], stream, mode);
 		if (err < 0)
 			goto _free;
 		snd_config_delete(slaves_conf[idx]);
@@ -1383,11 +1060,16 @@ _free:
 		}
 		free(slaves_conf);
 	}
-	free(slaves_pcm);
-	free(slaves_channels);
-	free(channels_sidx);
-	free(channels_schannel);
-	free(slaves_id);
+	if (slaves_pcm)
+		free(slaves_pcm);
+	if (slaves_channels)
+		free(slaves_channels);
+	if (channels_sidx)
+		free(channels_sidx);
+	if (channels_schannel)
+		free(channels_schannel);
+	if (slaves_id)
+		free(slaves_id);
 	return err;
 }
 #ifndef DOC_HIDDEN

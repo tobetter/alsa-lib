@@ -1,7 +1,7 @@
 /*
  *  Latency test program
  *
- *     Author: Jaroslav Kysela <perex@perex.cz>
+ *     Author: Jaroslav Kysela <perex@suse.cz>
  *
  *     Author of bandpass filter sweep effect:
  *	       Maarten de Boer <mdeboer@iua.upf.es>
@@ -42,14 +42,13 @@ char *cdevice = "hw:0,0";
 snd_pcm_format_t format = SND_PCM_FORMAT_S16_LE;
 int rate = 22050;
 int channels = 2;
-int buffer_size = 0;		/* auto */
-int period_size = 0;		/* auto */
 int latency_min = 32;		/* in frames / 2 */
 int latency_max = 2048;		/* in frames / 2 */
 int loop_sec = 30;		/* seconds */
 int block = 0;			/* block mode */
+int tick_time = 0;		/* disabled, otherwise in us */
+int tick_time_ok = 0;
 int use_poll = 0;
-int resample = 1;
 unsigned long loop_limit;
 
 snd_output_t *output = NULL;
@@ -64,11 +63,6 @@ int setparams_stream(snd_pcm_t *handle,
 	err = snd_pcm_hw_params_any(handle, params);
 	if (err < 0) {
 		printf("Broken configuration for %s PCM: no configurations available: %s\n", snd_strerror(err), id);
-		return err;
-	}
-	err = snd_pcm_hw_params_set_rate_resample(handle, params, resample);
-	if (err < 0) {
-		printf("Resample setup failed for %s (val %i): %s\n", id, resample, snd_strerror(err));
 		return err;
 	}
 	err = snd_pcm_hw_params_set_access(handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
@@ -92,7 +86,7 @@ int setparams_stream(snd_pcm_t *handle,
 		printf("Rate %iHz not available for %s: %s\n", rate, id, snd_strerror(err));
 		return err;
 	}
-	if ((int)rrate != rate) {
+	if (rrate != rate) {
 		printf("Rate doesn't match (requested %iHz, get %iHz)\n", rate, err);
 		return -EINVAL;
 	}
@@ -115,10 +109,7 @@ int setparams_bufsize(snd_pcm_t *handle,
 		printf("Unable to set buffer size %li for %s: %s\n", bufsize * 2, id, snd_strerror(err));
 		return err;
 	}
-	if (period_size > 0)
-		periodsize = period_size;
-	else
-		periodsize /= 2;
+	periodsize /= 2;
 	err = snd_pcm_hw_params_set_period_size_near(handle, params, &periodsize, 0);
 	if (err < 0) {
 		printf("Unable to set period size %li for %s: %s\n", periodsize, id, snd_strerror(err));
@@ -134,6 +125,7 @@ int setparams_set(snd_pcm_t *handle,
 {
 	int err;
 	snd_pcm_uframes_t val;
+	unsigned int sleep_min = 0;
 
 	err = snd_pcm_hw_params(handle, params);
 	if (err < 0) {
@@ -150,13 +142,42 @@ int setparams_set(snd_pcm_t *handle,
 		printf("Unable to set start threshold mode for %s: %s\n", id, snd_strerror(err));
 		return err;
 	}
+	tick_time_ok = 0;
+	if (tick_time > 0) {
+		int time, ttime;
+		snd_pcm_hw_params_get_period_time(params, &time, NULL);
+		 snd_pcm_hw_params_get_tick_time(params, &ttime, NULL);
+		if (time < ttime) {
+			printf("Skipping to set minimal sleep: period time < tick time\n");
+		} else if (ttime <= 0) {
+			printf("Skipping to set minimal sleep: tick time <= 0 (%i)\n", ttime);
+		} else {
+			sleep_min = tick_time / ttime;
+			if (sleep_min <= 0)
+				sleep_min = 1;
+			err = snd_pcm_sw_params_set_sleep_min(handle, swparams, sleep_min);
+			if (err < 0) {
+				printf("Unable to set minimal sleep %i for %s: %s\n", sleep_min, id, snd_strerror(err));
+				return err;
+			}
+			tick_time_ok = sleep_min * ttime;
+		}
+	}
 	if (!block)
 		val = 4;
 	else
 		snd_pcm_hw_params_get_period_size(params, &val, NULL);
+	if (tick_time_ok > 0)
+		val = 16;
 	err = snd_pcm_sw_params_set_avail_min(handle, swparams, val);
 	if (err < 0) {
 		printf("Unable to set avail min for %s: %s\n", id, snd_strerror(err));
+		return err;
+	}
+	val = !block ? 4 : 1;
+	err = snd_pcm_sw_params_set_xfer_align(handle, swparams, val);
+	if (err < 0) {
+		printf("Unable to set transfer align for %s: %s\n", id, snd_strerror(err));
 		return err;
 	}
 	err = snd_pcm_sw_params(handle, swparams);
@@ -173,9 +194,8 @@ int setparams(snd_pcm_t *phandle, snd_pcm_t *chandle, int *bufsize)
 	snd_pcm_hw_params_t *pt_params, *ct_params;	/* templates with rate, format and channels */
 	snd_pcm_hw_params_t *p_params, *c_params;
 	snd_pcm_sw_params_t *p_swparams, *c_swparams;
-	snd_pcm_uframes_t p_size, c_size, p_psize, c_psize;
+	snd_pcm_uframes_t size, p_size, c_size, p_psize, c_psize;
 	unsigned int p_time, c_time;
-	unsigned int val;
 
 	snd_pcm_hw_params_alloca(&p_params);
 	snd_pcm_hw_params_alloca(&c_params);
@@ -192,20 +212,12 @@ int setparams(snd_pcm_t *phandle, snd_pcm_t *chandle, int *bufsize)
 		exit(0);
 	}
 
-	if (buffer_size > 0) {
-		*bufsize = buffer_size;
-		goto __set_it;
-	}
-
       __again:
-      	if (buffer_size > 0)
-      		return -1;
       	if (last_bufsize == *bufsize)
 		*bufsize += 4;
 	last_bufsize = *bufsize;
 	if (*bufsize > latency_max)
 		return -1;
-      __set_it:
 	if ((err = setparams_bufsize(phandle, p_params, pt_params, *bufsize, "playback")) < 0) {
 		printf("Unable to set sw parameters for playback stream: %s\n", snd_strerror(err));
 		exit(0);
@@ -215,35 +227,26 @@ int setparams(snd_pcm_t *phandle, snd_pcm_t *chandle, int *bufsize)
 		exit(0);
 	}
 
-	snd_pcm_hw_params_get_period_size(p_params, &p_psize, NULL);
-	if (p_psize > (unsigned int)*bufsize)
-		*bufsize = p_psize;
-	snd_pcm_hw_params_get_period_size(c_params, &c_psize, NULL);
-	if (c_psize > (unsigned int)*bufsize)
-		*bufsize = c_psize;
+	snd_pcm_hw_params_get_period_size(p_params, &size, NULL);
+	if (size > *bufsize)
+		*bufsize = size;
+	snd_pcm_hw_params_get_period_size(c_params, &size, NULL);
+	if (size > *bufsize)
+		*bufsize = size;
 	snd_pcm_hw_params_get_period_time(p_params, &p_time, NULL);
 	snd_pcm_hw_params_get_period_time(c_params, &c_time, NULL);
 	if (p_time != c_time)
 		goto __again;
 
+	snd_pcm_hw_params_get_period_size(p_params, &p_psize, NULL);
 	snd_pcm_hw_params_get_buffer_size(p_params, &p_size);
-	if (p_psize * 2 < p_size) {
-                snd_pcm_hw_params_get_periods_min(p_params, &val, NULL);
-                if (val > 2) {
-			printf("playback device does not support 2 periods per buffer\n");
-			exit(0);
-		}
+	if (p_psize * 2 < p_size)
 		goto __again;
-	}
+	snd_pcm_hw_params_get_period_size(c_params, &c_psize, NULL);
 	snd_pcm_hw_params_get_buffer_size(c_params, &c_size);
-	if (c_psize * 2 < c_size) {
-                snd_pcm_hw_params_get_periods_min(c_params, &val, NULL);
-		if (val > 2 ) {
-			printf("capture device does not support 2 periods per buffer\n");
-			exit(0);
-		}
+	if (c_psize * 2 < c_size)
 		goto __again;
-	}
+
 	if ((err = setparams_set(phandle, p_params, p_swparams, "playback")) < 0) {
 		printf("Unable to set sw parameters for playback stream: %s\n", snd_strerror(err));
 		exit(0);
@@ -333,7 +336,7 @@ long timediff(snd_timestamp_t t1, snd_timestamp_t t2)
 	l = (signed long) t1.tv_usec - (signed long) t2.tv_usec;
 	if (l < 0) {
 		t1.tv_sec--;
-		l = 1000000 + l;
+		l = -l;
 		l %= 1000000;
 	}
 	return (t1.tv_sec * 1000000) + l;
@@ -349,7 +352,7 @@ long readbuf(snd_pcm_t *handle, char *buf, long len, size_t *frames, size_t *max
 		} while (r == -EAGAIN);
 		if (r > 0) {
 			*frames += r;
-			if ((long)*max < r)
+			if (*max < r)
 				*max = r;
 		}
 		// printf("read = %li\n", r);
@@ -361,7 +364,7 @@ long readbuf(snd_pcm_t *handle, char *buf, long len, size_t *frames, size_t *max
 				buf += r * frame_bytes;
 				len -= r;
 				*frames += r;
-				if ((long)*max < r)
+				if (*max < r)
 					*max = r;
 			}
 			// printf("r = %li, len = %li\n", r, len);
@@ -447,15 +450,14 @@ void help(void)
 "-f,--format    sample format\n"
 "-c,--channels  channels\n"
 "-r,--rate      rate\n"
-"-B,--buffer    buffer size in frames\n"
-"-E,--period    period size in frames\n"
 "-s,--seconds   duration of test in seconds\n"
 "-b,--block     block mode\n"
+"-t,--time      maximal tick time in us\n"
 "-p,--poll      use poll (wait for event - reduces CPU usage)\n"
 "-e,--effect    apply an effect (bandpass filter sweep)\n"
 );
         printf("Recognized sample formats are:");
-        for (k = 0; k < SND_PCM_FORMAT_LAST; ++k) {
+        for (k = 0; k < SND_PCM_FORMAT_LAST; ++(unsigned long) k) {
                 const char *s = snd_pcm_format_name(k);
                 if (s)
                         printf(" %s", s);
@@ -483,10 +485,9 @@ int main(int argc, char *argv[])
 		{"format", 1, NULL, 'f'},
 		{"channels", 1, NULL, 'c'},
 		{"rate", 1, NULL, 'r'},
-		{"buffer", 1, NULL, 'B'},
-		{"period", 1, NULL, 'E'},
 		{"seconds", 1, NULL, 's'},
 		{"block", 0, NULL, 'b'},
+		{"time", 1, NULL, 't'},
 		{"poll", 0, NULL, 'p'},
 		{"effect", 0, NULL, 'e'},
 		{NULL, 0, NULL, 0},
@@ -502,7 +503,7 @@ int main(int argc, char *argv[])
 	morehelp = 0;
 	while (1) {
 		int c;
-		if ((c = getopt_long(argc, argv, "hP:C:m:M:F:f:c:r:B:E:s:bpen", long_option, NULL)) < 0)
+		if ((c = getopt_long(argc, argv, "hP:C:m:M:F:f:c:r:s:bt:pe", long_option, NULL)) < 0)
 			break;
 		switch (c) {
 		case 'h':
@@ -539,14 +540,6 @@ int main(int argc, char *argv[])
 			err = atoi(optarg);
 			rate = err >= 4000 && err < 200000 ? err : 44100;
 			break;
-		case 'B':
-			err = atoi(optarg);
-			buffer_size = err >= 32 && err < 200000 ? err : 0;
-			break;
-		case 'E':
-			err = atoi(optarg);
-			period_size = err >= 32 && err < 200000 ? err : 0;
-			break;
 		case 's':
 			err = atoi(optarg);
 			loop_sec = err >= 1 && err <= 100000 ? err : 30;
@@ -554,14 +547,15 @@ int main(int argc, char *argv[])
 		case 'b':
 			block = 1;
 			break;
+		case 't':
+			tick_time = atoi(optarg);
+			tick_time = tick_time < 0 ? 0 : tick_time;
+			break;
 		case 'p':
 			use_poll = 1;
 			break;
 		case 'e':
 			effect = 1;
-			break;
-		case 'n':
-			resample = 0;
 			break;
 		}
 	}
@@ -585,7 +579,7 @@ int main(int argc, char *argv[])
 	printf("Playback device is %s\n", pdevice);
 	printf("Capture device is %s\n", cdevice);
 	printf("Parameters are %iHz, %s, %i channels, %s mode\n", rate, snd_pcm_format_name(format), channels, block ? "blocking" : "non-blocking");
-	printf("Poll mode: %s\n", use_poll ? "yes" : "no");
+	printf("Wanted tick time: %ius, poll mode: %s\n", tick_time, use_poll ? "yes" : "no");
 	printf("Loop limit is %li frames, minimum latency = %i, maximum latency = %i\n", loop_limit, latency_min * 2, latency_max * 2);
 
 	if ((err = snd_pcm_open(&phandle, pdevice, SND_PCM_STREAM_PLAYBACK, block ? 0 : SND_PCM_NONBLOCK)) < 0) {
@@ -618,6 +612,8 @@ int main(int argc, char *argv[])
 		if (setparams(phandle, chandle, &latency) < 0)
 			break;
 		showlatency(latency);
+		if (tick_time_ok)
+			printf("Using tick time %ius\n", tick_time_ok);
 		if ((err = snd_pcm_link(chandle, phandle)) < 0) {
 			printf("Streams link error: %s\n", snd_strerror(err));
 			exit(0);
