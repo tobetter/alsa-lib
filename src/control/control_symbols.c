@@ -22,15 +22,16 @@
 
 extern const char *_snd_module_control_hw;
 extern const char *_snd_module_control_shm;
+extern const char *_snd_module_control_ext;
 
 static const char **snd_control_open_objects[] = {
 	&_snd_module_control_hw,
-	&_snd_module_control_shm
+#include "ctl_symbols_list.c"
 };
 	
 void *snd_control_open_symbols(void)
 {
-	return (void *)snd_control_open_objects[0];
+	return snd_control_open_objects;
 }
 
 #endif /* !PIC */

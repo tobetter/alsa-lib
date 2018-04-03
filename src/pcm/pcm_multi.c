@@ -45,7 +45,7 @@ typedef struct {
 	snd_pcm_t *pcm;
 	unsigned int channels_count;
 	int close_slave;
-	int linked;
+	snd_pcm_t *linked;
 } snd_pcm_multi_slave_t;
 
 typedef struct {
@@ -57,7 +57,6 @@ typedef struct {
 	unsigned int slaves_count;
 	unsigned int master_slave;
 	snd_pcm_multi_slave_t *slaves;
-	int slave_link_master;
 	unsigned int channels_count;
 	snd_pcm_multi_channel_t *channels;
 } snd_pcm_multi_t;
@@ -314,6 +313,25 @@ static int snd_pcm_multi_hw_params_slave(snd_pcm_t *pcm,
 	return 0;
 }
 
+/* reset links to the normal state
+ * slave #0 = trigger master
+ * slave #1-(N-1) = trigger slaves, linked is set to #0
+ */
+static void reset_links(snd_pcm_multi_t *multi)
+{
+	unsigned int i;
+
+	for (i = 0; i < multi->slaves_count; ++i) {
+		if (multi->slaves[i].linked)
+			snd_pcm_unlink(multi->slaves[i].linked);
+		multi->slaves[0].linked = NULL;
+		if (! i)
+			continue;
+		if (snd_pcm_link(multi->slaves[0].pcm, multi->slaves[i].pcm) >= 0)
+			multi->slaves[i].linked = multi->slaves[0].pcm;
+	}
+}
+
 static int snd_pcm_multi_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
@@ -331,12 +349,7 @@ static int snd_pcm_multi_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			return err;
 		}
 	}
-	multi->slaves[0].linked = 0;
-	multi->slave_link_master = 0;
-	for (i = 1; i < multi->slaves_count; ++i) {
-		err = snd_pcm_link(multi->slaves[0].pcm, multi->slaves[i].pcm);
-		multi->slaves[i].linked = (err >= 0);
-	}
+	reset_links(multi);
 	return 0;
 }
 
@@ -352,10 +365,10 @@ static int snd_pcm_multi_hw_free(snd_pcm_t *pcm)
 			err = e;
 		if (!multi->slaves[i].linked)
 			continue;
-		multi->slaves[i].linked = 0;
 		e = snd_pcm_unlink(slave);
 		if (e < 0)
 			err = e;
+		multi->slaves[i].linked = NULL;
 	}
 	return err;
 }
@@ -421,7 +434,7 @@ static snd_pcm_sframes_t snd_pcm_multi_avail_update(snd_pcm_t *pcm)
 static int snd_pcm_multi_prepare(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
-	int err = 0;
+	int result = 0, err;
 	unsigned int i;
 	for (i = 0; i < multi->slaves_count; ++i) {
 		/* We call prepare to each slave even if it's linked.
@@ -429,30 +442,36 @@ static int snd_pcm_multi_prepare(snd_pcm_t *pcm)
 		 */
 		err = snd_pcm_prepare(multi->slaves[i].pcm);
 		if (err < 0)
-			return err;
+			result = err;
 	}
-	return err;
+	return result;
 }
 
 static int snd_pcm_multi_reset(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
-	int err = 0;
+	int result = 0, err;
 	unsigned int i;
 	for (i = 0; i < multi->slaves_count; ++i) {
 		/* Reset each slave, as well as in prepare */
 		err = snd_pcm_reset(multi->slaves[i].pcm);
-		if (err < 0)
-			return err;
+		if (err < 0) 
+			result = err;
 	}
-	return err;
+	return result;
 }
 
+/* when the first slave PCM is linked, it means that the whole multi
+ * plugin instance is linked manually to another PCM.  in this case,
+ * we need to trigger the master.
+ */
 static int snd_pcm_multi_start(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
+	if (multi->slaves[0].linked)
+		return snd_pcm_start(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -468,6 +487,8 @@ static int snd_pcm_multi_drop(snd_pcm_t *pcm)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
+	if (multi->slaves[0].linked)
+		return snd_pcm_drop(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -483,6 +504,8 @@ static int snd_pcm_multi_drain(snd_pcm_t *pcm)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
+	if (multi->slaves[0].linked)
+		return snd_pcm_drain(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -498,6 +521,8 @@ static int snd_pcm_multi_pause(snd_pcm_t *pcm, int enable)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
+	if (multi->slaves[0].linked)
+		return snd_pcm_pause(multi->slaves[0].linked, enable);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -587,6 +612,8 @@ static int snd_pcm_multi_resume(snd_pcm_t *pcm)
 	snd_pcm_multi_t *multi = pcm->private_data;
 	int err = 0;
 	unsigned int i;
+	if (multi->slaves[0].linked)
+		return snd_pcm_resume(multi->slaves[0].linked);
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
 			continue;
@@ -597,34 +624,37 @@ static int snd_pcm_multi_resume(snd_pcm_t *pcm)
 	return err;
 }
 
-static int snd_pcm_multi_link_fd_failed(snd_pcm_t *pcm, int fd)
-{
+/* if a multi plugin instance is linked as slaves, every slave PCMs
+ * including the first one has to be relinked to the given master.
+ */
+static int snd_pcm_multi_link_slaves(snd_pcm_t *pcm, snd_pcm_t *master)
+{ 
 	snd_pcm_multi_t *multi = pcm->private_data;
 	unsigned int i;
+	int err;
 
 	for (i = 0; i < multi->slaves_count; ++i) {
-		if (_snd_pcm_link_descriptor(multi->slaves[i].pcm) != fd)
-			continue;
-		 multi->slaves[i].linked = 0;
+		snd_pcm_unlink(multi->slaves[i].pcm);
+		multi->slaves[i].linked = NULL;
+		err = snd_pcm_link(master, multi->slaves[i].pcm);
+		if (err < 0) {
+			reset_links(multi);
+			return err;
+		}
+		multi->slaves[i].linked = master;
 	}
 	return 0;
 }
 
-static int snd_pcm_multi_link_fd(snd_pcm_t *pcm, int *fds, int count, int (**failed)(snd_pcm_t *pcm, int fd))
-{ 
-	snd_pcm_multi_t *multi = pcm->private_data;
-	unsigned int i;
-
-	if (count < (int)multi->slaves_count)
-		return -ENOMEM;
-	for (i = 0; i < multi->slaves_count; ++i) {
-		if (multi->slaves[i].linked)
-			snd_pcm_unlink(multi->slaves[i].pcm);
-		fds[i] = _snd_pcm_link_descriptor(multi->slaves[i].pcm);
-		multi->slaves[i].linked = 1;
-	}
-	*failed = snd_pcm_multi_link_fd_failed;
-	return multi->slaves_count;
+/* linking to a multi as a master is easy - simply link to the first
+ * slave element as its own slaves are already linked.
+ */
+static int snd_pcm_multi_link(snd_pcm_t *pcm1, snd_pcm_t *pcm2)
+{
+	snd_pcm_multi_t *multi = pcm1->private_data;
+	if (multi->slaves[0].pcm->fast_ops->link)
+		return multi->slaves[0].pcm->fast_ops->link(multi->slaves[0].pcm, pcm2);
+	return -ENOSYS;
 }
 
 static int snd_pcm_multi_unlink(snd_pcm_t *pcm)
@@ -634,8 +664,8 @@ static int snd_pcm_multi_unlink(snd_pcm_t *pcm)
 
 	for (i = 0; i < multi->slaves_count; ++i) {
 		if (multi->slaves[i].linked)
-			snd_pcm_unlink(multi->slaves[i].pcm);
-		multi->slaves[i].linked = 0;
+			snd_pcm_unlink(multi->slaves[i].linked);
+		multi->slaves[0].linked = NULL;
 	}
 	return 0;
 }
@@ -726,8 +756,8 @@ static snd_pcm_fast_ops_t snd_pcm_multi_fast_ops = {
 	.rewind = snd_pcm_multi_rewind,
 	.forward = snd_pcm_multi_forward,
 	.resume = snd_pcm_multi_resume,
-	.link_fd = snd_pcm_multi_link_fd,
-	.link = snd_pcm_generic_link2,
+	.link = snd_pcm_multi_link,
+	.link_slaves = snd_pcm_multi_link_slaves,
 	.unlink = snd_pcm_multi_unlink,
 	.avail_update = snd_pcm_multi_avail_update,
 	.mmap_commit = snd_pcm_multi_mmap_commit,

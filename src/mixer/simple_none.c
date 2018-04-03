@@ -47,13 +47,15 @@
 
 typedef enum _selem_ctl_type {
 	CTL_SINGLE,
-	CTL_ENUMLIST,
+	CTL_GLOBAL_ENUM,
 	CTL_GLOBAL_SWITCH,
 	CTL_GLOBAL_VOLUME,
 	CTL_GLOBAL_ROUTE,
+	CTL_PLAYBACK_ENUM,
 	CTL_PLAYBACK_SWITCH,
 	CTL_PLAYBACK_VOLUME,
 	CTL_PLAYBACK_ROUTE,
+	CTL_CAPTURE_ENUM,
 	CTL_CAPTURE_SWITCH,
 	CTL_CAPTURE_VOLUME,
 	CTL_CAPTURE_ROUTE,
@@ -286,7 +288,16 @@ static int elem_read_enum(selem_none_t *s)
 	snd_ctl_elem_value_t *ctl;
 	unsigned int idx;
 	int err;
-	selem_ctl_t *c = &s->ctls[CTL_ENUMLIST];
+	int type;
+	selem_ctl_t *c;
+	type = CTL_GLOBAL_ENUM;
+	if ( (s->selem.caps & (SM_CAP_CENUM | SM_CAP_PENUM)) == (SM_CAP_CENUM | SM_CAP_PENUM) )
+		type = CTL_GLOBAL_ENUM;
+	else if (s->selem.caps & SM_CAP_PENUM)
+		type = CTL_PLAYBACK_ENUM;
+	else if (s->selem.caps & SM_CAP_CENUM)
+		type = CTL_CAPTURE_ENUM;
+	c = &s->ctls[type];
 	snd_ctl_elem_value_alloca(&ctl);
 	if ((err = snd_hctl_elem_read(c->elem, ctl)) < 0)
 		return err;
@@ -319,12 +330,27 @@ static int selem_read(snd_mixer_elem_t *elem)
 	csw = s->str[SM_CAPT].sw;
 	s->str[SM_CAPT].sw = ~0U;
 
-	if (s->ctls[CTL_ENUMLIST].elem) {
+	if (s->ctls[CTL_GLOBAL_ENUM].elem) {
 		err = elem_read_enum(s);
 		if (err < 0)
 			return err;
 		goto __skip_cswitch;
 	}
+
+	if (s->ctls[CTL_CAPTURE_ENUM].elem) {
+		err = elem_read_enum(s);
+		if (err < 0)
+			return err;
+		goto __skip_cswitch;
+	}
+
+	if (s->ctls[CTL_PLAYBACK_ENUM].elem) {
+		err = elem_read_enum(s);
+		if (err < 0)
+			return err;
+		goto __skip_cswitch;
+	}
+
 
 	if (s->ctls[CTL_PLAYBACK_VOLUME].elem)
 		err = elem_read_volume(s, SM_PLAY, CTL_PLAYBACK_VOLUME);
@@ -504,7 +530,16 @@ static int elem_write_enum(selem_none_t *s)
 	snd_ctl_elem_value_t *ctl;
 	unsigned int idx;
 	int err;
-	selem_ctl_t *c = &s->ctls[CTL_ENUMLIST];
+	int type;
+	selem_ctl_t *c;
+	type = CTL_GLOBAL_ENUM;
+	if ( (s->selem.caps & (SM_CAP_CENUM | SM_CAP_PENUM) ) == (SM_CAP_CENUM | SM_CAP_PENUM) )
+		type = CTL_GLOBAL_ENUM;
+	else if (s->selem.caps & SM_CAP_PENUM)
+		type = CTL_PLAYBACK_ENUM;
+	else if (s->selem.caps & SM_CAP_CENUM)
+		type = CTL_CAPTURE_ENUM;
+	c = &s->ctls[type];
 	snd_ctl_elem_value_alloca(&ctl);
 	if ((err = snd_hctl_elem_read(c->elem, ctl)) < 0)
 		return err;
@@ -515,7 +550,7 @@ static int elem_write_enum(selem_none_t *s)
 	return 0;
 }
 
-static int selem_write(snd_mixer_elem_t *elem)
+static int selem_write_main(snd_mixer_elem_t *elem)
 {
 	selem_none_t *s;
 	unsigned int idx;
@@ -524,7 +559,13 @@ static int selem_write(snd_mixer_elem_t *elem)
 	assert(snd_mixer_elem_get_type(elem) == SND_MIXER_ELEM_SIMPLE);
 	s = snd_mixer_elem_get_private(elem);
 
-	if (s->ctls[CTL_ENUMLIST].elem)
+	if (s->ctls[CTL_GLOBAL_ENUM].elem)
+		return elem_write_enum(s);
+
+	if (s->ctls[CTL_PLAYBACK_ENUM].elem)
+		return elem_write_enum(s);
+
+	if (s->ctls[CTL_CAPTURE_ENUM].elem)
 		return elem_write_enum(s);
 
 	if (s->ctls[CTL_SINGLE].elem) {
@@ -598,6 +639,16 @@ static int selem_write(snd_mixer_elem_t *elem)
 	return 0;
 }
 
+static int selem_write(snd_mixer_elem_t *elem)
+{
+	int err;
+	
+	err = selem_write_main(elem);
+	if (err < 0)
+		selem_read(elem);
+	return err;
+}
+
 static void selem_free(snd_mixer_elem_t *elem)
 {
 	selem_none_t *simple = snd_mixer_elem_get_private(elem);
@@ -616,6 +667,7 @@ static int simple_update(snd_mixer_elem_t *melem)
 	unsigned int caps, pchannels, cchannels;
 	long pmin, pmax, cmin, cmax;
 	selem_ctl_t *ctl;
+	const char *name;
 
 	caps = 0;
 	pchannels = 0;
@@ -624,6 +676,7 @@ static int simple_update(snd_mixer_elem_t *melem)
 	cmin = cmax = 0;
 	assert(snd_mixer_elem_get_type(melem) == SND_MIXER_ELEM_SIMPLE);
 	simple = snd_mixer_elem_get_private(melem);
+	name = snd_mixer_selem_get_name(melem);
 	ctl = &simple->ctls[CTL_SINGLE];
 	if (ctl->elem) {
 		pchannels = cchannels = ctl->values;
@@ -723,12 +776,23 @@ static int simple_update(snd_mixer_elem_t *melem)
 		caps |= SM_CAP_CSWITCH | SM_CAP_CSWITCH_EXCL;
 		caps &= ~SM_CAP_GSWITCH;
 	}
-	ctl = &simple->ctls[CTL_ENUMLIST];
+	ctl = &simple->ctls[CTL_GLOBAL_ENUM];
 	if (ctl->elem) {
 		if (pchannels < ctl->values)
 			pchannels = ctl->values;
-		/* FIXME: differentiate some controls */
-		caps |= SM_CAP_PENUM|SM_CAP_CENUM;
+		caps |= SM_CAP_PENUM | SM_CAP_CENUM;
+	}
+	ctl = &simple->ctls[CTL_PLAYBACK_ENUM];
+	if (ctl->elem) {
+		if (pchannels < ctl->values)
+			pchannels = ctl->values;
+		caps |= SM_CAP_PENUM;
+	}
+	ctl = &simple->ctls[CTL_CAPTURE_ENUM];
+	if (ctl->elem) {
+		if (pchannels < ctl->values)
+			pchannels = ctl->values;
+		caps |= SM_CAP_CENUM;
 	}
 	if (pchannels > 32)
 		pchannels = 32;
@@ -819,12 +883,15 @@ static struct suf {
 	const char *suffix;
 	selem_ctl_type_t type;
 } suffixes[] = {
+	{" Playback Enum", CTL_PLAYBACK_ENUM},
 	{" Playback Switch", CTL_PLAYBACK_SWITCH},
 	{" Playback Route", CTL_PLAYBACK_ROUTE},
 	{" Playback Volume", CTL_PLAYBACK_VOLUME},
+	{" Capture Enum", CTL_CAPTURE_ENUM},
 	{" Capture Switch", CTL_CAPTURE_SWITCH},
 	{" Capture Route", CTL_CAPTURE_ROUTE},
 	{" Capture Volume", CTL_CAPTURE_VOLUME},
+	{" Enum", CTL_GLOBAL_ENUM},
 	{" Switch", CTL_GLOBAL_SWITCH},
 	{" Route", CTL_GLOBAL_ROUTE},
 	{" Volume", CTL_GLOBAL_VOLUME},
@@ -920,16 +987,33 @@ static int is_ops(snd_mixer_elem_t *elem, int dir, int cmd, int val)
 
 	case SM_OPS_IS_ENUMERATED:
 		if (val == 1) {
-			if (dir == SM_PLAY && (s->selem.caps & SM_CAP_PENUM))
+			if (dir == SM_PLAY && (s->selem.caps & SM_CAP_PENUM) && !(s->selem.caps & SM_CAP_CENUM) )
 				return 1;
-			return !!(s->selem.caps & SM_CAP_CENUM);
+			if (dir == SM_CAPT && (s->selem.caps & SM_CAP_CENUM) && !(s->selem.caps & SM_CAP_PENUM) )
+				return 1;
+			return 0;
 		}
-		return s->ctls[CTL_ENUMLIST].elem != 0;
+		if (s->selem.caps & (SM_CAP_CENUM | SM_CAP_PENUM) )
+			return 1;
+		return 0;
 	
 	case SM_OPS_IS_ENUMCNT:
-		if (! s->ctls[CTL_ENUMLIST].elem)
-			return -EINVAL;
-		return s->ctls[CTL_ENUMLIST].max;
+		/* Both */
+		if ( (s->selem.caps & (SM_CAP_CENUM | SM_CAP_PENUM)) == (SM_CAP_CENUM | SM_CAP_PENUM) ) {
+			if (! s->ctls[CTL_GLOBAL_ENUM].elem)
+				return -EINVAL;
+			return s->ctls[CTL_GLOBAL_ENUM].max;
+		/* Only Playback */
+		} else if (s->selem.caps & SM_CAP_PENUM ) {
+			if (! s->ctls[CTL_PLAYBACK_ENUM].elem)
+				return -EINVAL;
+			return s->ctls[CTL_PLAYBACK_ENUM].max;
+		/* Only Capture */
+		} else if (s->selem.caps & SM_CAP_CENUM ) {
+			if (! s->ctls[CTL_CAPTURE_ENUM].elem)
+				return -EINVAL;
+			return s->ctls[CTL_CAPTURE_ENUM].max;
+		}
 
 	}
 	
@@ -972,10 +1056,14 @@ static int get_volume_ops(snd_mixer_elem_t *elem, int dir,
 static int init_db_range(snd_hctl_elem_t *ctl, struct selem_str *rec);
 
 /* convert to index of integer array */
+#ifndef DOC_HIDDEN
 #define int_index(size)	(((size) + sizeof(int) - 1) / sizeof(int))
+#endif
 
 /* max size of a TLV entry for dB information (including compound one) */
+#ifndef DOC_HIDDEN
 #define MAX_TLV_RANGE_SIZE	256
+#endif
 
 /* parse TLV stream and retrieve dB information
  * return 0 if successly found and stored to rec,
@@ -1410,10 +1498,20 @@ static int enum_item_name_ops(snd_mixer_elem_t *elem,
 	selem_none_t *s = snd_mixer_elem_get_private(elem);
 	snd_ctl_elem_info_t *info;
 	snd_hctl_elem_t *helem;
+	int type;
 
-	helem = s->ctls[CTL_ENUMLIST].elem;
+	type = CTL_GLOBAL_ENUM;
+	helem = s->ctls[type].elem;
+	if (!helem) {
+		type = CTL_PLAYBACK_ENUM;
+		helem = s->ctls[type].elem;
+	}
+	if (!helem) {
+		type = CTL_CAPTURE_ENUM;
+		helem = s->ctls[type].elem;
+	}
 	assert(helem);
-	if (item >= (unsigned int)s->ctls[CTL_ENUMLIST].max)
+	if (item >= (unsigned int)s->ctls[type].max)
 		return -EINVAL;
 	snd_ctl_elem_info_alloca(&info);
 	snd_hctl_elem_info(helem, info);
@@ -1434,7 +1532,9 @@ static int get_enum_item_ops(snd_mixer_elem_t *elem,
 
 	if ((unsigned int) channel >= s->str[0].channels)
 		return -EINVAL;
-	helem = s->ctls[CTL_ENUMLIST].elem;
+	helem = s->ctls[CTL_GLOBAL_ENUM].elem;
+	if (!helem) helem = s->ctls[CTL_PLAYBACK_ENUM].elem;
+	if (!helem) helem = s->ctls[CTL_CAPTURE_ENUM].elem;
 	assert(helem);
 	snd_ctl_elem_value_alloca(&ctl);
 	err = snd_hctl_elem_read(helem, ctl);
@@ -1451,17 +1551,30 @@ static int set_enum_item_ops(snd_mixer_elem_t *elem,
 	snd_ctl_elem_value_t *ctl;
 	snd_hctl_elem_t *helem;
 	int err;
+	int type;
 
-	if ((unsigned int) channel >= s->str[0].channels)
+	if ((unsigned int) channel >= s->str[0].channels) {
 		return -EINVAL;
-	helem = s->ctls[CTL_ENUMLIST].elem;
+	}
+	type = CTL_GLOBAL_ENUM;
+	helem = s->ctls[type].elem;
+	if (!helem) {
+		type = CTL_PLAYBACK_ENUM;
+		helem = s->ctls[type].elem;
+	}
+	if (!helem) {
+		type = CTL_CAPTURE_ENUM;
+		helem = s->ctls[type].elem;
+	}
 	assert(helem);
-	if (item >= (unsigned int)s->ctls[CTL_ENUMLIST].max)
+	if (item >= (unsigned int)s->ctls[type].max) {
 		return -EINVAL;
+	}
 	snd_ctl_elem_value_alloca(&ctl);
 	err = snd_hctl_elem_read(helem, ctl);
-	if (err < 0)
+	if (err < 0) {
 		return err;
+	}
 	snd_ctl_elem_value_set_enumerated(ctl, channel, item);
 	return snd_hctl_elem_write(helem, ctl);
 }
@@ -1505,7 +1618,7 @@ static int simple_add1(snd_mixer_class_t *class, const char *name,
 	switch (type) {
 	case CTL_SINGLE:
 		if (ctype == SND_CTL_ELEM_TYPE_ENUMERATED)
-			type = CTL_ENUMLIST;
+			type = CTL_GLOBAL_ENUM;
 		else if (ctype != SND_CTL_ELEM_TYPE_BOOLEAN &&
 		         ctype != SND_CTL_ELEM_TYPE_INTEGER)
 			return 0;
@@ -1516,7 +1629,7 @@ static int simple_add1(snd_mixer_class_t *class, const char *name,
 	{
 		unsigned int n;
 		if (ctype == SND_CTL_ELEM_TYPE_ENUMERATED) {
-			type = CTL_ENUMLIST;
+			type = CTL_GLOBAL_ENUM;
 			break;
 		}
 		if (ctype != SND_CTL_ELEM_TYPE_BOOLEAN)
@@ -1531,7 +1644,7 @@ static int simple_add1(snd_mixer_class_t *class, const char *name,
 	case CTL_PLAYBACK_SWITCH:
 	case CTL_CAPTURE_SWITCH:
 		if (ctype == SND_CTL_ELEM_TYPE_ENUMERATED) {
-			type = CTL_ENUMLIST;
+			type = CTL_GLOBAL_ENUM;
 			break;
 		}
 		if (ctype != SND_CTL_ELEM_TYPE_BOOLEAN)
@@ -1541,13 +1654,19 @@ static int simple_add1(snd_mixer_class_t *class, const char *name,
 	case CTL_PLAYBACK_VOLUME:
 	case CTL_CAPTURE_VOLUME:
 		if (ctype == SND_CTL_ELEM_TYPE_ENUMERATED) {
-			type = CTL_ENUMLIST;
+			type = CTL_GLOBAL_ENUM;
 			break;
 		}
 		if (ctype != SND_CTL_ELEM_TYPE_INTEGER)
 			return 0;
 		break;
 	case CTL_CAPTURE_SOURCE:
+		if (ctype != SND_CTL_ELEM_TYPE_ENUMERATED)
+			return 0;
+		break;
+	case CTL_GLOBAL_ENUM:
+	case CTL_PLAYBACK_ENUM:
+	case CTL_CAPTURE_ENUM:
 		if (ctype != SND_CTL_ELEM_TYPE_ENUMERATED)
 			return 0;
 		break;
@@ -1583,7 +1702,7 @@ static int simple_add1(snd_mixer_class_t *class, const char *name,
 		snd_mixer_selem_id_free(id);
 	}
 	if (simple->ctls[type].elem) {
-		SNDERR("helem (%s,'%s',%li,%li,%li) appears twice or more",
+		SNDERR("helem (%s,'%s',%u,%u,%u) appears twice or more",
 				snd_ctl_elem_iface_name(snd_hctl_elem_get_interface(helem)),
 				snd_hctl_elem_get_name(helem),
 				snd_hctl_elem_get_index(helem),
@@ -1596,7 +1715,9 @@ static int simple_add1(snd_mixer_class_t *class, const char *name,
 	simple->ctls[type].type = snd_ctl_elem_info_get_type(info);
 	simple->ctls[type].inactive = snd_ctl_elem_info_is_inactive(info);
 	simple->ctls[type].values = values;
-	if (type == CTL_ENUMLIST) {
+	if ( (type == CTL_GLOBAL_ENUM) ||
+	     (type == CTL_PLAYBACK_ENUM) ||
+	     (type == CTL_CAPTURE_ENUM) ) {
 		simple->ctls[type].min = 0;
 		simple->ctls[type].max = snd_ctl_elem_info_get_items(info);
 	} else {

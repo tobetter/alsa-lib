@@ -152,8 +152,8 @@ typedef struct {
 	int (*hwsync)(snd_pcm_t *pcm);
 	int (*delay)(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp);
 	int (*resume)(snd_pcm_t *pcm);
-	int (*link_fd)(snd_pcm_t *pcm, int *fds, int count, int (**failed)(snd_pcm_t *, int));
 	int (*link)(snd_pcm_t *pcm1, snd_pcm_t *pcm2);
+	int (*link_slaves)(snd_pcm_t *pcm, snd_pcm_t *master);
 	int (*unlink)(snd_pcm_t *pcm);
 	snd_pcm_sframes_t (*rewind)(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
 	snd_pcm_sframes_t (*forward)(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
@@ -274,7 +274,6 @@ static inline int snd_pcm_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t *i
 }
 int snd_pcm_channel_info_shm(snd_pcm_t *pcm, snd_pcm_channel_info_t *info, int shmid);
 int _snd_pcm_poll_descriptor(snd_pcm_t *pcm);
-int _snd_pcm_link_descriptors(snd_pcm_t *pcm, int *fds, int size, int (**failed)(snd_pcm_t *, int));
 #define _snd_pcm_link_descriptor _snd_pcm_poll_descriptor /* FIXME */
 #define _snd_pcm_async_descriptor _snd_pcm_poll_descriptor /* FIXME */
 
@@ -757,7 +756,7 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name, int fd, int mmap_emul
 
 int snd_pcm_wait_nocheck(snd_pcm_t *pcm, int timeout);
 
-const char *snd_pcm_rate_get_default_converter(snd_config_t *root);
+const snd_config_t *snd_pcm_rate_get_default_converter(snd_config_t *root);
 
 #define SND_PCM_HW_PARBIT_ACCESS	(1U << SND_PCM_HW_PARAM_ACCESS)
 #define SND_PCM_HW_PARBIT_FORMAT	(1U << SND_PCM_HW_PARAM_FORMAT)

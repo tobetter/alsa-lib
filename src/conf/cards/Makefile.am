@@ -1,4 +1,4 @@
-alsadir = $(datadir)/alsa/cards
+alsadir = @ALSA_CONFIG_DIR@/cards
 cfg_files = aliases.conf \
 	AACI.conf \
 	ATIIXP.conf \
@@ -39,6 +39,7 @@ cfg_files = aliases.conf \
 	RME9652.conf \
 	SI7018.conf \
 	TRID4DWAVENX.conf \
+	USB-Audio.conf \
 	YMF744.conf \
 	VIA686A.conf \
 	VIA8233.conf \
@@ -55,7 +56,7 @@ endif
 alsa_DATA = $(cfg_files)
 
 if BUILD_ALISP
-SI7018dir = $(datadir)/alsa/cards/SI7018
+SI7018dir = @ALSA_CONFIG_DIR@/cards/SI7018
 SI7018_files = \
 	SI7018/sndoc-mixer.alisp \
 	SI7018/sndop-mixer.alisp

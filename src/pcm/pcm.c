@@ -634,7 +634,6 @@ playback devices.
 #include <malloc.h>
 #include <stdarg.h>
 #include <signal.h>
-#include <dlfcn.h>
 #include <sys/poll.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -1983,7 +1982,7 @@ snd_pcm_t *snd_async_handler_get_pcm(snd_async_handler_t *handler)
 
 static char *build_in_pcms[] = {
 	"adpcm", "alaw", "copy", "dmix", "file", "hooks", "hw", "ladspa", "lfloat",
-	"linear", "meter", "mulaw", "multi", "null", "plug", "rate", "route", "share",
+	"linear", "meter", "mulaw", "multi", "null", "empty", "plug", "rate", "route", "share",
 	"shm", "dsnoop", "dshare", "asym", "iec958", "softvol", NULL
 };
 
@@ -2081,13 +2080,13 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 			build_in++;
 		}
 		if (*build_in == NULL) {
-			buf1 = malloc(strlen(str) + sizeof(PKGLIBDIR) + 32);
+			buf1 = malloc(strlen(str) + sizeof(ALSA_PLUGIN_DIR) + 32);
 			if (buf1 == NULL) {
 				err = -ENOMEM;
 				goto _err;
 			}
 			lib = buf1;
-			sprintf(buf1, "%s/libasound_module_pcm_%s.so", PKGLIBDIR, str);
+			sprintf(buf1, "%s/libasound_module_pcm_%s.so", ALSA_PLUGIN_DIR, str);
 		}
 	}
 #ifndef PIC
@@ -2138,13 +2137,20 @@ static int snd_pcm_open_noupdate(snd_pcm_t **pcmp, snd_config_t *root,
 {
 	int err;
 	snd_config_t *pcm_conf;
+	const char *str;
+
 	err = snd_config_search_definition(root, "pcm", name, &pcm_conf);
 	if (err < 0) {
 		SNDERR("Unknown PCM %s", name);
 		return err;
 	}
-	snd_config_set_hop(pcm_conf, hop);
-	err = snd_pcm_open_conf(pcmp, name, root, pcm_conf, stream, mode);
+	if (snd_config_get_string(pcm_conf, &str) >= 0)
+		err = snd_pcm_open_noupdate(pcmp, root, str, stream, mode,
+					    hop + 1);
+	else {
+		snd_config_set_hop(pcm_conf, hop);
+		err = snd_pcm_open_conf(pcmp, name, root, pcm_conf, stream, mode);
+	}
 	snd_config_delete(pcm_conf);
 	return err;
 }
@@ -6307,15 +6313,6 @@ snd_pcm_sframes_t snd_pcm_mmap_commit(snd_pcm_t *pcm,
 
 #ifndef DOC_HIDDEN
 
-int _snd_pcm_link_descriptors(snd_pcm_t *pcm, int *fds, int count,
-			      int (**failed)(snd_pcm_t *, int))
-{
-	assert(pcm);
-	if (pcm->fast_ops->link_fd)
-		return pcm->fast_ops->link_fd(pcm, fds, count, failed);
-	return -ENOSYS;
-}
-
 int _snd_pcm_poll_descriptor(snd_pcm_t *pcm)
 {
 	assert(pcm);
@@ -6674,7 +6671,7 @@ int snd_pcm_slave_conf(snd_config_t *root, snd_config_t *conf,
 
 int snd_pcm_conf_generic_id(const char *id)
 {
-	static const char *ids[] = { "comment", "type" };
+	static const char *ids[] = { "comment", "type", "hint" };
 	unsigned int k;
 	for (k = 0; k < sizeof(ids) / sizeof(ids[0]); ++k) {
 		if (strcmp(id, ids[k]) == 0)
@@ -7148,7 +7145,7 @@ int snd_pcm_set_params(snd_pcm_t *pcm,
 	/* set the count of channels */
 	err = snd_pcm_hw_params_set_channels(pcm, params, channels);
 	if (err < 0) {
-		SNDERR("Channels count (%i) not available for %s: %s", s, channels, snd_strerror(err));
+		SNDERR("Channels count (%i) not available for %s: %s", channels, s, snd_strerror(err));
 		return err;
 	}
 	/* set the stream rate */
@@ -7205,7 +7202,7 @@ int snd_pcm_set_params(snd_pcm_t *pcm,
         	period_time = latency / 4;
         	err = INTERNAL(snd_pcm_hw_params_set_period_time_near)(pcm, params, &period_time, NULL);
         	if (err < 0) {
-        		SNDERR("Unable to set period time %i for %s: %s", s, period_time, snd_strerror(err));
+        		SNDERR("Unable to set period time %i for %s: %s", period_time, s, snd_strerror(err));
         		return err;
         	}
                 err = INTERNAL(snd_pcm_hw_params_get_period_size)(params, &period_size, NULL);

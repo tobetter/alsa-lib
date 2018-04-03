@@ -34,6 +34,11 @@
 #include "control_local.h"
 #include "control_external.h"
 
+#ifndef PIC
+/* entry for static linking */
+const char *_snd_module_control_ext = "";
+#endif
+
 static int snd_ctl_ext_close(snd_ctl_t *handle)
 {
 	snd_ctl_ext_t *ext = handle->private_data;
@@ -265,7 +270,7 @@ static int snd_ctl_ext_elem_write(snd_ctl_t *handle, snd_ctl_elem_value_t *contr
 	case SND_CTL_ELEM_TYPE_INTEGER64:
 		if (! ext->callback->write_integer64)
 			goto err;
-		ret = ext->callback->write_integer64(ext, key, control->value.integer64.value);
+		ret = ext->callback->write_integer64(ext, key, (int64_t *)control->value.integer64.value);
 		break;
 	case SND_CTL_ELEM_TYPE_ENUMERATED:
 		if (! ext->callback->write_enumerated)

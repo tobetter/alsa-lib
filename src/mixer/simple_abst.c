@@ -41,7 +41,7 @@
 
 #ifndef DOC_HIDDEN
 
-#define SO_PATH PKGLIBDIR "/smixer"
+#define SO_PATH ALSA_PLUGIN_DIR "/smixer"
 
 typedef struct _class_priv {
 	char *device;
@@ -82,14 +82,14 @@ static int try_open(snd_mixer_class_t *class, const char *lib)
 		free(xlib);
 		return -ENXIO;
 	}
-	event_func = dlsym(h, "alsa_mixer_simple_event");
+	event_func = snd_dlsym(h, "alsa_mixer_simple_event", NULL);
 	if (event_func == NULL) {
 		SNDERR("Symbol 'alsa_mixer_simple_event' was not found in '%s'", xlib);
 		snd_dlclose(h);
 		free(xlib);
 		return -ENXIO;
 	}
-	init_func = dlsym(h, "alsa_mixer_simple_init");
+	init_func = snd_dlsym(h, "alsa_mixer_simple_init", NULL);
 	if (init_func == NULL) {
 		SNDERR("Symbol 'alsa_mixer_simple_init' was not found in '%s'", xlib);
 		snd_dlclose(h);
@@ -239,7 +239,7 @@ int snd_mixer_simple_basic_register(snd_mixer_t *mixer,
 		goto __error;
 	file = getenv("ALSA_MIXER_SIMPLE");
 	if (!file)
-		file = DATADIR "/alsa/smixer.conf";
+		file = ALSA_CONFIG_DIR "/smixer.conf";
 	err = snd_config_top(&top);
 	if (err >= 0) {
 		err = snd_input_stdio_open(&input, file, "r");
