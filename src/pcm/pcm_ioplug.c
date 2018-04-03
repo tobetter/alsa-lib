@@ -60,7 +60,7 @@ static void snd_pcm_ioplug_hw_ptr_update(snd_pcm_t *pcm)
 			delta = hw - io->last_hw;
 		else
 			delta = pcm->buffer_size + hw - io->last_hw;
-		io->data->hw_ptr += delta;
+		snd_pcm_mmap_hw_forward(io->data->pcm, delta);
 		io->last_hw = hw;
 	} else
 		io->data->state = SNDRV_PCM_STATE_XRUN;
@@ -448,7 +448,7 @@ static int snd_pcm_ioplug_start(snd_pcm_t *pcm)
 	if (err < 0)
 		return err;
 
-	gettimestamp(&io->trigger_tstamp, pcm->monotonic);
+	gettimestamp(&io->trigger_tstamp, pcm->tstamp_type);
 	io->data->state = SND_PCM_STATE_RUNNING;
 
 	return 0;
@@ -463,7 +463,7 @@ static int snd_pcm_ioplug_drop(snd_pcm_t *pcm)
 
 	io->data->callback->stop(io->data);
 
-	gettimestamp(&io->trigger_tstamp, pcm->monotonic);
+	gettimestamp(&io->trigger_tstamp, pcm->tstamp_type);
 	io->data->state = SND_PCM_STATE_SETUP;
 
 	return 0;
@@ -503,7 +503,7 @@ static int snd_pcm_ioplug_pause(snd_pcm_t *pcm, int enable)
 
 static snd_pcm_sframes_t snd_pcm_ioplug_rewindable(snd_pcm_t *pcm)
 {
-	return snd_pcm_mmap_hw_avail(pcm);
+	return snd_pcm_mmap_hw_rewindable(pcm);
 }
 
 static snd_pcm_sframes_t snd_pcm_ioplug_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
@@ -625,7 +625,7 @@ static snd_pcm_sframes_t snd_pcm_ioplug_avail_update(snd_pcm_t *pcm)
 	snd_pcm_uframes_t avail;
 
 	snd_pcm_ioplug_hw_ptr_update(pcm);
-	if (io->data->state == SNDRV_PCM_STATE_XRUN)
+	if (io->data->state == SND_PCM_STATE_XRUN)
 		return -EPIPE;
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE &&
 	    pcm->access != SND_PCM_ACCESS_RW_INTERLEAVED &&
@@ -710,6 +710,36 @@ static int snd_pcm_ioplug_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
 	return 0;
 }
 
+static snd_pcm_chmap_query_t **snd_pcm_ioplug_query_chmaps(snd_pcm_t *pcm)
+{
+	ioplug_priv_t *io = pcm->private_data;
+
+	if (io->data->version >= 0x010002 &&
+	    io->data->callback->query_chmaps)
+		return io->data->callback->query_chmaps(io->data);
+	return NULL;
+}
+
+static snd_pcm_chmap_t *snd_pcm_ioplug_get_chmap(snd_pcm_t *pcm)
+{
+	ioplug_priv_t *io = pcm->private_data;
+
+	if (io->data->version >= 0x010002 &&
+	    io->data->callback->get_chmap)
+		return io->data->callback->get_chmap(io->data);
+	return NULL;
+}
+
+static int snd_pcm_ioplug_set_chmap(snd_pcm_t *pcm, const snd_pcm_chmap_t *map)
+{
+	ioplug_priv_t *io = pcm->private_data;
+
+	if (io->data->version >= 0x010002 &&
+	    io->data->callback->set_chmap)
+		return io->data->callback->set_chmap(io->data, map);
+	return -ENXIO;
+}
+
 static void snd_pcm_ioplug_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	ioplug_priv_t *io = pcm->private_data;
@@ -760,6 +790,9 @@ static const snd_pcm_ops_t snd_pcm_ioplug_ops = {
 	.dump = snd_pcm_ioplug_dump,
 	.mmap = snd_pcm_ioplug_mmap,
 	.munmap = snd_pcm_ioplug_munmap,
+	.query_chmaps = snd_pcm_ioplug_query_chmaps,
+	.get_chmap = snd_pcm_ioplug_get_chmap,
+	.set_chmap = snd_pcm_ioplug_set_chmap,
 };
 
 static const snd_pcm_fast_ops_t snd_pcm_ioplug_fast_ops = {
@@ -917,7 +950,8 @@ int snd_pcm_ioplug_create(snd_pcm_ioplug_t *ioplug, const char *name,
 	/* We support 1.0.0 to current */
 	if (ioplug->version < 0x010000 ||
 	    ioplug->version > SND_PCM_IOPLUG_VERSION) {
-		SNDERR("ioplug: Plugin version mismatch\n");
+		SNDERR("ioplug: Plugin version mismatch: 0x%x\n",
+		       ioplug->version);
 		return -ENXIO;
 	}
 
@@ -985,7 +1019,7 @@ void snd_pcm_ioplug_params_reset(snd_pcm_ioplug_t *ioplug)
 int snd_pcm_ioplug_set_param_list(snd_pcm_ioplug_t *ioplug, int type, unsigned int num_list, const unsigned int *list)
 {
 	ioplug_priv_t *io = ioplug->pcm->private_data;
-	if (type < 0 && type >= SND_PCM_IOPLUG_HW_PARAMS) {
+	if (type < 0 || type >= SND_PCM_IOPLUG_HW_PARAMS) {
 		SNDERR("IOPLUG: invalid parameter type %d", type);
 		return -EINVAL;
 	}
@@ -1009,7 +1043,7 @@ int snd_pcm_ioplug_set_param_list(snd_pcm_ioplug_t *ioplug, int type, unsigned i
 int snd_pcm_ioplug_set_param_minmax(snd_pcm_ioplug_t *ioplug, int type, unsigned int min, unsigned int max)
 {
 	ioplug_priv_t *io = ioplug->pcm->private_data;
-	if (type < 0 && type >= SND_PCM_IOPLUG_HW_PARAMS) {
+	if (type < 0 || type >= SND_PCM_IOPLUG_HW_PARAMS) {
 		SNDERR("IOPLUG: invalid parameter type %d", type);
 		return -EINVAL;
 	}
@@ -1035,7 +1069,10 @@ int snd_pcm_ioplug_reinit_status(snd_pcm_ioplug_t *ioplug)
 {
 	ioplug->pcm->poll_fd = ioplug->poll_fd;
 	ioplug->pcm->poll_events = ioplug->poll_events;
-	ioplug->pcm->monotonic = (ioplug->flags & SND_PCM_IOPLUG_FLAG_MONOTONIC) != 0;
+	if (ioplug->flags & SND_PCM_IOPLUG_FLAG_MONOTONIC)
+		ioplug->pcm->tstamp_type = SND_PCM_TSTAMP_TYPE_MONOTONIC;
+	else
+		ioplug->pcm->tstamp_type = SND_PCM_TSTAMP_TYPE_GETTIMEOFDAY;
 	ioplug->pcm->mmap_rw = ioplug->mmap_rw;
 	return 0;
 }

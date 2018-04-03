@@ -26,7 +26,6 @@
  *
  */
   
-#include <endian.h>
 #include <byteswap.h>
 #include <ctype.h>
 #include <string.h>
@@ -406,7 +405,9 @@ static int snd_pcm_file_close(snd_pcm_t *pcm)
 		if (file->wav_header.fmt)
 			fixup_wav_header(pcm);
 		free((void *)file->fname);
-		close(file->fd);
+		if (file->fd >= 0) {
+			close(file->fd);
+		}
 	}
 	if (file->ifname) {
 		free((void *)file->ifname);
@@ -453,7 +454,7 @@ static int snd_pcm_file_drain(snd_pcm_t *pcm)
 static snd_pcm_sframes_t snd_pcm_file_rewindable(snd_pcm_t *pcm)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_sframes_t res = snd_pcm_rewindable(pcm);
+	snd_pcm_sframes_t res = snd_pcm_rewindable(file->gen.slave);
 	snd_pcm_sframes_t n = snd_pcm_bytes_to_frames(pcm, file->wbuf_used_bytes);
 	if (res > n)
 		res = n;
@@ -481,7 +482,7 @@ static snd_pcm_sframes_t snd_pcm_file_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t f
 static snd_pcm_sframes_t snd_pcm_file_forwardable(snd_pcm_t *pcm)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_sframes_t res = snd_pcm_forwardable(pcm);
+	snd_pcm_sframes_t res = snd_pcm_forwardable(file->gen.slave);
 	snd_pcm_sframes_t n = snd_pcm_bytes_to_frames(pcm, file->wbuf_size_bytes - file->wbuf_used_bytes);
 	if (res > n)
 		res = n;
@@ -533,7 +534,6 @@ static snd_pcm_sframes_t snd_pcm_file_writen(snd_pcm_t *pcm, void **bufs, snd_pc
 static snd_pcm_sframes_t snd_pcm_file_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t size)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_channel_area_t areas[pcm->channels];
 	snd_pcm_sframes_t n;
 
 	n = snd_pcm_readi(file->gen.slave, buffer, size);
@@ -545,15 +545,12 @@ static snd_pcm_sframes_t snd_pcm_file_readi(snd_pcm_t *pcm, void *buffer, snd_pc
 			return n;
 		return n * 8 / pcm->frame_bits;
 	}
-	snd_pcm_areas_from_buf(pcm, areas, buffer);
-	snd_pcm_file_add_frames(pcm, areas, 0, n);
 	return n;
 }
 
 static snd_pcm_sframes_t snd_pcm_file_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size)
 {
 	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_channel_area_t areas[pcm->channels];
 	snd_pcm_sframes_t n;
 
 	if (file->ifd >= 0) {
@@ -562,10 +559,6 @@ static snd_pcm_sframes_t snd_pcm_file_readn(snd_pcm_t *pcm, void **bufs, snd_pcm
 	}
 
 	n = snd_pcm_readn(file->gen.slave, bufs, size);
-	if (n > 0) {
-		snd_pcm_areas_from_bufs(pcm, areas, bufs);
-		snd_pcm_file_add_frames(pcm, areas, 0, n);
-	}
 	return n;
 }
 
@@ -592,8 +585,10 @@ static int snd_pcm_file_hw_free(snd_pcm_t *pcm)
 	snd_pcm_file_t *file = pcm->private_data;
 	free(file->wbuf);
 	free(file->wbuf_areas);
+	free(file->final_fname);
 	file->wbuf = NULL;
 	file->wbuf_areas = NULL;
+	file->final_fname = NULL;
 	return snd_pcm_hw_free(file->gen.slave);
 }
 
@@ -602,7 +597,7 @@ static int snd_pcm_file_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 	snd_pcm_file_t *file = pcm->private_data;
 	unsigned int channel;
 	snd_pcm_t *slave = file->gen.slave;
-	int err = _snd_pcm_hw_params(slave, params);
+	int err = _snd_pcm_hw_params_internal(slave, params);
 	if (err < 0)
 		return err;
 	file->buffer_bytes = snd_pcm_frames_to_bytes(slave, slave->buffer_size);
@@ -627,7 +622,7 @@ static int snd_pcm_file_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 		a->first = slave->sample_bits * channel;
 		a->step = slave->frame_bits;
 	}
-	if (file->fd < 0) {
+	if ((file->fd < 0) && (pcm->stream == SND_PCM_STREAM_PLAYBACK)) {
 		err = snd_pcm_file_open_output_file(file);
 		if (err < 0) {
 			SYSERR("failed opening output file %s", file->fname);
@@ -669,6 +664,9 @@ static const snd_pcm_ops_t snd_pcm_file_ops = {
 	.async = snd_pcm_generic_async,
 	.mmap = snd_pcm_generic_mmap,
 	.munmap = snd_pcm_generic_munmap,
+	.query_chmaps = snd_pcm_generic_query_chmaps,
+	.get_chmap = snd_pcm_generic_get_chmap,
+	.set_chmap = snd_pcm_generic_set_chmap,
 };
 
 static const snd_pcm_fast_ops_t snd_pcm_file_fast_ops = {
@@ -699,6 +697,7 @@ static const snd_pcm_fast_ops_t snd_pcm_file_fast_ops = {
 	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
 	.poll_descriptors = snd_pcm_generic_poll_descriptors,
 	.poll_revents = snd_pcm_generic_poll_revents,
+	.htimestamp = snd_pcm_generic_real_htimestamp,
 };
 
 /**
@@ -715,6 +714,7 @@ static const snd_pcm_fast_ops_t snd_pcm_file_fast_ops = {
  * \param perm File permission
  * \param slave Slave PCM handle
  * \param close_slave When set, the slave PCM handle is closed with copy PCM
+ * \param stream the direction of PCM stream
  * \retval zero on success otherwise a negative error code
  * \warning Using of this function might be dangerous in the sense
  *          of compatibility reasons. The prototype might be freely
@@ -723,7 +723,8 @@ static const snd_pcm_fast_ops_t snd_pcm_file_fast_ops = {
 int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 		      const char *fname, int fd, const char *ifname, int ifd,
 		      int trunc,
-		      const char *fmt, int perm, snd_pcm_t *slave, int close_slave)
+		      const char *fmt, int perm, snd_pcm_t *slave, int close_slave,
+		      snd_pcm_stream_t stream)
 {
 	snd_pcm_t *pcm;
 	snd_pcm_file_t *file;
@@ -753,10 +754,11 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	file->trunc = trunc;
 	file->perm = perm;
 
-	if (ifname) {
+	if (ifname && (stream == SND_PCM_STREAM_CAPTURE)) {
 		ifd = open(ifname, O_RDONLY);	/* TODO: mind blocking mode */
 		if (ifd < 0) {
 			SYSERR("open %s for reading failed", ifname);
+			free(file->fname);
 			free(file);
 			return -errno;
 		}
@@ -771,6 +773,7 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	err = snd_pcm_new(&pcm, SND_PCM_TYPE_FILE, name, slave->stream, slave->mode);
 	if (err < 0) {
 		free(file->fname);
+		free(file->ifname);
 		free(file);
 		return err;
 	}
@@ -780,11 +783,12 @@ int snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
 	pcm->mmap_shadow = 1;
+	pcm->tstamp_type = SND_PCM_TSTAMP_TYPE_GETTIMEOFDAY;
 #if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC)
-	pcm->monotonic = clock_gettime(CLOCK_MONOTONIC, &timespec) == 0;
-#else
-	pcm->monotonic = 0;
+	if (clock_gettime(CLOCK_MONOTONIC, &timespec) == 0)
+		pcm->tstamp_type = SND_PCM_TSTAMP_TYPE_MONOTONIC;
 #endif
+	pcm->stream = stream;
 	snd_pcm_link_hw_ptr(pcm, slave);
 	snd_pcm_link_appl_ptr(pcm, slave);
 	*pcmp = pcm;
@@ -945,7 +949,7 @@ int _snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	err = snd_pcm_slave_conf(root, slave, &sconf, 0);
 	if (err < 0)
 		return err;
-	if ((!fname || strlen(fname) == 0) && fd < 0 && !ifname) {
+	if ((!fname || strlen(fname) == 0) && fd < 0) {
 		snd_config_delete(sconf);
 		SNDERR("file is not defined");
 		return -EINVAL;
@@ -955,7 +959,7 @@ int _snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 	if (err < 0)
 		return err;
 	err = snd_pcm_file_open(pcmp, name, fname, fd, ifname, ifd,
-				trunc, format, perm, spcm, 1);
+				trunc, format, perm, spcm, 1, stream);
 	if (err < 0)
 		snd_pcm_close(spcm);
 	return err;

@@ -82,7 +82,6 @@ pcm.rate44100Hz {
 
 */
   
-#include <sys/shm.h>
 #include <limits.h>
 #include "pcm_local.h"
 #include "pcm_plugin.h"
@@ -198,13 +197,13 @@ static int snd_pcm_plugin_reset(snd_pcm_t *pcm)
 
 static snd_pcm_sframes_t snd_pcm_plugin_rewindable(snd_pcm_t *pcm)
 {
-	return snd_pcm_mmap_hw_avail(pcm);
+	return snd_pcm_mmap_hw_rewindable(pcm);
 }
 
-static snd_pcm_sframes_t snd_pcm_plugin_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
+snd_pcm_sframes_t snd_pcm_plugin_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_plugin_t *plugin = pcm->private_data;
-	snd_pcm_sframes_t n = snd_pcm_mmap_hw_avail(pcm);
+	snd_pcm_sframes_t n = snd_pcm_plugin_rewindable(pcm);
 	snd_pcm_sframes_t sframes;
 
 	if ((snd_pcm_uframes_t)n < frames)
@@ -219,9 +218,9 @@ static snd_pcm_sframes_t snd_pcm_plugin_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t
 		snd_atomic_write_end(&plugin->watom);
 		return sframes;
 	}
-	snd_pcm_mmap_appl_backward(pcm, (snd_pcm_uframes_t) frames);
+	snd_pcm_mmap_appl_backward(pcm, (snd_pcm_uframes_t) sframes);
 	snd_atomic_write_end(&plugin->watom);
-	return (snd_pcm_sframes_t) frames;
+	return (snd_pcm_sframes_t) sframes;
 }
 
 static snd_pcm_sframes_t snd_pcm_plugin_forwardable(snd_pcm_t *pcm)
@@ -229,10 +228,10 @@ static snd_pcm_sframes_t snd_pcm_plugin_forwardable(snd_pcm_t *pcm)
 	return snd_pcm_mmap_avail(pcm);
 }
 
-static snd_pcm_sframes_t snd_pcm_plugin_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
+snd_pcm_sframes_t snd_pcm_plugin_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	snd_pcm_plugin_t *plugin = pcm->private_data;
-	snd_pcm_sframes_t n = snd_pcm_mmap_avail(pcm);
+	snd_pcm_sframes_t n = snd_pcm_plugin_forwardable(pcm);
 	snd_pcm_sframes_t sframes;
 
 	if ((snd_pcm_uframes_t)n < frames)
@@ -570,6 +569,7 @@ const snd_pcm_fast_ops_t snd_pcm_plugin_fast_ops = {
 	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
 	.poll_descriptors = snd_pcm_generic_poll_descriptors,
 	.poll_revents = snd_pcm_generic_poll_revents,
+	.may_wait_for_avail_min = snd_pcm_generic_may_wait_for_avail_min,
 };
 
 #endif

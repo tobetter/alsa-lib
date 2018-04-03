@@ -414,12 +414,12 @@ beginning:</P>
 */
 
 
+#include "local.h"
 #include <stdarg.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <locale.h>
-#include "local.h"
 #ifdef HAVE_LIBPTHREAD
 #include <pthread.h>
 #endif
@@ -427,8 +427,8 @@ beginning:</P>
 #ifndef DOC_HIDDEN
 
 #ifdef HAVE_LIBPTHREAD
-static pthread_mutex_t snd_config_update_mutex =
-				PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t snd_config_update_mutex;
+static pthread_once_t snd_config_update_mutex_once = PTHREAD_ONCE_INIT;
 #endif
 
 struct _snd_config {
@@ -472,8 +472,19 @@ typedef struct {
 
 #ifdef HAVE_LIBPTHREAD
 
+static void snd_config_init_mutex(void)
+{
+	pthread_mutexattr_t attr;
+
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&snd_config_update_mutex, &attr);
+	pthread_mutexattr_destroy(&attr);
+}
+
 static inline void snd_config_lock(void)
 {
+	pthread_once(&snd_config_update_mutex_once, snd_config_init_mutex);
 	pthread_mutex_lock(&snd_config_update_mutex);
 }
 
@@ -496,7 +507,7 @@ static int safe_strtoll(const char *str, long long *val)
 	if (!*str)
 		return -EINVAL;
 	errno = 0;
-	if (sscanf(str, "%Li%n", &v, &endidx) < 1)
+	if (sscanf(str, "%lli%n", &v, &endidx) < 1)
 		return -EINVAL;
 	if (str[endidx])
 		return -EINVAL;
@@ -1378,7 +1389,7 @@ static int _snd_config_save_node_value(snd_config_t *n, snd_output_t *out,
 		snd_output_printf(out, "%ld", n->u.integer);
 		break;
 	case SND_CONFIG_TYPE_INTEGER64:
-		snd_output_printf(out, "%Ld", n->u.integer64);
+		snd_output_printf(out, "%lld", n->u.integer64);
 		break;
 	case SND_CONFIG_TYPE_REAL:
 		snd_output_printf(out, "%-16g", n->u.real);
@@ -2217,6 +2228,38 @@ int snd_config_imake_string(snd_config_t **config, const char *id, const char *v
 	return 0;
 }
 
+int snd_config_imake_safe_string(snd_config_t **config, const char *id, const char *value)
+{
+	int err;
+	snd_config_t *tmp;
+	char *c;
+
+	err = snd_config_make(&tmp, id, SND_CONFIG_TYPE_STRING);
+	if (err < 0)
+		return err;
+	if (value) {
+		tmp->u.string = strdup(value);
+		if (!tmp->u.string) {
+			snd_config_delete(tmp);
+			return -ENOMEM;
+		}
+
+		for (c = tmp->u.string; *c; c++) {
+			if (*c == ' ' || *c == '-' || *c == '_' ||
+				(*c >= '0' && *c <= '9') ||
+				(*c >= 'a' && *c <= 'z') ||
+				(*c >= 'A' && *c <= 'Z'))
+					continue;
+			*c = '_';
+		}
+	} else {
+		tmp->u.string = NULL;
+	}
+	*config = tmp;
+	return 0;
+}
+
+
 /**
  * \brief Creates a pointer configuration node with the given initial value.
  * \param[out] config The function puts the handle to the new node at
@@ -2630,7 +2673,7 @@ int snd_config_get_ascii(const snd_config_t *config, char **ascii)
 		{
 			char res[32];
 			int err;
-			err = snprintf(res, sizeof(res), "%Li", config->u.integer64);
+			err = snprintf(res, sizeof(res), "%lli", config->u.integer64);
 			if (err < 0 || err == sizeof(res)) {
 				assert(0);
 				return -ENOMEM;
@@ -3505,7 +3548,14 @@ int snd_config_hook_load(snd_config_t *root, snd_config_t *config, snd_config_t 
 			struct dirent **namelist;
 			int n;
 
-			n = scandir(fi[idx].name, &namelist, config_filename_filter, versionsort);
+#ifndef DOC_HIDDEN
+#ifdef _GNU_SOURCE
+#define SORTFUNC	versionsort
+#else
+#define SORTFUNC	alphasort
+#endif
+#endif
+			n = scandir(fi[idx].name, &namelist, config_filename_filter, SORTFUNC);
 			if (n > 0) {
 				int j;
 				err = 0;
@@ -3525,7 +3575,7 @@ int snd_config_hook_load(snd_config_t *root, snd_config_t *config, snd_config_t 
 				if (err < 0)
 					goto _err;
 			}
-		} else if (config_file_open(root, fi[idx].name) < 0)
+		} else if ((err = config_file_open(root, fi[idx].name)) < 0)
 			goto _err;
 	}
 	*dst = NULL;
@@ -4180,6 +4230,7 @@ static int _snd_config_evaluate(snd_config_t *src,
 			snd_config_iterator_t i, next;
 			if (snd_config_get_type(func_conf) != SND_CONFIG_TYPE_COMPOUND) {
 				SNDERR("Invalid type for func %s definition", str);
+				err = -EINVAL;
 				goto _err;
 			}
 			snd_config_for_each(i, next, func_conf) {
@@ -4825,3 +4876,39 @@ static void _snd_config_end(void)
 	files_info_count = 0;
 }
 #endif
+
+size_t page_size(void)
+{
+	long s = sysconf(_SC_PAGE_SIZE);
+	assert(s > 0);
+	return s;
+}
+
+size_t page_align(size_t size)
+{
+	size_t r;
+	long psz = page_size();
+	r = size % psz;
+	if (r)
+		return size + psz - r;
+	return size;
+}
+
+size_t page_ptr(size_t object_offset, size_t object_size, size_t *offset, size_t *mmap_offset)
+{
+	size_t r;
+	long psz = page_size();
+	assert(offset);
+	assert(mmap_offset);
+	*mmap_offset = object_offset;
+	object_offset %= psz;
+	*mmap_offset -= object_offset;
+	object_size += object_offset;
+	r = object_size % psz;
+	if (r)
+		r = object_size + psz - r;
+	else
+		r = object_size;
+	*offset = object_offset;
+	return r;
+}
