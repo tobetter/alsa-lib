@@ -60,6 +60,8 @@ IMA compatibility project proceedings, Vol 2, Issue 2, May 1992.
 #include "pcm_local.h"
 #include "pcm_plugin.h"
 
+#include "plugin_ops.h"
+
 #ifndef PIC
 /* entry for static linking */
 const char *_snd_module_pcm_adpcm = "";
@@ -447,10 +449,8 @@ static int snd_pcm_adpcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 static int snd_pcm_adpcm_hw_free(snd_pcm_t *pcm)
 {
 	snd_pcm_adpcm_t *adpcm = pcm->private_data;
-	if (adpcm->states) {
-		free(adpcm->states);
-		adpcm->states = 0;
-	}
+	free(adpcm->states);
+	adpcm->states = NULL;
 	return snd_pcm_hw_free(adpcm->plug.gen.slave);
 }
 
@@ -664,7 +664,7 @@ int _snd_pcm_adpcm_open(snd_pcm_t **pcmp, const char *name,
 		SNDERR("invalid slave format");
 		return -EINVAL;
 	}
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;

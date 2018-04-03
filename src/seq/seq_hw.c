@@ -30,8 +30,8 @@ const char *_snd_module_seq_hw = "";
 #endif
 
 #ifndef DOC_HIDDEN
-#define SNDRV_FILE_SEQ		"/dev/snd/seq"
-#define SNDRV_FILE_ALOADSEQ	"/dev/aloadSEQ"
+#define SNDRV_FILE_SEQ		ALSA_DEVICE_DIRECTORY "seq"
+#define SNDRV_FILE_ALOADSEQ	ALOAD_DEVICE_DIRECTORY "aloadSEQ"
 #define SNDRV_SEQ_VERSION_MAX	SNDRV_PROTOCOL_VERSION(1, 0, 1)
 
 typedef struct {
@@ -42,12 +42,14 @@ typedef struct {
 static int snd_seq_hw_close(snd_seq_t *seq)
 {
 	snd_seq_hw_t *hw = seq->private_data;
+	int err = 0;
+
 	if (close(hw->fd)) {
+		err = -errno;
 		SYSERR("close failed\n");
-		return -errno;
 	}
 	free(hw);
-	return 0;
+	return err;
 }
 
 static int snd_seq_hw_nonblock(snd_seq_t *seq, int nonblock)
@@ -501,7 +503,7 @@ int snd_seq_hw_open(snd_seq_t **handle, const char *name, int streams, int mode)
 	if (streams & SND_SEQ_OPEN_INPUT) {
 		seq->ibuf = (snd_seq_event_t *) calloc(sizeof(snd_seq_event_t), seq->ibufsize = SND_SEQ_IBUF_SIZE);
 		if (!seq->ibuf) {
-			free(seq->ibuf);
+			free(seq->obuf);
 			free(hw);
 			free(seq);
 			close(fd);

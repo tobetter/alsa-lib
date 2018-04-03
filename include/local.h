@@ -236,7 +236,11 @@ static inline int snd_open_device(const char *filename, int fmode)
 	int fd = open(filename, fmode);
 	if (fd >= 0)
 		return fd;
-	return rsm_open_device(filename, fmode);
+	if (errno == EAGAIN || errno == EBUSY)
+		return fd;
+	if (! access(filename, F_OK))
+		return rsm_open_device(filename, fmode);
+	return -1;
 }
 #else
 #define snd_open_device(filename, fmode) open(filename, fmode);
@@ -246,5 +250,10 @@ static inline int snd_open_device(const char *filename, int fmode)
 void *snd_dlobj_cache_lookup(const char *name);
 int snd_dlobj_cache_add(const char *name, void *dlobj, void *open_func);
 void snd_dlobj_cache_cleanup(void);
+
+/* for recursive checks */
+void snd_config_set_hop(snd_config_t *conf, int hop);
+int snd_config_check_hop(snd_config_t *conf);
+#define SND_CONF_MAX_HOPS	64
 
 #endif

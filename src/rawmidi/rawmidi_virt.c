@@ -53,6 +53,10 @@ typedef struct {
 	snd_seq_event_t out_event;
 	int pending;
 } snd_rawmidi_virtual_t;
+
+int _snd_seq_open_lconf(snd_seq_t **seqp, const char *name, 
+			int streams, int mode, snd_config_t *lconf,
+			snd_config_t *parent_conf);
 #endif
 
 static int snd_rawmidi_virtual_close(snd_rawmidi_t *rmidi)
@@ -381,11 +385,10 @@ int snd_rawmidi_virtual_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 		snd_seq_close(seq_handle);
 	if (virt->midi_event)
 		snd_midi_event_free(virt->midi_event);
-	if (virt)
-		free(virt);
-	if (inputp && *inputp)
+	free(virt);
+	if (inputp)
 		free(*inputp);
-	if (outputp && *outputp)
+	if (outputp)
 		free(*outputp);
 	return err;
 }
@@ -435,11 +438,12 @@ int _snd_rawmidi_virtual_open(snd_rawmidi_t **inputp, snd_rawmidi_t **outputp,
 
 	seq_mode = 0;
 	if (mode & SND_RAWMIDI_NONBLOCK)
-		seq_mode |= O_NONBLOCK;
+		seq_mode |= SND_SEQ_NONBLOCK;
 
 	if (! slave_str)
 		slave_str = "default";
-	err = snd_seq_open_lconf(&seq_handle, slave_str, streams, seq_mode, root);
+	err = _snd_seq_open_lconf(&seq_handle, slave_str, streams, seq_mode,
+				  root, conf);
 	if (err < 0)
 		return err;
 

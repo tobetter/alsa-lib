@@ -569,7 +569,7 @@ static void snd_pcm_shm_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_output_printf(out, "Shm PCM\n");
 	if (pcm->setup) {
-		snd_output_printf(out, "\nIts setup is:\n");
+		snd_output_printf(out, "Its setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
 	}
 }
@@ -773,61 +773,9 @@ int snd_pcm_shm_open(snd_pcm_t **pcmp, const char *name,
 	close(sock);
 	if (ctrl)
 		shmdt(ctrl);
-	if (shm)
-		free(shm);
+	free(shm);
 	return result;
 }
-
-#ifndef DOC_HIDDEN
-int snd_is_local(struct hostent *hent)
-{
-	int s;
-	int err;
-	struct ifconf conf;
-	size_t numreqs = 10;
-	size_t i;
-	struct in_addr *haddr = (struct in_addr*) hent->h_addr_list[0];
-	
-	s = socket(PF_INET, SOCK_STREAM, 0);
-	if (s < 0) {
-		SYSERR("socket failed");
-		return -errno;
-	}
-	
-	conf.ifc_len = numreqs * sizeof(struct ifreq);
-	conf.ifc_buf = malloc((unsigned int) conf.ifc_len);
-	if (! conf.ifc_buf)
-		return -ENOMEM;
-	while (1) {
-		err = ioctl(s, SIOCGIFCONF, &conf);
-		if (err < 0) {
-			SYSERR("SIOCGIFCONF failed");
-			return -errno;
-		}
-		if ((size_t)conf.ifc_len < numreqs * sizeof(struct ifreq))
-			break;
-		numreqs *= 2;
-		conf.ifc_len = numreqs * sizeof(struct ifreq);
-		conf.ifc_buf = realloc(conf.ifc_buf, (unsigned int) conf.ifc_len);
-		if (! conf.ifc_buf)
-			return -ENOMEM;
-	}
-	numreqs = conf.ifc_len / sizeof(struct ifreq);
-	for (i = 0; i < numreqs; ++i) {
-		struct ifreq *req = &conf.ifc_req[i];
-		struct sockaddr_in *s_in = (struct sockaddr_in *)&req->ifr_addr;
-		s_in->sin_family = AF_INET;
-		err = ioctl(s, SIOCGIFADDR, req);
-		if (err < 0)
-			continue;
-		if (haddr->s_addr == s_in->sin_addr.s_addr)
-			break;
-	}
-	close(s);
-	free(conf.ifc_buf);
-	return i < numreqs;
-}
-#endif
 
 /*! \page pcm_plugins
 

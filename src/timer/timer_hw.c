@@ -33,7 +33,7 @@
 const char *_snd_module_timer_hw = "";
 #endif
 
-#define SNDRV_FILE_TIMER		"/dev/snd/timer"
+#define SNDRV_FILE_TIMER		ALSA_DEVICE_DIRECTORY "timer"
 #define SNDRV_TIMER_VERSION_MAX	SNDRV_PROTOCOL_VERSION(2, 0, 5)
 
 #define SNDRV_TIMER_IOCTL_STATUS_OLD	_IOW('T', 0x14, struct sndrv_timer_status)
@@ -266,7 +266,7 @@ int snd_timer_hw_open(snd_timer_t **handle, const char *name, int dev_class, int
 			ret = -errno;
 			close(fd);
 		      __no_tread:
-			SNDERR("extended read is not supported (SNDRV_TIMER_IOCTL_TREAD)");
+			SNDMSG("extended read is not supported (SNDRV_TIMER_IOCTL_TREAD)");
 			return ret;
 		}
 	}

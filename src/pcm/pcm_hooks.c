@@ -55,13 +55,13 @@ static int snd_pcm_hooks_close(snd_pcm_t *pcm)
 	snd_pcm_hooks_t *h = pcm->private_data;
 	struct list_head *pos, *next;
 	unsigned int k;
-	int err;
+	int res = 0, err;
 
 	list_for_each_safe(pos, next, &h->hooks[SND_PCM_HOOK_TYPE_CLOSE]) {
 		snd_pcm_hook_t *hook = list_entry(pos, snd_pcm_hook_t, list);
 		err = hook->func(hook);
 		if (err < 0)
-			return err;
+			res = err;
 	}
 	for (k = 0; k <= SND_PCM_HOOK_TYPE_LAST; ++k) {
 		struct list_head *hooks = &h->hooks[k];
@@ -72,7 +72,10 @@ static int snd_pcm_hooks_close(snd_pcm_t *pcm)
 			snd_pcm_hook_remove(hook);
 		}
 	}
-	return snd_pcm_generic_close(pcm);
+	err = snd_pcm_generic_close(pcm);
+	if (err < 0)
+		res = err;
+	return res;
 }
 
 static int snd_pcm_hooks_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
@@ -460,7 +463,7 @@ int _snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name,
 	err = snd_pcm_slave_conf(root, slave, &sconf, 0);
 	if (err < 0)
 		return err;
-	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode);
+	err = snd_pcm_open_slave(&spcm, root, sconf, stream, mode, conf);
 	snd_config_delete(sconf);
 	if (err < 0)
 		return err;
