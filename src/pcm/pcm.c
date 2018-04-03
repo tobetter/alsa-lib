@@ -726,8 +726,11 @@ int snd_pcm_nonblock(snd_pcm_t *pcm, int nonblock)
 		return err;
 	if (nonblock)
 		pcm->mode |= SND_PCM_NONBLOCK;
-	else
+	else {
+		if (pcm->hw_flags & SND_PCM_HW_PARAMS_NO_PERIOD_WAKEUP)
+			return -EINVAL;
 		pcm->mode &= ~SND_PCM_NONBLOCK;
+	}
 	return 0;
 }
 
@@ -1630,6 +1633,7 @@ static const char *const snd_pcm_type_names[] = {
 	PCMTYPE(SOFTVOL),
         PCMTYPE(IOPLUG),
         PCMTYPE(EXTPLUG),
+	PCMTYPE(MMAP_EMUL),
 };
 
 static const char *const snd_pcm_subformat_names[] = {
@@ -2058,7 +2062,7 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 	const char *str;
 	char *buf = NULL, *buf1 = NULL;
 	int err;
-	snd_config_t *conf, *type_conf = NULL;
+	snd_config_t *conf, *type_conf = NULL, *tmp;
 	snd_config_iterator_t i, next;
 	const char *id;
 	const char *lib = NULL, *open_name = NULL;
@@ -2068,7 +2072,6 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 #ifndef PIC
 	extern void *snd_pcm_open_symbols(void);
 #endif
-	void *h = NULL;
 	if (snd_config_get_type(pcm_conf) != SND_CONFIG_TYPE_COMPOUND) {
 		char *val;
 		id = NULL;
@@ -2157,40 +2160,38 @@ static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
 #ifndef PIC
 	snd_pcm_open_symbols();	/* this call is for static linking only */
 #endif
-	open_func = snd_dlobj_cache_lookup(open_name);
+	open_func = snd_dlobj_cache_get(lib, open_name,
+			SND_DLSYM_VERSION(SND_PCM_DLSYM_VERSION), 1);
 	if (open_func) {
-		err = 0;
-		goto _err;
-	}
-	h = snd_dlopen(lib, RTLD_NOW);
-	if (h)
-		open_func = snd_dlsym(h, open_name, SND_DLSYM_VERSION(SND_PCM_DLSYM_VERSION));
-	err = 0;
-	if (!h) {
-		SNDERR("Cannot open shared library %s",
-		       lib ? lib : "[builtin]");
-		err = -ENOENT;
-	} else if (!open_func) {
-		SNDERR("symbol %s is not defined inside %s", open_name,
-		       lib ? lib : "[builtin]");
-		snd_dlclose(h);
-		err = -ENXIO;
-	}
-       _err:
-	if (err >= 0) {
 		err = open_func(pcmp, name, pcm_root, pcm_conf, stream, mode);
 		if (err >= 0) {
-			if (h /*&& (mode & SND_PCM_KEEP_ALIVE)*/) {
-				snd_dlobj_cache_add(open_name, h, open_func);
-				h = NULL;
-			}
-			(*pcmp)->dl_handle = h;
+			(*pcmp)->open_func = open_func;
 			err = 0;
 		} else {
-			if (h)
-				snd_dlclose(h);
+			snd_dlobj_cache_put(open_func);
 		}
+	} else {
+		err = -ENXIO;
 	}
+	if (err >= 0) {
+		err = snd_config_search(pcm_root, "defaults.pcm.compat", &tmp);
+		if (err >= 0) {
+			long i;
+			if (snd_config_get_integer(tmp, &i) >= 0) {
+				if (i > 0)
+					(*pcmp)->compat = 1;
+			}
+		} else {
+			char *str = getenv("LIBASOUND_COMPAT");
+			if (str && *str)
+				(*pcmp)->compat = 1;
+		}
+		err = snd_config_search(pcm_root, "defaults.pcm.minperiodtime", &tmp);
+		if (err >= 0)
+			snd_config_get_integer(tmp, &(*pcmp)->minperiodtime);
+		err = 0;
+	}
+       _err:
 	if (type_conf)
 		snd_config_delete(type_conf);
 	free(buf);
@@ -2286,8 +2287,7 @@ int snd_pcm_free(snd_pcm_t *pcm)
 	free(pcm->name);
 	free(pcm->hw.link_dst);
 	free(pcm->appl.link_dst);
-	if (pcm->dl_handle)
-		snd_dlclose(pcm->dl_handle);
+	snd_dlobj_cache_put(pcm->open_func);
 	free(pcm);
 	return 0;
 }
@@ -2471,18 +2471,22 @@ int snd_pcm_avail_delay(snd_pcm_t *pcm,
 			snd_pcm_sframes_t *delayp)
 {
 	snd_pcm_sframes_t sf;
+	int err;
 
 	assert(pcm && availp && delayp);
 	if (CHECK_SANITY(! pcm->setup)) {
 		SNDMSG("PCM not set up");
 		return -EIO;
 	}
-	sf = pcm->fast_ops->delay(pcm->fast_op_arg, delayp);
-	if (sf < 0)
-		return (int)sf;
+	err = pcm->fast_ops->hwsync(pcm->fast_op_arg);
+	if (err < 0)
+		return err;
 	sf = pcm->fast_ops->avail_update(pcm->fast_op_arg);
 	if (sf < 0)
 		return (int)sf;
+	err = pcm->fast_ops->delay(pcm->fast_op_arg, delayp);
+	if (err < 0)
+		return err;
 	*availp = sf;
 	return 0;
 }
@@ -3082,6 +3086,23 @@ int snd_pcm_hw_params_can_sync_start(const snd_pcm_hw_params_t *params)
 		return 0; /* FIXME: should be a negative error? */
 	}
 	return !!(params->info & SNDRV_PCM_INFO_SYNC_START);
+}
+
+/**
+ * \brief Check if hardware can disable period wakeups
+ * \param params Configuration space
+ * \return Boolean value
+ * \retval 0 Hardware cannot disable period wakeups
+ * \retval 1 Hardware can disable period wakeups
+ */
+int snd_pcm_hw_params_can_disable_period_wakeup(const snd_pcm_hw_params_t *params)
+{
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
+	return !!(params->info & SNDRV_PCM_INFO_NO_PERIOD_WAKEUP);
 }
 
 /**
@@ -4200,6 +4221,56 @@ int snd_pcm_hw_params_get_export_buffer(snd_pcm_t *pcm, snd_pcm_hw_params_t *par
 {
 	assert(pcm && params && val);
 	*val = params->flags & SND_PCM_HW_PARAMS_EXPORT_BUFFER ? 1 : 0;
+	return 0;
+}
+
+/**
+ * \brief Restrict a configuration space to settings without period wakeups
+ * \param pcm PCM handle
+ * \param params Configuration space
+ * \param val 0 = disable, 1 = enable (default) period wakeup
+ * \return Zero on success, otherwise a negative error code.
+ *
+ * This function must be called only on devices where non-blocking mode is
+ * enabled.
+ *
+ * To check whether the hardware does support disabling period wakeups, call
+ * #snd_pcm_hw_params_can_disable_period_wakeup(). If the hardware does not
+ * support this mode, standard period wakeups will be generated.
+ *
+ * Even with disabled period wakeups, the period size/time/count parameters
+ * are valid; it is suggested to use #snd_pcm_hw_params_set_period_size_last().
+ *
+ * When period wakeups are disabled, the application must not use any functions
+ * that could block on this device. The use of poll should be limited to error
+ * cases. The application needs to use an external event or a timer to
+ * check the state of the ring buffer and refill it apropriately.
+ */
+int snd_pcm_hw_params_set_period_wakeup(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val)
+{
+	assert(pcm && params);
+
+	if (!val) {
+		if (!(pcm->mode & SND_PCM_NONBLOCK))
+			return -EINVAL;
+		params->flags |= SND_PCM_HW_PARAMS_NO_PERIOD_WAKEUP;
+	} else
+		params->flags &= ~SND_PCM_HW_PARAMS_NO_PERIOD_WAKEUP;
+
+	return snd_pcm_hw_refine(pcm, params);
+}
+
+/**
+ * \brief Extract period wakeup flag from a configuration space
+ * \param pcm PCM handle
+ * \param params Configuration space
+ * \param val 0 = disabled, 1 = enabled period wakeups
+ * \return Zero on success, otherwise a negative error code.
+ */
+int snd_pcm_hw_params_get_period_wakeup(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val)
+{
+	assert(pcm && params && val);
+	*val = params->flags & SND_PCM_HW_PARAMS_NO_PERIOD_WAKEUP ? 0 : 1;
 	return 0;
 }
 
@@ -7242,7 +7313,7 @@ int snd_pcm_recover(snd_pcm_t *pcm, int err, int silent)
                 else
                         s = "overrun";
                 if (!silent)
-                        SNDERR("%s occured", s);
+                        SNDERR("%s occurred", s);
                 err = snd_pcm_prepare(pcm);
                 if (err < 0) {
                         SNDERR("cannot recovery from %s, prepare failed: %s", s, snd_strerror(err));
