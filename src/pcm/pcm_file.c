@@ -102,6 +102,7 @@ static void snd_pcm_file_add_frames(snd_pcm_t *pcm,
 				   areas, offset,
 				   pcm->channels, n, pcm->format);
 		frames -= n;
+		offset += n;
 		file->appl_ptr += n;
 		if (file->appl_ptr == file->wbuf_size)
 			file->appl_ptr = 0;
@@ -168,6 +169,7 @@ static snd_pcm_sframes_t snd_pcm_file_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t f
 		frames = snd_pcm_bytes_to_frames(pcm, file->wbuf_used_bytes);
 	err = snd_pcm_rewind(file->gen.slave, frames);
 	if (err > 0) {
+		file->appl_ptr = (file->appl_ptr - err + file->wbuf_size) % file->wbuf_size;
 		n = snd_pcm_frames_to_bytes(pcm, err);
 		file->wbuf_used_bytes -= n;
 	}
@@ -185,6 +187,7 @@ static snd_pcm_sframes_t snd_pcm_file_forward(snd_pcm_t *pcm, snd_pcm_uframes_t 
 		frames = snd_pcm_bytes_to_frames(pcm, file->wbuf_size_bytes - file->wbuf_used_bytes);
 	err = INTERNAL(snd_pcm_forward)(file->gen.slave, frames);
 	if (err > 0) {
+		file->appl_ptr = (file->appl_ptr + err) % file->wbuf_size;
 		snd_pcm_uframes_t n = snd_pcm_frames_to_bytes(pcm, err);
 		file->wbuf_used_bytes += n;
 	}
@@ -281,6 +284,7 @@ static int snd_pcm_file_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 	file->buffer_bytes = snd_pcm_frames_to_bytes(slave, slave->buffer_size);
 	file->wbuf_size = slave->buffer_size * 2;
 	file->wbuf_size_bytes = snd_pcm_frames_to_bytes(slave, file->wbuf_size);
+	file->wbuf_used_bytes = 0;
 	assert(!file->wbuf);
 	file->wbuf = malloc(file->wbuf_size_bytes);
 	if (file->wbuf == NULL) {
@@ -299,26 +303,6 @@ static int snd_pcm_file_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 		a->first = slave->sample_bits * channel;
 		a->step = slave->frame_bits;
 	}
-	return 0;
-}
-
-static int snd_pcm_file_mmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
-{
-	snd_pcm_file_t *file = pcm->private_data;
-	snd_pcm_t *slave = file->gen.slave;
-	pcm->running_areas = slave->running_areas;
-	pcm->stopped_areas = slave->stopped_areas;
-	pcm->mmap_channels = slave->mmap_channels;
-	pcm->mmap_shadow = 1;
-	return 0;
-}
-
-static int snd_pcm_file_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
-{
-	pcm->mmap_channels = NULL;
-	pcm->running_areas = NULL;
-	pcm->stopped_areas = NULL;
-	pcm->mmap_shadow = 0;
 	return 0;
 }
 
@@ -348,8 +332,8 @@ static snd_pcm_ops_t snd_pcm_file_ops = {
 	.dump = snd_pcm_file_dump,
 	.nonblock = snd_pcm_generic_nonblock,
 	.async = snd_pcm_generic_async,
-	.mmap = snd_pcm_file_mmap,
-	.munmap = snd_pcm_file_munmap,
+	.mmap = snd_pcm_generic_mmap,
+	.munmap = snd_pcm_generic_munmap,
 };
 
 static snd_pcm_fast_ops_t snd_pcm_file_fast_ops = {
@@ -550,9 +534,11 @@ int _snd_pcm_file_open(snd_pcm_t **pcmp, const char *name,
 			}
 			if (isdigit(*str) == 0) {
 				SNDERR("The field perm must be a valid file permission");
+				free(str);
 				return -EINVAL;
 			}
 			perm = strtol(str, &endp, 8);
+			free(str);
 			continue;
 		}
 		SNDERR("Unknown field %s", id);

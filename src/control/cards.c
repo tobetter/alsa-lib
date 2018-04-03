@@ -61,9 +61,9 @@ int snd_card_load(int card)
 #endif
 	if (open_dev >= 0) {
 		close (open_dev);
-		return 0;
+		return 1;
 	}
-	return open_dev ? 1 : 0;
+	return 0;
 }
 
 /**
@@ -85,7 +85,7 @@ int snd_card_next(int *rcard)
 	card = *rcard;
 	card = card < 0 ? 0 : card + 1;
 	for (; card < 32; card++) {
-		if (!snd_card_load(card)) {
+		if (snd_card_load(card)) {
 			*rcard = card;
 			return 0;
 		}
@@ -112,15 +112,16 @@ int snd_card_get_index(const char *string)
 		return -EINVAL;
 	if ((isdigit(*string) && *(string + 1) == 0) ||
 	    (isdigit(*string) && isdigit(*(string + 1)) && *(string + 2) == 0)) {
-		sscanf(string, "%i", &card);
+		if (sscanf(string, "%i", &card) != 1)
+			return -EINVAL;
 		if (card < 0 || card > 31)
 			return -EINVAL;
-	        if (snd_card_load(card) >= 0)
+		if (snd_card_load(card))
 			return card;
-		return -EINVAL;
+		return -ENODEV;
 	}
 	for (card = 0; card < 32; card++) {
-		if (snd_card_load(card) < 0)
+		if (! snd_card_load(card))
 			continue;
 		if (snd_ctl_hw_open(&handle, NULL, card, 0) < 0)
 			continue;
@@ -129,7 +130,7 @@ int snd_card_get_index(const char *string)
 			continue;
 		}
 		snd_ctl_close(handle);
-		if (!strcmp(info.id, string))
+		if (!strcmp((const char *)info.id, string))
 			return card;
 	}
 	return -ENODEV;
@@ -156,7 +157,7 @@ int snd_card_get_name(int card, char **name)
 		return err;
 	}
 	snd_ctl_close(handle);
-	*name = strdup(info.name);
+	*name = strdup((const char *)info.name);
 	if (*name == NULL)
 		return -ENOMEM;
 	return 0;
@@ -183,7 +184,7 @@ int snd_card_get_longname(int card, char **name)
 		return err;
 	}
 	snd_ctl_close(handle);
-	*name = strdup(info.longname);
+	*name = strdup((const char *)info.longname);
 	if (*name == NULL)
 		return -ENOMEM;
 	return 0;

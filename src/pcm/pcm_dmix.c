@@ -34,6 +34,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <grp.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -76,7 +77,7 @@ retryshm:
 	dmix->u.dmix.shmid_sum = shmget(dmix->ipc_key + 1, size,
 					IPC_CREAT | dmix->ipc_perm);
 	err = -errno;
-	if (dmix->u.dmix.shmid_sum < 0){
+	if (dmix->u.dmix.shmid_sum < 0) {
 		if (errno == EINVAL)
 		if ((tmpid = shmget(dmix->ipc_key + 1, 0, dmix->ipc_perm)) != -1)
 		if (!shmctl(tmpid, IPC_STAT, &buf))
@@ -86,10 +87,20 @@ retryshm:
 		    goto retryshm;
 		return err;
 	}
+	if (shmctl(dmix->u.dmix.shmid_sum, IPC_STAT, &buf) < 0) {
+		err = -errno;
+		shm_sum_discard(dmix);
+		return err;
+	}
+	if (dmix->ipc_gid >= 0) {
+		buf.shm_perm.gid = dmix->ipc_gid;
+		shmctl(dmix->u.dmix.shmid_sum, IPC_SET, &buf); 
+	}
 	dmix->u.dmix.sum_buffer = shmat(dmix->u.dmix.shmid_sum, 0, 0);
 	if (dmix->u.dmix.sum_buffer == (void *) -1) {
+		err = -errno;
 		shm_sum_discard(dmix);
-		return -errno;
+		return err;
 	}
 	mlock(dmix->u.dmix.sum_buffer, size);
 	return 0;
@@ -148,7 +159,8 @@ static void mix_areas(snd_pcm_direct_t *dmix,
 	unsigned int chn, dchn, channels;
 	
 	channels = dmix->channels;
-	if (dmix->shmptr->s.format == SND_PCM_FORMAT_S16) {
+	if (dmix->shmptr->s.format == SND_PCM_FORMAT_S16_LE ||
+	    dmix->shmptr->s.format == SND_PCM_FORMAT_S16_BE) {
 		signed short *src;
 		volatile signed short *dst;
 		if (dmix->interleaved) {
@@ -227,49 +239,60 @@ static void mix_areas(snd_pcm_direct_t *dmix,
 static void snd_pcm_dmix_sync_area(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_uframes_t appl_ptr, slave_appl_ptr, slave_bsize;
-	snd_pcm_uframes_t size, slave_hw_ptr;
+	snd_pcm_uframes_t slave_hw_ptr, slave_appl_ptr, slave_size;
+	snd_pcm_uframes_t appl_ptr, size;
 	const snd_pcm_channel_area_t *src_areas, *dst_areas;
 	
 	/* calculate the size to transfer */
+	/* check the available size in the local buffer
+	 * last_appl_ptr keeps the last updated position
+	 */
 	size = dmix->appl_ptr - dmix->last_appl_ptr;
 	if (! size)
 		return;
-	slave_bsize = dmix->shmptr->s.buffer_size;
+	if (size >= pcm->boundary / 2)
+		size = pcm->boundary - size;
+
+	/* check the available size in the slave PCM buffer */
 	slave_hw_ptr = dmix->slave_hw_ptr;
 	/* don't write on the last active period - this area may be cleared
 	 * by the driver during mix operation...
 	 */
-	slave_hw_ptr -= slave_hw_ptr % dmix->shmptr->s.period_size;
-	slave_hw_ptr += slave_bsize;
-	if (dmix->slave_hw_ptr > dmix->slave_appl_ptr)
-		slave_hw_ptr -= dmix->shmptr->s.boundary;
-	if (dmix->slave_appl_ptr + size >= slave_hw_ptr)
-		size = slave_hw_ptr - dmix->slave_appl_ptr;
+	slave_hw_ptr -= slave_hw_ptr % dmix->slave_period_size;
+	slave_hw_ptr += dmix->slave_buffer_size;
+	if (slave_hw_ptr >= dmix->slave_boundary)
+		slave_hw_ptr -= dmix->slave_boundary;
+	if (slave_hw_ptr < dmix->slave_appl_ptr)
+		slave_size = slave_hw_ptr + (dmix->slave_boundary - dmix->slave_appl_ptr);
+	else
+		slave_size = slave_hw_ptr - dmix->slave_appl_ptr;
+	if (slave_size < size)
+		size = slave_size;
 	if (! size)
 		return;
+
 	/* add sample areas here */
 	src_areas = snd_pcm_mmap_areas(pcm);
 	dst_areas = snd_pcm_mmap_areas(dmix->spcm);
 	appl_ptr = dmix->last_appl_ptr % pcm->buffer_size;
 	dmix->last_appl_ptr += size;
 	dmix->last_appl_ptr %= pcm->boundary;
-	slave_appl_ptr = dmix->slave_appl_ptr % slave_bsize;
+	slave_appl_ptr = dmix->slave_appl_ptr % dmix->slave_buffer_size;
 	dmix->slave_appl_ptr += size;
-	dmix->slave_appl_ptr %= dmix->shmptr->s.boundary;
+	dmix->slave_appl_ptr %= dmix->slave_boundary;
 	dmix_down_sem(dmix);
 	for (;;) {
 		snd_pcm_uframes_t transfer = size;
 		if (appl_ptr + transfer > pcm->buffer_size)
 			transfer = pcm->buffer_size - appl_ptr;
-		if (slave_appl_ptr + transfer > slave_bsize)
-			transfer = slave_bsize - slave_appl_ptr;
+		if (slave_appl_ptr + transfer > dmix->slave_buffer_size)
+			transfer = dmix->slave_buffer_size - slave_appl_ptr;
 		mix_areas(dmix, src_areas, dst_areas, appl_ptr, slave_appl_ptr, transfer);
 		size -= transfer;
 		if (! size)
 			break;
 		slave_appl_ptr += transfer;
-		slave_appl_ptr %= slave_bsize;
+		slave_appl_ptr %= dmix->slave_buffer_size;
 		appl_ptr += transfer;
 		appl_ptr %= pcm->buffer_size;
 	}
@@ -304,7 +327,7 @@ static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
 		/* not really started yet - don't update hw_ptr */
 		return 0;
 	if (diff < 0) {
-		slave_hw_ptr += dmix->shmptr->s.boundary;
+		slave_hw_ptr += dmix->slave_boundary;
 		diff = slave_hw_ptr - old_slave_hw_ptr;
 	}
 	dmix->hw_ptr += diff;
@@ -428,7 +451,6 @@ static int snd_pcm_dmix_prepare(snd_pcm_t *pcm)
 	snd_pcm_direct_t *dmix = pcm->private_data;
 
 	snd_pcm_direct_check_interleave(dmix, pcm);
-	// assert(pcm->boundary == dmix->shmptr->s.boundary);	/* for sure */
 	dmix->state = SND_PCM_STATE_PREPARED;
 	dmix->appl_ptr = dmix->last_appl_ptr = 0;
 	dmix->hw_ptr = 0;
@@ -559,13 +581,6 @@ static snd_pcm_sframes_t snd_pcm_dmix_forward(snd_pcm_t *pcm, snd_pcm_uframes_t 
 	return frames;
 }
 
-static int snd_pcm_dmix_resume(snd_pcm_t *pcm)
-{
-	snd_pcm_direct_t *dmix = pcm->private_data;
-	snd_pcm_resume(dmix->spcm);
-	return 0;
-}
-
 static snd_pcm_sframes_t snd_pcm_dmix_readi(snd_pcm_t *pcm ATTRIBUTE_UNUSED, void *buffer ATTRIBUTE_UNUSED, snd_pcm_uframes_t size ATTRIBUTE_UNUSED)
 {
 	return -ENODEV;
@@ -694,7 +709,7 @@ static snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
 	.pause = snd_pcm_dmix_pause,
 	.rewind = snd_pcm_dmix_rewind,
 	.forward = snd_pcm_dmix_forward,
-	.resume = snd_pcm_dmix_resume,
+	.resume = snd_pcm_direct_resume,
 	.link_fd = NULL,
 	.link = NULL,
 	.unlink = NULL,
@@ -715,6 +730,7 @@ static snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
  * \param name Name of PCM
  * \param ipc_key IPC key for semaphore and shared memory
  * \param ipc_perm IPC permissions for semaphore and shared memory
+ * \param ipc_gid IPC group ID for semaphore and shared memory
  * \param params Parameters for slave
  * \param bindings Channel bindings
  * \param slowptr Slow but more precise pointer updates
@@ -728,7 +744,7 @@ static snd_pcm_fast_ops_t snd_pcm_dmix_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
-		      key_t ipc_key, mode_t ipc_perm,
+		      key_t ipc_key, mode_t ipc_perm, int ipc_gid,
 		      struct slave_params *params,
 		      snd_config_t *bindings,
 		      int slowptr,
@@ -759,6 +775,7 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	
 	dmix->ipc_key = ipc_key;
 	dmix->ipc_perm = ipc_perm;
+	dmix->ipc_gid = ipc_gid;
 	dmix->semid = -1;
 	dmix->shmid = -1;
 
@@ -836,25 +853,9 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 		}
 			
 		snd_pcm_direct_semaphore_down(dmix, DIRECT_IPC_SEM_CLIENT);
-		ret = snd_pcm_hw_open_fd(&spcm, "dmix_client", dmix->hw_fd, 0, 0);
-		if (ret < 0) {
-			SNDERR("unable to open hardware");
+		ret = snd_pcm_direct_open_secondary_client(&spcm, dmix, "dmix_client");
+		if (ret < 0)
 			goto _err;
-		}
-		
-		spcm->donot_close = 1;
-		spcm->setup = 1;
-		spcm->buffer_size = dmix->shmptr->s.buffer_size;
-		spcm->sample_bits = dmix->shmptr->s.sample_bits;
-		spcm->channels = dmix->shmptr->s.channels;
-		spcm->format = dmix->shmptr->s.format;
-		spcm->boundary = dmix->shmptr->s.boundary;
-		spcm->info = dmix->shmptr->s.info;
-		ret = snd_pcm_mmap(spcm);
-		if (ret < 0) {
-			SNDERR("unable to mmap channels");
-			goto _err;
-		}
 		dmix->spcm = spcm;
 	}
 
@@ -1050,6 +1051,7 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	int bsize, psize, ipc_key_add_uid = 0, slowptr = 0;
 	key_t ipc_key = 0;
 	mode_t ipc_perm = 0600;
+	int ipc_gid = -1;
 	int err;
 	snd_config_for_each(i, next, conf) {
 		snd_config_t *n = snd_config_iterator_entry(i);
@@ -1063,6 +1065,7 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 			err = snd_config_get_integer(n, &key);
 			if (err < 0) {
 				SNDERR("The field ipc_key must be an integer type");
+
 				return err;
 			}
 			ipc_key = key;
@@ -1078,9 +1081,33 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 			}
 			if (isdigit(*perm) == 0) {
 				SNDERR("The field ipc_perm must be a valid file permission");
+				free(perm);
 				return -EINVAL;
 			}
 			ipc_perm = strtol(perm, &endp, 8);
+			free(perm);
+			continue;
+		}
+		if (strcmp(id, "ipc_gid") == 0) {
+			char *group;
+			char *endp;
+			err = snd_config_get_ascii(n, &group);
+			if (err < 0) {
+				SNDERR("The field ipc_gid must be a valid group");
+				return err;
+			}
+			if (isdigit(*group) == 0) {
+				struct group *grp = getgrnam(group);
+				if (grp == NULL) {
+					SNDERR("The field ipc_gid must be a valid group (create group %s)", group);
+					free(group);
+					return -EINVAL;
+				}
+				ipc_gid = grp->gr_gid;
+			} else {
+				ipc_perm = strtol(group, &endp, 10);
+			}
+			free(group);
 			continue;
 		}
 		if (strcmp(id, "ipc_key_add_uid") == 0) {
@@ -1145,9 +1172,8 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 		params.period_time = 125000;    /* 0.125 seconds */
 
 	/* sorry, limited features */
-        if (params.format != SND_PCM_FORMAT_S16 &&
-            params.format != SND_PCM_FORMAT_S32) {
-		SNDERR("invalid format, specify s16 or s32");
+	if (! (dmix_supported_format & (1ULL << params.format))) {
+		SNDERR("Unsupported format");
 		snd_config_delete(sconf);
 		return -EINVAL;
 	}
@@ -1155,7 +1181,7 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	params.period_size = psize;
 	params.buffer_size = bsize;
 
-	err = snd_pcm_dmix_open(pcmp, name, ipc_key, ipc_perm, &params, bindings, slowptr, root, sconf, stream, mode);
+	err = snd_pcm_dmix_open(pcmp, name, ipc_key, ipc_perm, ipc_gid, &params, bindings, slowptr, root, sconf, stream, mode);
 	if (err < 0)
 		snd_config_delete(sconf);
 	return err;

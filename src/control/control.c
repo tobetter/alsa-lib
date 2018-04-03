@@ -163,6 +163,10 @@ int snd_ctl_async(snd_ctl_t *ctl, int sig, pid_t pid)
 int snd_ctl_poll_descriptors_count(snd_ctl_t *ctl)
 {
 	assert(ctl);
+	if (ctl->ops->poll_descriptors_count)
+		return ctl->ops->poll_descriptors_count(ctl);
+	if (ctl->poll_fd < 0)
+		return 0;
 	return 1;
 }
 
@@ -176,6 +180,10 @@ int snd_ctl_poll_descriptors_count(snd_ctl_t *ctl)
 int snd_ctl_poll_descriptors(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int space)
 {
 	assert(ctl && pfds);
+	if (ctl->ops->poll_descriptors)
+		return ctl->ops->poll_descriptors(ctl, pfds, space);
+	if (ctl->poll_fd < 0)
+		return 0;
 	if (space > 0) {
 		pfds->fd = ctl->poll_fd;
 		pfds->events = POLLIN|POLLERR|POLLNVAL;
@@ -195,6 +203,8 @@ int snd_ctl_poll_descriptors(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int s
 int snd_ctl_poll_descriptors_revents(snd_ctl_t *ctl, struct pollfd *pfds, unsigned int nfds, unsigned short *revents)
 {
 	assert(ctl && pfds && revents);
+	if (ctl->ops->poll_revents)
+		return ctl->ops->poll_revents(ctl, pfds, nfds, revents);
 	if (nfds == 1) {
 		*revents = pfds->revents;
                 return 0;
@@ -571,14 +581,44 @@ int snd_ctl_read(snd_ctl_t *ctl, snd_ctl_event_t *event)
  */
 int snd_ctl_wait(snd_ctl_t *ctl, int timeout)
 {
-	struct pollfd pfd;
-	int err;
-	err = snd_ctl_poll_descriptors(ctl, &pfd, 1);
-	assert(err == 1);
-	err = poll(&pfd, 1, timeout);
+	struct pollfd *pfd;
+	unsigned short *revents;
+	int i, npfds, pollio, err, err_poll;
+
+	npfds = snd_ctl_poll_descriptors_count(ctl);
+	if (npfds <= 0 || npfds >= 16) {
+		SNDERR("Invalid poll_fds %d\n", npfds);
+		return -EIO;
+	}
+	pfd = alloca(sizeof(*pfd) * npfds);
+	revents = alloca(sizeof(*revents) * npfds);
+	err = snd_ctl_poll_descriptors(ctl, pfd, npfds);
 	if (err < 0)
-		return -errno;
-	return 0;
+		return err;
+	if (err != npfds) {
+		SNDMSG("invalid poll descriptors %d\n", err);
+		return -EIO;
+	}
+	do {
+		err_poll = poll(pfd, npfds, timeout);
+		if (err_poll < 0)
+			return -errno;
+		if (! err_poll)
+			break;
+		err = snd_ctl_poll_descriptors_revents(ctl, pfd, npfds, revents);
+		if (err < 0)
+			return err;
+		pollio = 0;
+		for (i = 0; i < npfds; i++) {
+			if (revents[i] & (POLLERR | POLLNVAL))
+				return -EIO;
+			if ((revents[i] & (POLLIN | POLLOUT)) == 0)
+				continue;
+			pollio++;
+		}
+	} while (! pollio);
+
+	return err_poll > 0 ? 1 : 0;
 }
 
 /**
@@ -625,11 +665,15 @@ snd_ctl_t *snd_async_handler_get_ctl(snd_async_handler_t *handler)
 	return handler->u.ctl;
 }
 
+static const char *build_in_ctls[] = {
+	"hw", "shm", NULL
+};
+
 static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 			     snd_config_t *ctl_root, snd_config_t *ctl_conf, int mode)
 {
 	const char *str;
-	char buf[256];
+	char *buf = NULL, *buf1 = NULL;
 	int err;
 	snd_config_t *conf, *type_conf = NULL;
 	snd_config_iterator_t i, next;
@@ -697,12 +741,39 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 		}
 	}
 	if (!open_name) {
+		buf = malloc(strlen(str) + 32);
+		if (buf == NULL) {
+			err = -ENOMEM;
+			goto _err;
+		}
 		open_name = buf;
-		snprintf(buf, sizeof(buf), "_snd_ctl_%s_open", str);
+		sprintf(buf, "_snd_ctl_%s_open", str);
+	}
+	if (!lib) {
+		const char **build_in = build_in_ctls;
+		while (*build_in) {
+			if (!strcmp(*build_in, str))
+				break;
+			build_in++;
+		}
+		if (*build_in == NULL) {
+			buf1 = malloc(strlen(str) + sizeof(PKGLIBDIR) + 32);
+			if (buf1 == NULL) {
+				err = -ENOMEM;
+				goto _err;
+			}
+			lib = buf1;
+			sprintf(buf1, "%s/libasound_module_ctl_%s.so", PKGLIBDIR, str);
+		}
 	}
 #ifndef PIC
 	snd_control_open_symbols();
 #endif
+	open_func = snd_dlobj_cache_lookup(open_name);
+	if (open_func) {
+		err = 0;
+		goto _err;
+	}
 	h = snd_dlopen(lib, RTLD_NOW);
 	if (h)
 		open_func = snd_dlsym(h, open_name, SND_DLSYM_VERSION(SND_CONTROL_DLSYM_VERSION));
@@ -710,7 +781,7 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 	if (!h) {
 		SNDERR("Cannot open shared library %s", lib);
 		err = -ENOENT;
-	} if (!open_func) {
+	} else if (!open_func) {
 		SNDERR("symbol %s is not defined inside %s", open_name, lib);
 		snd_dlclose(h);
 		err = -ENXIO;
@@ -721,12 +792,19 @@ static int snd_ctl_open_conf(snd_ctl_t **ctlp, const char *name,
 	if (err >= 0) {
 		err = open_func(ctlp, name, ctl_root, ctl_conf, mode);
 		if (err >= 0) {
+			if (h /*&& (mode & SND_CTL_KEEP_ALIVE)*/) {
+				snd_dlobj_cache_add(open_name, h, open_func);
+				h = NULL;
+			}
 			(*ctlp)->dl_handle = h;
-			return 0;
+			err = 0;
 		} else {
-			snd_dlclose(h);
+			if (h)
+				snd_dlclose(h);
 		}
 	}
+	free(buf);
+	free(buf1);
 	return err;
 }
 
@@ -950,7 +1028,7 @@ const char *snd_ctl_event_elem_get_name(const snd_ctl_event_t *obj)
 {
 	assert(obj);
 	assert(obj->type == SND_CTL_EVENT_ELEM);
-	return obj->data.elem.id.name;
+	return (const char *)obj->data.elem.id.name;
 }
 
 /**
@@ -1077,7 +1155,7 @@ unsigned int snd_ctl_elem_id_get_subdevice(const snd_ctl_elem_id_t *obj)
 const char *snd_ctl_elem_id_get_name(const snd_ctl_elem_id_t *obj)
 {
 	assert(obj);
-	return obj->name;
+	return (const char *)obj->name;
 }
 
 /**
@@ -1143,7 +1221,7 @@ void snd_ctl_elem_id_set_subdevice(snd_ctl_elem_id_t *obj, unsigned int val)
 void snd_ctl_elem_id_set_name(snd_ctl_elem_id_t *obj, const char *val)
 {
 	assert(obj);
-	strncpy(obj->name, val, sizeof(obj->name));
+	strncpy((char *)obj->name, val, sizeof(obj->name));
 }
 
 /**
@@ -1228,7 +1306,7 @@ int snd_ctl_card_info_get_card(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_id(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return obj->id;
+	return (const char *)obj->id;
 }
 
 /**
@@ -1239,7 +1317,7 @@ const char *snd_ctl_card_info_get_id(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_driver(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return obj->driver;
+	return (const char *)obj->driver;
 }
 
 /**
@@ -1250,7 +1328,7 @@ const char *snd_ctl_card_info_get_driver(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_name(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return obj->name;
+	return (const char *)obj->name;
 }
 
 /**
@@ -1261,7 +1339,7 @@ const char *snd_ctl_card_info_get_name(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_longname(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return obj->longname;
+	return (const char *)obj->longname;
 }
 
 /**
@@ -1272,7 +1350,7 @@ const char *snd_ctl_card_info_get_longname(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_mixername(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return obj->mixername;
+	return (const char *)obj->mixername;
 }
 
 /**
@@ -1283,7 +1361,7 @@ const char *snd_ctl_card_info_get_mixername(const snd_ctl_card_info_t *obj)
 const char *snd_ctl_card_info_get_components(const snd_ctl_card_info_t *obj)
 {
 	assert(obj);
-	return obj->components;
+	return (const char *)obj->components;
 }
 
 /**
@@ -1509,7 +1587,7 @@ const char *snd_ctl_elem_list_get_name(const snd_ctl_elem_list_t *obj, unsigned 
 {
 	assert(obj);
 	assert(idx < obj->used);
-	return obj->pids[idx].name;
+	return (const char *)obj->pids[idx].name;
 }
 
 /**
@@ -1913,7 +1991,7 @@ unsigned int snd_ctl_elem_info_get_subdevice(const snd_ctl_elem_info_t *obj)
 const char *snd_ctl_elem_info_get_name(const snd_ctl_elem_info_t *obj)
 {
 	assert(obj);
-	return obj->id.name;
+	return (const char *)obj->id.name;
 }
 
 /**
@@ -1990,7 +2068,7 @@ void snd_ctl_elem_info_set_subdevice(snd_ctl_elem_info_t *obj, unsigned int val)
 void snd_ctl_elem_info_set_name(snd_ctl_elem_info_t *obj, const char *val)
 {
 	assert(obj);
-	strncpy(obj->id.name, val, sizeof(obj->id.name));
+	strncpy((char *)obj->id.name, val, sizeof(obj->id.name));
 }
 
 /**
@@ -2119,7 +2197,7 @@ unsigned int snd_ctl_elem_value_get_subdevice(const snd_ctl_elem_value_t *obj)
 const char *snd_ctl_elem_value_get_name(const snd_ctl_elem_value_t *obj)
 {
 	assert(obj);
-	return obj->id.name;
+	return (const char *)obj->id.name;
 }
 
 /**
@@ -2196,7 +2274,7 @@ void snd_ctl_elem_value_set_subdevice(snd_ctl_elem_value_t *obj, unsigned int va
 void snd_ctl_elem_value_set_name(snd_ctl_elem_value_t *obj, const char *val)
 {
 	assert(obj);
-	strncpy(obj->id.name, val, sizeof(obj->id.name));
+	strncpy((char *)obj->id.name, val, sizeof(obj->id.name));
 }
 
 /**

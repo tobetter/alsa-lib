@@ -34,6 +34,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <grp.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -102,48 +103,52 @@ static void share_areas(snd_pcm_direct_t *dshare,
 static void snd_pcm_dshare_sync_area(snd_pcm_t *pcm)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
-	snd_pcm_uframes_t appl_ptr, slave_appl_ptr, slave_bsize;
-	snd_pcm_uframes_t size, slave_hw_ptr;
+	snd_pcm_uframes_t slave_hw_ptr, slave_appl_ptr, slave_size;
+	snd_pcm_uframes_t appl_ptr, size;
 	const snd_pcm_channel_area_t *src_areas, *dst_areas;
 	
 	/* calculate the size to transfer */
 	size = dshare->appl_ptr - dshare->last_appl_ptr;
 	if (! size)
 		return;
-	slave_bsize = dshare->shmptr->s.buffer_size;
 	slave_hw_ptr = dshare->slave_hw_ptr;
 	/* don't write on the last active period - this area may be cleared
 	 * by the driver during write operation...
 	 */
-	slave_hw_ptr -= slave_hw_ptr % dshare->shmptr->s.period_size;
-	slave_hw_ptr += slave_bsize;
-	if (dshare->slave_hw_ptr > dshare->slave_appl_ptr)
-		slave_hw_ptr -= dshare->shmptr->s.boundary;
-	if (dshare->slave_appl_ptr + size >= slave_hw_ptr)
-		size = slave_hw_ptr - dshare->slave_appl_ptr;
+	slave_hw_ptr -= slave_hw_ptr % dshare->slave_period_size;
+	slave_hw_ptr += dshare->slave_buffer_size;
+	if (dshare->slave_hw_ptr > dshare->slave_boundary)
+		slave_hw_ptr -= dshare->slave_boundary;
+	if (slave_hw_ptr < dshare->slave_appl_ptr)
+		slave_size = slave_hw_ptr + (dshare->slave_boundary - dshare->slave_appl_ptr);
+	else
+		slave_size = slave_hw_ptr - dshare->slave_appl_ptr;
+	if (slave_size < size)
+		size = slave_size;
 	if (! size)
 		return;
+
 	/* add sample areas here */
 	src_areas = snd_pcm_mmap_areas(pcm);
 	dst_areas = snd_pcm_mmap_areas(dshare->spcm);
 	appl_ptr = dshare->last_appl_ptr % pcm->buffer_size;
 	dshare->last_appl_ptr += size;
 	dshare->last_appl_ptr %= pcm->boundary;
-	slave_appl_ptr = dshare->slave_appl_ptr % slave_bsize;
+	slave_appl_ptr = dshare->slave_appl_ptr % dshare->slave_buffer_size;
 	dshare->slave_appl_ptr += size;
-	dshare->slave_appl_ptr %= dshare->shmptr->s.boundary;
+	dshare->slave_appl_ptr %= dshare->slave_boundary;
 	for (;;) {
 		snd_pcm_uframes_t transfer = size;
 		if (appl_ptr + transfer > pcm->buffer_size)
 			transfer = pcm->buffer_size - appl_ptr;
-		if (slave_appl_ptr + transfer > slave_bsize)
-			transfer = slave_bsize - slave_appl_ptr;
+		if (slave_appl_ptr + transfer > dshare->slave_buffer_size)
+			transfer = dshare->slave_buffer_size - slave_appl_ptr;
 		share_areas(dshare, src_areas, dst_areas, appl_ptr, slave_appl_ptr, transfer);
 		size -= transfer;
 		if (! size)
 			break;
 		slave_appl_ptr += transfer;
-		slave_appl_ptr %= slave_bsize;
+		slave_appl_ptr %= dshare->slave_buffer_size;
 		appl_ptr += transfer;
 		appl_ptr %= pcm->buffer_size;
 	}
@@ -177,7 +182,7 @@ static int snd_pcm_dshare_sync_ptr(snd_pcm_t *pcm)
 		/* not really started yet - don't update hw_ptr */
 		return 0;
 	if (diff < 0) {
-		slave_hw_ptr += dshare->shmptr->s.boundary;
+		slave_hw_ptr += dshare->slave_boundary;
 		diff = slave_hw_ptr - old_slave_hw_ptr;
 	}
 	dshare->hw_ptr += diff;
@@ -298,7 +303,6 @@ static int snd_pcm_dshare_prepare(snd_pcm_t *pcm)
 	snd_pcm_direct_t *dshare = pcm->private_data;
 
 	snd_pcm_direct_check_interleave(dshare, pcm);
-	// assert(pcm->boundary == dshare->shmptr->s.boundary);	/* for sure */
 	dshare->state = SND_PCM_STATE_PREPARED;
 	dshare->appl_ptr = dshare->last_appl_ptr = 0;
 	dshare->hw_ptr = 0;
@@ -430,13 +434,6 @@ static snd_pcm_sframes_t snd_pcm_dshare_forward(snd_pcm_t *pcm, snd_pcm_uframes_
 	return frames;
 }
 
-static int snd_pcm_dshare_resume(snd_pcm_t *pcm)
-{
-	snd_pcm_direct_t *dshare = pcm->private_data;
-	snd_pcm_resume(dshare->spcm);
-	return 0;
-}
-
 static snd_pcm_sframes_t snd_pcm_dshare_readi(snd_pcm_t *pcm ATTRIBUTE_UNUSED, void *buffer ATTRIBUTE_UNUSED, snd_pcm_uframes_t size ATTRIBUTE_UNUSED)
 {
 	return -ENODEV;
@@ -520,7 +517,7 @@ static void snd_pcm_dshare_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_pcm_direct_t *dshare = pcm->private_data;
 
-	snd_output_printf(out, "Direct Stream Mixing PCM\n");
+	snd_output_printf(out, "Direct Share PCM\n");
 	if (pcm->setup) {
 		snd_output_printf(out, "\nIts setup is:\n");
 		snd_pcm_dump_setup(pcm, out);
@@ -557,7 +554,7 @@ static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
 	.pause = snd_pcm_dshare_pause,
 	.rewind = snd_pcm_dshare_rewind,
 	.forward = snd_pcm_dshare_forward,
-	.resume = snd_pcm_dshare_resume,
+	.resume = snd_pcm_direct_resume,
 	.link_fd = NULL,
 	.link = NULL,
 	.unlink = NULL,
@@ -578,6 +575,7 @@ static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
  * \param name Name of PCM
  * \param ipc_key IPC key for semaphore and shared memory
  * \param ipc_perm IPC permissions for semaphore and shared memory
+ * \param ipc_gid IPC group ID for semaphore and shared memory
  * \param params Parameters for slave
  * \param bindings Channel bindings
  * \param slowptr Slow but more precise pointer updates
@@ -591,7 +589,7 @@ static snd_pcm_fast_ops_t snd_pcm_dshare_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
-			key_t ipc_key, mode_t ipc_perm,
+			key_t ipc_key, mode_t ipc_perm, int ipc_gid,
 			struct slave_params *params,
 			snd_config_t *bindings,
 			int slowptr,
@@ -629,6 +627,7 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	
 	dshare->ipc_key = ipc_key;
 	dshare->ipc_perm = ipc_perm;
+	dshare->ipc_gid = ipc_gid;
 	dshare->semid = -1;
 	dshare->shmid = -1;
 
@@ -703,25 +702,10 @@ int snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 		}
 			
 		snd_pcm_direct_semaphore_down(dshare, DIRECT_IPC_SEM_CLIENT);
+		ret = snd_pcm_direct_open_secondary_client(&spcm, dshare, "dshare_client");
 		ret = snd_pcm_hw_open_fd(&spcm, "dshare_client", dshare->hw_fd, 0, 0);
-		if (ret < 0) {
-			SNDERR("unable to open hardware");
+		if (ret < 0)
 			goto _err;
-		}
-		
-		spcm->donot_close = 1;
-		spcm->setup = 1;
-		spcm->buffer_size = dshare->shmptr->s.buffer_size;
-		spcm->sample_bits = dshare->shmptr->s.sample_bits;
-		spcm->channels = dshare->shmptr->s.channels;
-		spcm->format = dshare->shmptr->s.format;
-		spcm->boundary = dshare->shmptr->s.boundary;
-		spcm->info = dshare->shmptr->s.info;
-		ret = snd_pcm_mmap(spcm);
-		if (ret < 0) {
-			SNDERR("unable to mmap channels");
-			goto _err;
-		}
 		dshare->spcm = spcm;
 	}
 
@@ -851,6 +835,7 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 	int bsize, psize, ipc_key_add_uid = 0, slowptr = 0;
 	key_t ipc_key = 0;
 	mode_t ipc_perm = 0600;
+	int ipc_gid = -1;
 	
 	int err;
 	snd_config_for_each(i, next, conf) {
@@ -880,9 +865,33 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 			}
 			if (isdigit(*perm) == 0) {
 				SNDERR("The field ipc_perm must be a valid file permission");
+				free(perm);
 				return -EINVAL;
 			}
 			ipc_perm = strtol(perm, &endp, 8);
+			free(perm);
+			continue;
+		}
+		if (strcmp(id, "ipc_gid") == 0) {
+			char *group;
+			char *endp;
+			err = snd_config_get_ascii(n, &group);
+			if (err < 0) {
+				SNDERR("The field ipc_gid must be a valid group");
+				return err;
+			}
+			if (isdigit(*group) == 0) {
+				struct group *grp = getgrnam(group);
+				if (group == NULL) {
+					SNDERR("The field ipc_gid must be a valid group (create group %s)", group);
+					free(group);
+					return -EINVAL;
+				}
+				ipc_gid = grp->gr_gid;
+			} else {
+				ipc_perm = strtol(group, &endp, 10);
+			}
+			free(group);
 			continue;
 		}
 		if (strcmp(id, "ipc_key_add_uid") == 0) {
@@ -950,7 +959,7 @@ int _snd_pcm_dshare_open(snd_pcm_t **pcmp, const char *name,
 
 	params.period_size = psize;
 	params.buffer_size = bsize;
-	err = snd_pcm_dshare_open(pcmp, name, ipc_key, ipc_perm, &params, bindings, slowptr, root, sconf, stream, mode);
+	err = snd_pcm_dshare_open(pcmp, name, ipc_key, ipc_perm, ipc_gid, &params, bindings, slowptr, root, sconf, stream, mode);
 	if (err < 0)
 		snd_config_delete(sconf);
 	return err;

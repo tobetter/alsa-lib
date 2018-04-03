@@ -14,16 +14,12 @@
 
 @SET_MAKE@
 
-#SUBDIRS =
-#DIST_SUBDIRS =
-
 srcdir = @srcdir@
 top_srcdir = @top_srcdir@
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
-pkglibdir = $(libdir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
-top_builddir = ../..
+top_builddir = ../../..
 
 am__cd = CDPATH="$${ZSH_VERSION+.}$(PATH_SEPARATOR)" && cd
 INSTALL = @INSTALL@
@@ -41,6 +37,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+pkglibdir = $(libdir)/@PACKAGE@/smixer
 ACLOCAL = @ACLOCAL@
 ALSA_HSEARCH_R_FALSE = @ALSA_HSEARCH_R_FALSE@
 ALSA_HSEARCH_R_TRUE = @ALSA_HSEARCH_R_TRUE@
@@ -151,28 +148,50 @@ target_cpu = @target_cpu@
 target_os = @target_os@
 target_vendor = @target_vendor@
 
-EXTRA_LTLIBRARIES = libordinarypcm.la
-
-libordinarypcm_la_SOURCES = ordinary_pcm.c
-
-#noinst_HEADERS =
-alsadir = $(datadir)/alsa
+AM_CFLAGS = -g -O2 -W -Wall
 
 INCLUDES = -I$(top_srcdir)/include
-subdir = src/ordinary_pcm
+
+pkglib_LTLIBRARIES = smixer-sbase.la \
+		     smixer-ac97.la \
+		     smixer-hda.la
+
+
+noinst_HEADERS = sbase.h
+
+smixer_sbase_la_SOURCES = sbase.c
+smixer_sbase_la_LDFLAGS = -module -avoid-version
+smixer_sbase_la_LIBADD = ../../../src/libasound.la
+
+smixer_ac97_la_SOURCES = ac97.c sbasedl.c
+smixer_ac97_la_LDFLAGS = -module -avoid-version
+smixer_ac97_la_LIBADD = ../../../src/libasound.la
+
+smixer_hda_la_SOURCES = hda.c sbasedl.c
+smixer_hda_la_LDFLAGS = -module -avoid-version
+smixer_hda_la_LIBADD = ../../../src/libasound.la
+subdir = modules/mixer/simple
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = $(top_builddir)/include/config.h
 CONFIG_CLEAN_FILES =
-libordinarypcm_la_LDFLAGS =
-libordinarypcm_la_LIBADD =
-am_libordinarypcm_la_OBJECTS = ordinary_pcm.lo
-libordinarypcm_la_OBJECTS = $(am_libordinarypcm_la_OBJECTS)
+LTLIBRARIES = $(pkglib_LTLIBRARIES)
+
+smixer_ac97_la_DEPENDENCIES = ../../../src/libasound.la
+am_smixer_ac97_la_OBJECTS = ac97.lo sbasedl.lo
+smixer_ac97_la_OBJECTS = $(am_smixer_ac97_la_OBJECTS)
+smixer_hda_la_DEPENDENCIES = ../../../src/libasound.la
+am_smixer_hda_la_OBJECTS = hda.lo sbasedl.lo
+smixer_hda_la_OBJECTS = $(am_smixer_hda_la_OBJECTS)
+smixer_sbase_la_DEPENDENCIES = ../../../src/libasound.la
+am_smixer_sbase_la_OBJECTS = sbase.lo
+smixer_sbase_la_OBJECTS = $(am_smixer_sbase_la_OBJECTS)
 
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
-@AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/ordinary_pcm.Plo
+@AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/ac97.Plo ./$(DEPDIR)/hda.Plo \
+@AMDEP_TRUE@	./$(DEPDIR)/sbase.Plo ./$(DEPDIR)/sbasedl.Plo
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) \
@@ -180,9 +199,12 @@ LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) \
 CCLD = $(CC)
 LINK = $(LIBTOOL) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
-DIST_SOURCES = $(libordinarypcm_la_SOURCES)
-DIST_COMMON = Makefile.am Makefile.in
-SOURCES = $(libordinarypcm_la_SOURCES)
+DIST_SOURCES = $(smixer_ac97_la_SOURCES) $(smixer_hda_la_SOURCES) \
+	$(smixer_sbase_la_SOURCES)
+HEADERS = $(noinst_HEADERS)
+
+DIST_COMMON = $(noinst_HEADERS) Makefile.am Makefile.in
+SOURCES = $(smixer_ac97_la_SOURCES) $(smixer_hda_la_SOURCES) $(smixer_sbase_la_SOURCES)
 
 all: all-am
 
@@ -190,11 +212,43 @@ all: all-am
 .SUFFIXES: .c .lo .o .obj
 $(srcdir)/Makefile.in:  Makefile.am  $(top_srcdir)/configure.in $(ACLOCAL_M4)
 	cd $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign  src/ordinary_pcm/Makefile
+	  $(AUTOMAKE) --foreign  modules/mixer/simple/Makefile
 Makefile:  $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)
-libordinarypcm.la: $(libordinarypcm_la_OBJECTS) $(libordinarypcm_la_DEPENDENCIES) 
-	$(LINK)  $(libordinarypcm_la_LDFLAGS) $(libordinarypcm_la_OBJECTS) $(libordinarypcm_la_LIBADD) $(LIBS)
+pkglibLTLIBRARIES_INSTALL = $(INSTALL)
+install-pkglibLTLIBRARIES: $(pkglib_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	$(mkinstalldirs) $(DESTDIR)$(pkglibdir)
+	@list='$(pkglib_LTLIBRARIES)'; for p in $$list; do \
+	  if test -f $$p; then \
+	    f="`echo $$p | sed -e 's|^.*/||'`"; \
+	    echo " $(LIBTOOL) --mode=install $(pkglibLTLIBRARIES_INSTALL) $(INSTALL_STRIP_FLAG) $$p $(DESTDIR)$(pkglibdir)/$$f"; \
+	    $(LIBTOOL) --mode=install $(pkglibLTLIBRARIES_INSTALL) $(INSTALL_STRIP_FLAG) $$p $(DESTDIR)$(pkglibdir)/$$f; \
+	  else :; fi; \
+	done
+
+uninstall-pkglibLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkglib_LTLIBRARIES)'; for p in $$list; do \
+	    p="`echo $$p | sed -e 's|^.*/||'`"; \
+	  echo " $(LIBTOOL) --mode=uninstall rm -f $(DESTDIR)$(pkglibdir)/$$p"; \
+	  $(LIBTOOL) --mode=uninstall rm -f $(DESTDIR)$(pkglibdir)/$$p; \
+	done
+
+clean-pkglibLTLIBRARIES:
+	-test -z "$(pkglib_LTLIBRARIES)" || rm -f $(pkglib_LTLIBRARIES)
+	@list='$(pkglib_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" = "$$p" && dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+smixer-ac97.la: $(smixer_ac97_la_OBJECTS) $(smixer_ac97_la_DEPENDENCIES) 
+	$(LINK) -rpath $(pkglibdir) $(smixer_ac97_la_LDFLAGS) $(smixer_ac97_la_OBJECTS) $(smixer_ac97_la_LIBADD) $(LIBS)
+smixer-hda.la: $(smixer_hda_la_OBJECTS) $(smixer_hda_la_DEPENDENCIES) 
+	$(LINK) -rpath $(pkglibdir) $(smixer_hda_la_LDFLAGS) $(smixer_hda_la_OBJECTS) $(smixer_hda_la_LIBADD) $(LIBS)
+smixer-sbase.la: $(smixer_sbase_la_OBJECTS) $(smixer_sbase_la_DEPENDENCIES) 
+	$(LINK) -rpath $(pkglibdir) $(smixer_sbase_la_LDFLAGS) $(smixer_sbase_la_OBJECTS) $(smixer_sbase_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT) core *.core
@@ -202,7 +256,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ordinary_pcm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ac97.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hda.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sbase.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sbasedl.Plo@am__quote@
 
 distclean-depend:
 	-rm -rf ./$(DEPDIR)
@@ -305,7 +362,7 @@ distclean-tags:
 	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 
-top_distdir = ../..
+top_distdir = ../../..
 distdir = $(top_distdir)/$(PACKAGE)-$(VERSION)
 
 distdir: $(DISTFILES)
@@ -337,9 +394,10 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile
+all-am: Makefile $(LTLIBRARIES) $(HEADERS)
 
 installdirs:
+	$(mkinstalldirs) $(DESTDIR)$(pkglibdir)
 install: install-am
 install-exec: install-exec-am
 install-data: install-data-am
@@ -366,7 +424,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool mostlyclean-am
+clean-am: clean-generic clean-libtool clean-pkglibLTLIBRARIES \
+	mostlyclean-am
 
 distclean: distclean-am
 
@@ -383,7 +442,7 @@ info-am:
 
 install-data-am:
 
-install-exec-am:
+install-exec-am: install-pkglibLTLIBRARIES
 
 install-info: install-info-am
 
@@ -408,21 +467,21 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-info-am
+uninstall-am: uninstall-info-am uninstall-pkglibLTLIBRARIES
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool ctags distclean distclean-compile \
-	distclean-depend distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am info info-am install \
-	install-am install-data install-data-am install-exec \
-	install-exec-am install-info install-info-am install-man \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool pdf \
-	pdf-am ps ps-am tags uninstall uninstall-am uninstall-info-am
+	clean-libtool clean-pkglibLTLIBRARIES ctags distclean \
+	distclean-compile distclean-depend distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am info \
+	info-am install install-am install-data install-data-am \
+	install-exec install-exec-am install-info install-info-am \
+	install-man install-pkglibLTLIBRARIES install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags uninstall uninstall-am uninstall-info-am \
+	uninstall-pkglibLTLIBRARIES
 
-
-all: libordinarypcm.la
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:
