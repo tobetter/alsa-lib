@@ -306,6 +306,16 @@ static int parse_sequence(snd_use_case_mgr_t *uc_mgr ATTRIBUTE_UNUSED,
 			continue;
 		}
 
+		if (strcmp(cmd, "cset-bin-file") == 0) {
+			curr->type = SEQUENCE_ELEMENT_TYPE_CSET_BIN_FILE;
+			err = parse_string(n, &curr->data.cset);
+			if (err < 0) {
+				uc_error("error: cset-bin-file requires a string!");
+				return err;
+			}
+			continue;
+		}
+
 		if (strcmp(cmd, "usleep") == 0) {
 			curr->type = SEQUENCE_ELEMENT_TYPE_SLEEP;
 			err = snd_config_get_integer(n, &curr->data.sleep);
@@ -1254,7 +1264,12 @@ int uc_mgr_scan_master_configs(const char **_list[])
 		"%s", env ? env : ALSA_USE_CASE_DIR);
 	filename[MAX_FILE-1] = '\0';
 
-	err = scandir(filename, &namelist, filename_filter, versionsort);
+#ifdef _GNU_SOURCE
+#define SORTFUNC	versionsort
+#else
+#define SORTFUNC	alphasort
+#endif
+	err = scandir(filename, &namelist, filename_filter, SORTFUNC);
 	if (err < 0) {
 		err = -errno;
 		uc_error("error: could not scan directory %s: %s",
