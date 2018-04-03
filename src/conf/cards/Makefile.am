@@ -16,6 +16,7 @@ cfg_files = aliases.conf \
 	CMI8338-SWIEC.conf \
 	CMI8738-MC6.conf \
 	CMI8738-MC8.conf \
+	CMI8788.conf \
 	CS46xx.conf \
 	EMU10K1.conf \
 	EMU10K1X.conf \
@@ -35,6 +36,7 @@ cfg_files = aliases.conf \
 	PC-Speaker.conf \
 	PMac.conf \
 	PMacToonie.conf \
+	PS3.conf \
 	RME9636.conf \
 	RME9652.conf \
 	SI7018.conf \

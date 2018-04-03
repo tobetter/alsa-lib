@@ -877,6 +877,8 @@ SYMBOL_PREFIX
 BUILD_MODULES_TRUE
 BUILD_MODULES_FALSE
 ALSA_DEPLIBS
+PYTHON_LIBS
+PYTHON_INCLUDES
 BUILD_MIXER_TRUE
 BUILD_MIXER_FALSE
 BUILD_PCM_TRUE
@@ -891,6 +893,8 @@ BUILD_INSTR_TRUE
 BUILD_INSTR_FALSE
 BUILD_ALISP_TRUE
 BUILD_ALISP_FALSE
+BUILD_PYTHON_TRUE
+BUILD_PYTHON_FALSE
 BUILD_PCM_PLUGIN_TRUE
 BUILD_PCM_PLUGIN_FALSE
 BUILD_PCM_PLUGIN_COPY_TRUE
@@ -945,6 +949,8 @@ BUILD_PCM_PLUGIN_EXTPLUG_TRUE
 BUILD_PCM_PLUGIN_EXTPLUG_FALSE
 BUILD_PCM_PLUGIN_IOPLUG_TRUE
 BUILD_PCM_PLUGIN_IOPLUG_FALSE
+BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE
+BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE
 BUILD_CTL_PLUGIN_TRUE
 BUILD_CTL_PLUGIN_FALSE
 BUILD_CTL_PLUGIN_SHM_TRUE
@@ -1565,6 +1571,7 @@ Optional Features:
   --disable-seq           disable the sequencer component
   --disable-instr         disable the instrument component
   --disable-alisp         disable the alisp component
+  --disable-python        disable the python components
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -1586,6 +1593,12 @@ Optional Packages:
   --with-pthread          Use pthread (default = yes)
   --with-alsa-devdir=dir  directory with ALSA device files (default /dev/snd)
   --with-aload-devdir=dir directory with aload* device files (default /dev)
+  --with-pythonlibs=ldflags
+                          specify python libraries (-lpthread -lm -ldl
+                          -lpython2.4)
+  --with-pythonincludes=Cflags
+                          specify python C header files
+                          (-I/usr/include/python)
   --with-pcm-plugins=<list>
                           build PCM plugins (default = all)
   --with-ctl-plugins=<list>
@@ -2470,7 +2483,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=alsa-lib
- VERSION=1.0.14
+ VERSION=1.0.15
 
 
 cat >>confdefs.h <<_ACEOF
@@ -4875,7 +4888,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 4878 "configure"' > conftest.$ac_ext
+  echo '#line 4891 "configure"' > conftest.$ac_ext
   if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -7576,11 +7589,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7579: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7592: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7583: \$? = $ac_status" >&5
+   echo "$as_me:7596: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7844,11 +7857,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7847: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7860: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7851: \$? = $ac_status" >&5
+   echo "$as_me:7864: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7948,11 +7961,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7951: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7964: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:7955: \$? = $ac_status" >&5
+   echo "$as_me:7968: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -10400,7 +10413,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10403 "configure"
+#line 10416 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -10500,7 +10513,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10503 "configure"
+#line 10516 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12868,11 +12881,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:12871: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:12884: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:12875: \$? = $ac_status" >&5
+   echo "$as_me:12888: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -12972,11 +12985,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:12975: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:12988: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:12979: \$? = $ac_status" >&5
+   echo "$as_me:12992: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -14542,11 +14555,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:14545: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:14558: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:14549: \$? = $ac_status" >&5
+   echo "$as_me:14562: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -14646,11 +14659,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:14649: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:14662: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:14653: \$? = $ac_status" >&5
+   echo "$as_me:14666: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -16876,11 +16889,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:16879: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:16892: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:16883: \$? = $ac_status" >&5
+   echo "$as_me:16896: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -17144,11 +17157,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:17147: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:17160: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:17151: \$? = $ac_status" >&5
+   echo "$as_me:17164: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -17248,11 +17261,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:17251: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:17264: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:17255: \$? = $ac_status" >&5
+   echo "$as_me:17268: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -20666,7 +20679,7 @@ if test -z "$plugindir"; then
 fi
 
 cat >>confdefs.h <<_ACEOF
-#define ALSA_PLUGIN_DIR "plugindir"
+#define ALSA_PLUGIN_DIR "$plugindir"
 _ACEOF
 
 ALSA_PLUGIN_DIR="$plugindir"
@@ -20738,6 +20751,7 @@ echo "${ECHO_T}yes" >&6; }
   else
     { echo "$as_me:$LINENO: result: not supported by ld" >&5
 echo "${ECHO_T}not supported by ld" >&6; }
+    symfuncs="no"
   fi
 else
   { echo "$as_me:$LINENO: result: no" >&5
@@ -20824,7 +20838,7 @@ _ACEOF
      softfloat=yes
 fi
 
-if test "$softloat" = "yes" ; then
+if test "$softfloat" = "yes" ; then
   { echo "$as_me:$LINENO: result: yes" >&5
 echo "${ECHO_T}yes" >&6; }
 else
@@ -21486,6 +21500,44 @@ else
   build_alisp="yes"
 fi
 
+# Check whether --enable-python was given.
+if test "${enable_python+set}" = set; then
+  enableval=$enable_python; build_python="$enableval"
+else
+  build_python="yes"
+fi
+
+PYTHON_LIBS=""
+PYTHON_INCLUDES=""
+if test "$build_python" = "yes"; then
+
+# Check whether --with-pythonlibs was given.
+if test "${with_pythonlibs+set}" = set; then
+  withval=$with_pythonlibs; pythonlibs="$withval"
+else
+  pythonlibs=`python-config --libs`
+fi
+
+
+# Check whether --with-pythonincludes was given.
+if test "${with_pythonincludes+set}" = set; then
+  withval=$with_pythonincludes; pythonincludes="$withval"
+else
+  pythonincludes=`python-config --includes`
+fi
+
+  if test -z "$pythonlibs"; then
+    echo "Unable to determine python libraries! Probably python-config is not"
+    echo "available on this system. Please, use --with-pythonlibs and"
+    echo "--with-pythonincludes options. Python components are disabled in this build."
+    build_python="no"
+  else
+    PYTHON_LIBS="$pythonlibs"
+    PYTHON_INCLUDES="$pythonincludes"
+  fi
+fi
+
+
 
 if test "$build_seq" != "yes"; then
   build_instr="no"
@@ -21562,6 +21614,16 @@ else
 fi
 
 
+
+if test x$build_python = xyes; then
+  BUILD_PYTHON_TRUE=
+  BUILD_PYTHON_FALSE='#'
+else
+  BUILD_PYTHON_TRUE='#'
+  BUILD_PYTHON_FALSE=
+fi
+
+
 if test "$build_mixer" = "yes"; then
 
 cat >>confdefs.h <<\_ACEOF
@@ -21580,6 +21642,13 @@ if test "$build_rawmidi" = "yes"; then
 
 cat >>confdefs.h <<\_ACEOF
 #define BUILD_RAWMIDI "1"
+_ACEOF
+
+fi
+if test "$build_hwdep" = "yes"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define BUILD_HWDEP "1"
 _ACEOF
 
 fi
@@ -21612,7 +21681,7 @@ else
 pcm_plugins=""
 fi
 
-PCM_PLUGIN_LIST="copy linear route mulaw alaw adpcm rate plug multi shm file null empty share meter hooks lfloat ladspa dmix dshare dsnoop asym iec958 softvol extplug ioplug"
+PCM_PLUGIN_LIST="copy linear route mulaw alaw adpcm rate plug multi shm file null empty share meter hooks lfloat ladspa dmix dshare dsnoop asym iec958 softvol extplug ioplug mmap_emul"
 
 build_pcm_plugin="no"
 for t in $PCM_PLUGIN_LIST; do
@@ -21649,7 +21718,7 @@ if test "$HAVE_LIBPTHREAD" != "yes"; then
   build_pcm_share="no"
 fi
 
-if test "$softfloat" != "yes"; then
+if test "$softfloat" = "yes"; then
   build_pcm_lfloat="no"
 fi
 
@@ -21921,6 +21990,16 @@ if test x$build_pcm_ioplug = xyes; then
 else
   BUILD_PCM_PLUGIN_IOPLUG_TRUE='#'
   BUILD_PCM_PLUGIN_IOPLUG_FALSE=
+fi
+
+
+
+if test x$build_pcm_mmap_emul = xyes; then
+  BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE=
+  BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE='#'
+else
+  BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE='#'
+  BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE=
 fi
 
 
@@ -22251,6 +22330,13 @@ echo "$as_me: error: conditional \"BUILD_ALISP\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${BUILD_PYTHON_TRUE}" && test -z "${BUILD_PYTHON_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"BUILD_PYTHON\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"BUILD_PYTHON\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 if test -z "${BUILD_PCM_PLUGIN_TRUE}" && test -z "${BUILD_PCM_PLUGIN_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"BUILD_PCM_PLUGIN\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -22437,6 +22523,13 @@ if test -z "${BUILD_PCM_PLUGIN_IOPLUG_TRUE}" && test -z "${BUILD_PCM_PLUGIN_IOPL
   { { echo "$as_me:$LINENO: error: conditional \"BUILD_PCM_PLUGIN_IOPLUG\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 echo "$as_me: error: conditional \"BUILD_PCM_PLUGIN_IOPLUG\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE}" && test -z "${BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"BUILD_PCM_PLUGIN_MMAP_EMUL\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"BUILD_PCM_PLUGIN_MMAP_EMUL\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -23173,6 +23266,8 @@ SYMBOL_PREFIX!$SYMBOL_PREFIX$ac_delim
 BUILD_MODULES_TRUE!$BUILD_MODULES_TRUE$ac_delim
 BUILD_MODULES_FALSE!$BUILD_MODULES_FALSE$ac_delim
 ALSA_DEPLIBS!$ALSA_DEPLIBS$ac_delim
+PYTHON_LIBS!$PYTHON_LIBS$ac_delim
+PYTHON_INCLUDES!$PYTHON_INCLUDES$ac_delim
 BUILD_MIXER_TRUE!$BUILD_MIXER_TRUE$ac_delim
 BUILD_MIXER_FALSE!$BUILD_MIXER_FALSE$ac_delim
 BUILD_PCM_TRUE!$BUILD_PCM_TRUE$ac_delim
@@ -23187,6 +23282,8 @@ BUILD_INSTR_TRUE!$BUILD_INSTR_TRUE$ac_delim
 BUILD_INSTR_FALSE!$BUILD_INSTR_FALSE$ac_delim
 BUILD_ALISP_TRUE!$BUILD_ALISP_TRUE$ac_delim
 BUILD_ALISP_FALSE!$BUILD_ALISP_FALSE$ac_delim
+BUILD_PYTHON_TRUE!$BUILD_PYTHON_TRUE$ac_delim
+BUILD_PYTHON_FALSE!$BUILD_PYTHON_FALSE$ac_delim
 BUILD_PCM_PLUGIN_TRUE!$BUILD_PCM_PLUGIN_TRUE$ac_delim
 BUILD_PCM_PLUGIN_FALSE!$BUILD_PCM_PLUGIN_FALSE$ac_delim
 BUILD_PCM_PLUGIN_COPY_TRUE!$BUILD_PCM_PLUGIN_COPY_TRUE$ac_delim
@@ -23239,10 +23336,6 @@ BUILD_PCM_PLUGIN_SOFTVOL_TRUE!$BUILD_PCM_PLUGIN_SOFTVOL_TRUE$ac_delim
 BUILD_PCM_PLUGIN_SOFTVOL_FALSE!$BUILD_PCM_PLUGIN_SOFTVOL_FALSE$ac_delim
 BUILD_PCM_PLUGIN_EXTPLUG_TRUE!$BUILD_PCM_PLUGIN_EXTPLUG_TRUE$ac_delim
 BUILD_PCM_PLUGIN_EXTPLUG_FALSE!$BUILD_PCM_PLUGIN_EXTPLUG_FALSE$ac_delim
-BUILD_PCM_PLUGIN_IOPLUG_TRUE!$BUILD_PCM_PLUGIN_IOPLUG_TRUE$ac_delim
-BUILD_PCM_PLUGIN_IOPLUG_FALSE!$BUILD_PCM_PLUGIN_IOPLUG_FALSE$ac_delim
-BUILD_CTL_PLUGIN_TRUE!$BUILD_CTL_PLUGIN_TRUE$ac_delim
-BUILD_CTL_PLUGIN_FALSE!$BUILD_CTL_PLUGIN_FALSE$ac_delim
 _ACEOF
 
   if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 97; then
@@ -23284,6 +23377,12 @@ _ACEOF
 ac_delim='%!_!# '
 for ac_last_try in false false false false false :; do
   cat >conf$$subs.sed <<_ACEOF
+BUILD_PCM_PLUGIN_IOPLUG_TRUE!$BUILD_PCM_PLUGIN_IOPLUG_TRUE$ac_delim
+BUILD_PCM_PLUGIN_IOPLUG_FALSE!$BUILD_PCM_PLUGIN_IOPLUG_FALSE$ac_delim
+BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE!$BUILD_PCM_PLUGIN_MMAP_EMUL_TRUE$ac_delim
+BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE!$BUILD_PCM_PLUGIN_MMAP_EMUL_FALSE$ac_delim
+BUILD_CTL_PLUGIN_TRUE!$BUILD_CTL_PLUGIN_TRUE$ac_delim
+BUILD_CTL_PLUGIN_FALSE!$BUILD_CTL_PLUGIN_FALSE$ac_delim
 BUILD_CTL_PLUGIN_SHM_TRUE!$BUILD_CTL_PLUGIN_SHM_TRUE$ac_delim
 BUILD_CTL_PLUGIN_SHM_FALSE!$BUILD_CTL_PLUGIN_SHM_FALSE$ac_delim
 BUILD_CTL_PLUGIN_EXT_TRUE!$BUILD_CTL_PLUGIN_EXT_TRUE$ac_delim
@@ -23292,7 +23391,7 @@ LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 6; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 12; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5
@@ -23882,4 +23981,21 @@ if test "$no_create" != yes; then
   # would make configure fail if this is the last instruction.
   $ac_cs_success || { (exit 1); exit 1; }
 fi
+
+
+echo "Creating asoundlib.h..."
+cp "$srcdir"/include/asoundlib-head.h include/asoundlib.h
+test "$build_pcm" = "yes" && echo "#include <alsa/pcm.h>" >> include/asoundlib.h
+test "$build_rawmidi" = "yes" && echo "#include <alsa/rawmidi.h>" >> include/asoundlib.h
+test "$build_pcm" = "yes" && echo "#include <alsa/timer.h>" >> include/asoundlib.h
+test "$build_hwdep" = "yes" && echo "#include <alsa/hwdep.h>" >> include/asoundlib.h
+echo "#include <alsa/control.h>" >> include/asoundlib.h
+test "$build_mixer" = "yes" && echo "#include <alsa/mixer.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seq_event.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seq.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seqmid.h>" >> include/asoundlib.h
+test "$build_seq" = "yes" && echo "#include <alsa/seq_midi_event.h>" >> include/asoundlib.h
+test "$build_instr" = "yes" && echo "#include <alsa/conv.h>" >> include/asoundlib.h
+test "$build_instr" = "yes" && echo "#include <alsa/instr.h>" >> include/asoundlib.h
+cat "$srcdir"/include/asoundlib-tail.h >> include/asoundlib.h
 

@@ -3,7 +3,7 @@
  * \ingroup PCM_Plugins
  * \brief PCM HW Plugin Interface
  * \author Abramo Bagnara <abramo@alsa-project.org>
- * \author Jaroslav Kysela <perex@suse.cz>
+ * \author Jaroslav Kysela <perex@perex.cz>
  * \date 2000-2001
  */
 /*
@@ -88,14 +88,11 @@ typedef struct {
 	int version;
 	int fd;
 	int card, device, subdevice;
-	int mmap_emulation;
 	int sync_ptr_ioctl;
 	volatile struct sndrv_pcm_mmap_status * mmap_status;
 	struct sndrv_pcm_mmap_control *mmap_control;
 	struct sndrv_pcm_sync_ptr *sync_ptr;
-	int shadow_appl_ptr: 1,
-	    avail_update_flag: 1,
-	    mmap_shm: 1;
+	snd_pcm_uframes_t hw_ptr;
 	snd_pcm_uframes_t appl_ptr;
 	/* restricted parameters */
 	snd_pcm_format_t format;
@@ -108,9 +105,6 @@ typedef struct {
 #define SNDRV_PCM_VERSION_MAX			SNDRV_PROTOCOL_VERSION(2, 0, 5)
 
 /* update appl_ptr with driver */
-#define UPDATE_SHADOW_PTR(hw) \
-	do { if (hw->shadow_appl_ptr && !hw->avail_update_flag) \
-	       hw->appl_ptr = hw->mmap_control->appl_ptr; } while (0)
 #define FAST_PCM_STATE(hw) \
 	((enum sndrv_pcm_state) (hw)->mmap_status->state)
 #define FAST_PCM_TSTAMP(hw) \
@@ -246,73 +240,10 @@ static int snd_pcm_hw_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 			return err;
 	}
 
-	if (hw->mmap_emulation) {
-		int err = 0;
-		snd_pcm_access_mask_t oldmask = *snd_pcm_hw_param_get_mask(params, SND_PCM_HW_PARAM_ACCESS);
-		snd_pcm_access_mask_t mask;
-		const snd_mask_t *pmask;
-
-		snd_mask_empty(&mask);
-		if (hw_refine_call(hw, params) < 0)
-			err = -errno;
-		if (err < 0) {
-			snd_pcm_hw_params_t new = *params;
-
-			if (!(params->rmask & (1<<SND_PCM_HW_PARAM_ACCESS)))
-				return err;
-			if (snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_MMAP_INTERLEAVED) &&
-			    !snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_RW_INTERLEAVED))
-				snd_pcm_access_mask_set(&mask, SND_PCM_ACCESS_RW_INTERLEAVED);
-			if (snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED) &&
-			    !snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_RW_NONINTERLEAVED))
-				snd_pcm_access_mask_set(&mask, SND_PCM_ACCESS_RW_NONINTERLEAVED);
-			if (snd_pcm_access_mask_empty(&mask))
-				return err;
-			pmask = snd_pcm_hw_param_get_mask(&new, SND_PCM_HW_PARAM_ACCESS);
-			*(snd_mask_t *)pmask = mask;
-			if (hw_refine_call(hw, &new) < 0)
-				return -errno;
-			*params = new;
-		}
-		pmask = snd_pcm_hw_param_get_mask(params, SND_PCM_HW_PARAM_ACCESS);
-		if (snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_MMAP_INTERLEAVED) ||
-		    snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED) ||
-		    snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_MMAP_COMPLEX))
-			return 0;
-		if (snd_pcm_access_mask_test(&mask, SND_PCM_ACCESS_RW_INTERLEAVED)) {
-			if (snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_RW_INTERLEAVED))
-				snd_pcm_access_mask_set((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_MMAP_INTERLEAVED);
-			snd_pcm_access_mask_reset((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_RW_INTERLEAVED);
-			params->cmask |= 1<<SND_PCM_HW_PARAM_ACCESS;
-		}
-		if (snd_pcm_access_mask_test(&mask, SND_PCM_ACCESS_RW_NONINTERLEAVED)) {
-			if (snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_RW_NONINTERLEAVED))
-				snd_pcm_access_mask_set((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED);
-			snd_pcm_access_mask_reset((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_RW_NONINTERLEAVED);
-			params->cmask |= 1<<SND_PCM_HW_PARAM_ACCESS;
-		}
-		if (snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_MMAP_INTERLEAVED)) {
-			if (snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_RW_INTERLEAVED)) {
-				if (snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_RW_INTERLEAVED)) {
-					snd_pcm_access_mask_set((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_MMAP_INTERLEAVED);
-					params->cmask |= 1<<SND_PCM_HW_PARAM_ACCESS;
-				}
-			}
-		}
-		if (snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED)) {
-			if (snd_pcm_access_mask_test(&oldmask, SND_PCM_ACCESS_RW_NONINTERLEAVED)) {
-				if (snd_pcm_access_mask_test(pmask, SND_PCM_ACCESS_RW_NONINTERLEAVED)) {
-					snd_pcm_access_mask_set((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED);
-					params->cmask |= 1<<SND_PCM_HW_PARAM_ACCESS;
-				}
-			}
-		}
-	} else {
-		if (hw_refine_call(hw, params) < 0) {
-			err = -errno;
-			// SYSMSG("SNDRV_PCM_IOCTL_HW_REFINE failed");
-			return err;
-		}
+	if (hw_refine_call(hw, params) < 0) {
+		err = -errno;
+		// SYSMSG("SNDRV_PCM_IOCTL_HW_REFINE failed");
+		return err;
 	}
 	
 	return 0;
@@ -330,55 +261,17 @@ static int snd_pcm_hw_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
 	int err;
-	if (hw->mmap_emulation) {
-		snd_pcm_hw_params_t old = *params;
-		if (hw_params_call(hw, params) < 0) {
-			snd_pcm_access_t access;
-			snd_pcm_access_mask_t oldmask;
-			const snd_mask_t *pmask;
-
-			*params = old;
-			pmask = snd_pcm_hw_param_get_mask(params, SND_PCM_HW_PARAM_ACCESS);
-			oldmask = *(snd_pcm_access_mask_t *)pmask;
-			if (INTERNAL(snd_pcm_hw_params_get_access)(params, &access) < 0)
-				goto _err;
-			switch (access) {
-			case SND_PCM_ACCESS_MMAP_INTERLEAVED:
-				snd_pcm_access_mask_reset((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_MMAP_INTERLEAVED);
-				snd_pcm_access_mask_set((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_RW_INTERLEAVED);
-				break;
-			case SND_PCM_ACCESS_MMAP_NONINTERLEAVED:
-				snd_pcm_access_mask_reset((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED);
-				snd_pcm_access_mask_set((snd_pcm_access_mask_t *)pmask, SND_PCM_ACCESS_RW_NONINTERLEAVED);
-				break;
-			default:
-				goto _err;
-			}
-			if (hw_params_call(hw, params) < 0)
-				goto _err;
-			hw->mmap_shm = 1;
-			*(snd_pcm_access_mask_t *)pmask = oldmask;
-		}
-	} else {
-		if (hw_params_call(hw, params) < 0) {
-		      _err:
-			err = -errno;
-			SYSMSG("SNDRV_PCM_IOCTL_HW_PARAMS failed");
-			return err;
-		}
+	if (hw_params_call(hw, params) < 0) {
+		err = -errno;
+		SYSMSG("SNDRV_PCM_IOCTL_HW_PARAMS failed");
+		return err;
 	}
 	err = sync_ptr(hw, 0);
 	if (err < 0)
 		return err;
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE) {
-		if (hw->mmap_shm) {
-			hw->shadow_appl_ptr = 1;
-			hw->appl_ptr = 0;
-			snd_pcm_set_appl_ptr(pcm, &hw->appl_ptr, -1, 0);
-		} else {
-			hw->shadow_appl_ptr = 0;
-			snd_pcm_set_appl_ptr(pcm, &hw->mmap_control->appl_ptr, hw->fd, SNDRV_PCM_MMAP_OFFSET_CONTROL);
-		}
+		snd_pcm_set_appl_ptr(pcm, &hw->mmap_control->appl_ptr, hw->fd,
+				     SNDRV_PCM_MMAP_OFFSET_CONTROL);
 	}
 	return 0;
 }
@@ -431,16 +324,13 @@ static int snd_pcm_hw_channel_info(snd_pcm_t *pcm, snd_pcm_channel_info_t * info
 		return err;
 	}
 	info->channel = i.channel;
-	if (!hw->mmap_shm) {
-		info->addr = 0;
-		info->first = i.first;
-		info->step = i.step;
-		info->type = SND_PCM_AREA_MMAP;
-		info->u.mmap.fd = fd;
-		info->u.mmap.offset = i.offset;
-		return 0;
-	}
-	return snd_pcm_channel_info_shm(pcm, info, -1);
+	info->addr = 0;
+	info->first = i.first;
+	info->step = i.step;
+	info->type = SND_PCM_AREA_MMAP;
+	info->u.mmap.fd = fd;
+	info->u.mmap.offset = i.offset;
+	return 0;
 }
 
 static int snd_pcm_hw_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
@@ -781,7 +671,6 @@ static snd_pcm_sframes_t snd_pcm_hw_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_
 #endif
 	if (err < 0)
 		return snd_pcm_check_error(pcm, err);
-	UPDATE_SHADOW_PTR(hw);
 	return xferi.result;
 }
 
@@ -801,7 +690,6 @@ static snd_pcm_sframes_t snd_pcm_hw_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_u
 #endif
 	if (err < 0)
 		return snd_pcm_check_error(pcm, err);
-	UPDATE_SHADOW_PTR(hw);
 	return xfern.result;
 }
 
@@ -925,22 +813,6 @@ static snd_pcm_sframes_t snd_pcm_hw_mmap_commit(snd_pcm_t *pcm,
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
 
-	if (hw->mmap_shm) {
-		if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
-		    	snd_pcm_sframes_t result = 0, res;
-
-			do {
-				res = snd_pcm_write_mmap(pcm, size);
-				if (res < 0)
-					return result > 0 ? result : res;
-				size -= res;
-				result += res;
-			} while (size > 0);
-			return result;
-		} else {
-			assert(hw->shadow_appl_ptr);
-		}
-	}
 	snd_pcm_mmap_appl_forward(pcm, size);
 	sync_ptr(hw, 0);
 #ifdef DEBUG_MMAP
@@ -955,23 +827,7 @@ static snd_pcm_sframes_t snd_pcm_hw_avail_update(snd_pcm_t *pcm)
 	snd_pcm_uframes_t avail;
 
 	sync_ptr(hw, 0);
-	if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
-		avail = snd_pcm_mmap_playback_avail(pcm);
-	} else {
-		avail = snd_pcm_mmap_capture_avail(pcm);
-		if (avail > 0 && hw->mmap_shm) {
-			snd_pcm_sframes_t err;
-			snd_pcm_hw_t *hw = pcm->private_data;
-			hw->avail_update_flag = 1;
-			err = snd_pcm_read_mmap(pcm, avail);
-			hw->avail_update_flag = 0;
-			if (err < 0)
-				return err;
-			if ((snd_pcm_uframes_t)err != avail)
-				SNDMSG("short read %ld for avail %ld", err, avail);
-			return err;
-		}
-	}
+	avail = snd_pcm_mmap_avail(pcm);
 	switch (FAST_PCM_STATE(hw)) {
 	case SNDRV_PCM_STATE_RUNNING:
 		if (avail >= pcm->stop_threshold) {
@@ -1058,7 +914,7 @@ static snd_pcm_fast_ops_t snd_pcm_hw_fast_ops = {
  * \param pcmp Returns created PCM handle
  * \param name Name of PCM
  * \param fd File descriptor
- * \param mmap_emulation Boolean flag for mmap emulation mode
+ * \param mmap_emulation Obsoleted parameter
  * \param sync_ptr_ioctl Boolean flag for sync_ptr ioctl
  * \retval zero on success otherwise a negative error code
  * \warning Using of this function might be dangerous in the sense
@@ -1066,7 +922,8 @@ static snd_pcm_fast_ops_t snd_pcm_hw_fast_ops = {
  *          changed in future.
  */
 int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
-		       int fd, int mmap_emulation, int sync_ptr_ioctl)
+		       int fd, int mmap_emulation ATTRIBUTE_UNUSED,
+		       int sync_ptr_ioctl)
 {
 	int ver;
 	long fmode;
@@ -1139,7 +996,6 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 	hw->device = info.device;
 	hw->subdevice = info.subdevice;
 	hw->fd = fd;
-	hw->mmap_emulation = mmap_emulation;
 	hw->sync_ptr_ioctl = sync_ptr_ioctl;
 	/* no restriction */
 	hw->format = SND_PCM_FORMAT_UNKNOWN;
@@ -1159,8 +1015,6 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 	pcm->poll_fd = fd;
 	pcm->poll_events = info.stream == SND_PCM_STREAM_PLAYBACK ? POLLOUT : POLLIN;
 
-	*pcmp = pcm;
-
 	ret = snd_pcm_hw_mmap_status(pcm);
 	if (ret < 0) {
 		snd_pcm_close(pcm);
@@ -1171,6 +1025,8 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 		snd_pcm_close(pcm);
 		return ret;
 	}
+
+	*pcmp = pcm;
 	return 0;
 }
 
@@ -1183,7 +1039,7 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
  * \param subdevice Number of subdevice
  * \param stream PCM Stream
  * \param mode PCM Mode
- * \param mmap_emulation Emulate mmap access using standard r/w access
+ * \param mmap_emulation Obsoleted parameter
  * \param sync_ptr_ioctl Use SYNC_PTR ioctl rather than mmap for control structures
  * \retval zero on success otherwise a negative error code
  * \warning Using of this function might be dangerous in the sense
@@ -1193,7 +1049,8 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 int snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 		    int card, int device, int subdevice,
 		    snd_pcm_stream_t stream, int mode,
-		    int mmap_emulation, int sync_ptr_ioctl)
+		    int mmap_emulation ATTRIBUTE_UNUSED,
+		    int sync_ptr_ioctl)
 {
 	char filename[sizeof(SNDRV_FILE_PCM_STREAM_PLAYBACK) + 20];
 	const char *filefmt;
@@ -1255,7 +1112,7 @@ int snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 		}
 	}
 	snd_ctl_close(ctl);
-	return snd_pcm_hw_open_fd(pcmp, name, fd, mmap_emulation, sync_ptr_ioctl);
+	return snd_pcm_hw_open_fd(pcmp, name, fd, 0, sync_ptr_ioctl);
        _err:
 	snd_ctl_close(ctl);
 	return ret;
@@ -1281,7 +1138,6 @@ pcm.name {
 	card INT/STR		# Card name (string) or number (integer)
 	[device INT]		# Device number (default 0)
 	[subdevice INT]		# Subdevice number (default -1: first available)
-	[mmap_emulation BOOL]	# Enable mmap emulation for ro/wo devices
 	[sync_ptr_ioctl BOOL]	# Use SYNC_PTR ioctl rather than the direct mmap access for control structures
 	[nonblock BOOL]		# Force non-blocking open mode
 	[format STR]		# Restrict only to the given format
@@ -1318,7 +1174,7 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 	snd_config_iterator_t i, next;
 	long card = -1, device = 0, subdevice = -1;
 	const char *str;
-	int err, mmap_emulation = 0, sync_ptr_ioctl = 0;
+	int err, sync_ptr_ioctl = 0;
 	int rate = 0, channels = 0;
 	snd_pcm_format_t format = SND_PCM_FORMAT_UNKNOWN;
 	snd_config_t *n;
@@ -1368,13 +1224,6 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 				SNDERR("Invalid type for %s", id);
 				return err;
 			}
-			continue;
-		}
-		if (strcmp(id, "mmap_emulation") == 0) {
-			err = snd_config_get_bool(n);
-			if (err < 0)
-				continue;
-			mmap_emulation = err;
 			continue;
 		}
 		if (strcmp(id, "sync_ptr_ioctl") == 0) {
@@ -1429,7 +1278,7 @@ int _snd_pcm_hw_open(snd_pcm_t **pcmp, const char *name,
 	}
 	err = snd_pcm_hw_open(pcmp, name, card, device, subdevice, stream,
 			      mode | (nonblock ? SND_PCM_NONBLOCK : 0),
-			      mmap_emulation, sync_ptr_ioctl);
+			      0, sync_ptr_ioctl);
 	if (err < 0)
 		return err;
 	if (nonblock && ! (mode & SND_PCM_NONBLOCK)) {
