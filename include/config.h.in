@@ -12,6 +12,9 @@
 /* Directory with ALSA device files */
 #undef ALSA_DEVICE_DIRECTORY
 
+/* directory containing pkgconfig files */
+#undef ALSA_PKGCONF_DIR
+
 /* directory containing ALSA add-on modules */
 #undef ALSA_PLUGIN_DIR
 
