@@ -35,7 +35,6 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-target_triplet = @target@
 check_PROGRAMS = control$(EXEEXT) pcm$(EXEEXT) pcm_min$(EXEEXT) \
 	latency$(EXEEXT) seq$(EXEEXT) playmidi1$(EXEEXT) \
 	timer$(EXEEXT) rawmidi$(EXEEXT) midiloop$(EXEEXT) \
@@ -310,11 +309,7 @@ psdir = @psdir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
-target = @target@
 target_alias = @target_alias@
-target_cpu = @target_cpu@
-target_os = @target_os@
-target_vendor = @target_vendor@
 control_LDADD = ../src/libasound.la
 pcm_LDADD = ../src/libasound.la
 pcm_min_LDADD = ../src/libasound.la

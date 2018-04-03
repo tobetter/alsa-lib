@@ -61,7 +61,7 @@ typedef struct {
 #define ZERO_DB                  0.0
 #define MAX_DB_UPPER_LIMIT      50
 
-static unsigned int preset_dB_value[PRESET_RESOLUTION] = {
+static const unsigned int preset_dB_value[PRESET_RESOLUTION] = {
 	0x00b8, 0x00bd, 0x00c1, 0x00c5, 0x00ca, 0x00cf, 0x00d4, 0x00d9,
 	0x00de, 0x00e3, 0x00e8, 0x00ed, 0x00f3, 0x00f9, 0x00fe, 0x0104,
 	0x010a, 0x0111, 0x0117, 0x011e, 0x0124, 0x012b, 0x0132, 0x0139,
@@ -399,6 +399,7 @@ static int snd_pcm_softvol_hw_refine_cprepare(snd_pcm_t *pcm,
 {
 	int err;
 	snd_pcm_softvol_t *svol = pcm->private_data;
+	snd_pcm_access_mask_t access_mask = { SND_PCM_ACCBIT_SHM };
 	snd_pcm_format_mask_t format_mask = {
 		{
 			(1ULL << SND_PCM_FORMAT_S16_LE) |
@@ -412,6 +413,10 @@ static int snd_pcm_softvol_hw_refine_cprepare(snd_pcm_t *pcm,
 		snd_pcm_format_mask_none(&format_mask);
 		snd_pcm_format_mask_set(&format_mask, svol->sformat);
 	}
+	err = _snd_pcm_hw_param_set_mask(params, SND_PCM_HW_PARAM_ACCESS,
+					 &access_mask);
+	if (err < 0)
+		return err;
 	err = _snd_pcm_hw_param_set_mask(params, SND_PCM_HW_PARAM_FORMAT,
 					 &format_mask);
 	if (err < 0)
@@ -429,12 +434,47 @@ static int snd_pcm_softvol_hw_refine_cprepare(snd_pcm_t *pcm,
 static int snd_pcm_softvol_hw_refine_sprepare(snd_pcm_t *pcm, snd_pcm_hw_params_t *sparams)
 {
 	snd_pcm_softvol_t *svol = pcm->private_data;
+	snd_pcm_access_mask_t saccess_mask = { SND_PCM_ACCBIT_MMAP };
 	_snd_pcm_hw_params_any(sparams);
+	_snd_pcm_hw_param_set_mask(sparams, SND_PCM_HW_PARAM_ACCESS,
+				   &saccess_mask);
 	if (svol->sformat != SND_PCM_FORMAT_UNKNOWN) {
 		_snd_pcm_hw_params_set_format(sparams, svol->sformat);
 		_snd_pcm_hw_params_set_subformat(sparams, SND_PCM_SUBFORMAT_STD);
 	}
 	return 0;
+}
+
+/*
+ * refine the access mask
+ */
+static int check_access_mask(snd_pcm_hw_params_t *src,
+			     snd_pcm_hw_params_t *dst)
+{
+	const snd_pcm_access_mask_t *mask;
+	snd_pcm_access_mask_t smask;
+
+	mask = snd_pcm_hw_param_get_mask(src, SND_PCM_HW_PARAM_ACCESS);
+	snd_mask_none(&smask);
+	if (snd_pcm_access_mask_test(mask, SND_PCM_ACCESS_RW_INTERLEAVED) ||
+	    snd_pcm_access_mask_test(mask, SND_PCM_ACCESS_MMAP_INTERLEAVED)) {
+		snd_pcm_access_mask_set(&smask,
+					SND_PCM_ACCESS_RW_INTERLEAVED);
+		snd_pcm_access_mask_set(&smask,
+					SND_PCM_ACCESS_MMAP_INTERLEAVED);
+	}
+	if (snd_pcm_access_mask_test(mask, SND_PCM_ACCESS_RW_NONINTERLEAVED) ||
+	    snd_pcm_access_mask_test(mask, SND_PCM_ACCESS_MMAP_NONINTERLEAVED))  {
+		snd_pcm_access_mask_set(&smask,
+					SND_PCM_ACCESS_RW_NONINTERLEAVED);
+		snd_pcm_access_mask_set(&smask,
+					SND_PCM_ACCESS_MMAP_NONINTERLEAVED);
+	}
+	if (snd_pcm_access_mask_test(mask, SND_PCM_ACCESS_MMAP_COMPLEX))
+		snd_pcm_access_mask_set(&smask,
+					SND_PCM_ACCESS_MMAP_COMPLEX);
+
+	return _snd_pcm_hw_param_set_mask(dst, SND_PCM_HW_PARAM_ACCESS, &smask);
 }
 
 static int snd_pcm_softvol_hw_refine_schange(snd_pcm_t *pcm,
@@ -443,8 +483,7 @@ static int snd_pcm_softvol_hw_refine_schange(snd_pcm_t *pcm,
 {
 	snd_pcm_softvol_t *svol = pcm->private_data;
 	int err;
-	unsigned int links = (SND_PCM_HW_PARBIT_ACCESS |
-			      SND_PCM_HW_PARBIT_CHANNELS |
+	unsigned int links = (SND_PCM_HW_PARBIT_CHANNELS |
 			      SND_PCM_HW_PARBIT_RATE |
 			      SND_PCM_HW_PARBIT_PERIODS |
 			      SND_PCM_HW_PARBIT_PERIOD_SIZE |
@@ -459,6 +498,11 @@ static int snd_pcm_softvol_hw_refine_schange(snd_pcm_t *pcm,
 	err = _snd_pcm_hw_params_refine(sparams, links, params);
 	if (err < 0)
 		return err;
+
+	err = check_access_mask(params, sparams);
+	if (err < 0)
+		return err;
+
 	return 0;
 }
 	
@@ -468,8 +512,7 @@ static int snd_pcm_softvol_hw_refine_cchange(snd_pcm_t *pcm,
 {
 	snd_pcm_softvol_t *svol = pcm->private_data;
 	int err;
-	unsigned int links = (SND_PCM_HW_PARBIT_ACCESS |
-			      SND_PCM_HW_PARBIT_CHANNELS |
+	unsigned int links = (SND_PCM_HW_PARBIT_CHANNELS |
 			      SND_PCM_HW_PARBIT_RATE |
 			      SND_PCM_HW_PARBIT_PERIODS |
 			      SND_PCM_HW_PARBIT_PERIOD_SIZE |
@@ -484,6 +527,11 @@ static int snd_pcm_softvol_hw_refine_cchange(snd_pcm_t *pcm,
 	err = _snd_pcm_hw_params_refine(params, links, sparams);
 	if (err < 0)
 		return err;
+
+	err = check_access_mask(sparams, params);
+	if (err < 0)
+		return err;
+
 	return 0;
 }
 
@@ -714,7 +762,7 @@ static int softvol_load_control(snd_pcm_t *pcm, snd_pcm_softvol_t *svol,
 
 	/* set up dB table */
 	if (min_dB == PRESET_MIN_DB && max_dB == ZERO_DB && resolution == PRESET_RESOLUTION)
-		svol->dB_value = preset_dB_value;
+		svol->dB_value = (unsigned int*)preset_dB_value;
 	else {
 #ifndef HAVE_SOFT_FLOAT
 		svol->dB_value = calloc(resolution, sizeof(unsigned int));
@@ -739,7 +787,7 @@ static int softvol_load_control(snd_pcm_t *pcm, snd_pcm_softvol_t *svol,
 	return 0;
 }
 
-static snd_pcm_ops_t snd_pcm_softvol_ops = {
+static const snd_pcm_ops_t snd_pcm_softvol_ops = {
 	.close = snd_pcm_softvol_close,
 	.info = snd_pcm_generic_info,
 	.hw_refine = snd_pcm_softvol_hw_refine,

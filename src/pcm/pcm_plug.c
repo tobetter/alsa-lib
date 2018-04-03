@@ -87,7 +87,7 @@ static int snd_pcm_plug_info(snd_pcm_t *pcm, snd_pcm_info_t *info)
 	return 0;
 }
 
-static snd_pcm_format_t linear_preferred_formats[] = {
+static const snd_pcm_format_t linear_preferred_formats[] = {
 #ifdef SND_LITTLE_ENDIAN
 	SND_PCM_FORMAT_S16_LE,
 	SND_PCM_FORMAT_U16_LE,
@@ -176,7 +176,7 @@ static snd_pcm_format_t linear_preferred_formats[] = {
 #endif
 
 #ifdef BUILD_PCM_NONLINEAR
-static snd_pcm_format_t nonlinear_preferred_formats[] = {
+static const snd_pcm_format_t nonlinear_preferred_formats[] = {
 #ifdef BUILD_PCM_PLUGIN_MULAW
 	SND_PCM_FORMAT_MU_LAW,
 #endif
@@ -190,7 +190,7 @@ static snd_pcm_format_t nonlinear_preferred_formats[] = {
 #endif
 
 #ifdef BUILD_PCM_PLUGIN_LFLOAT
-static snd_pcm_format_t float_preferred_formats[] = {
+static const snd_pcm_format_t float_preferred_formats[] = {
 #ifdef SND_LITTLE_ENDIAN
 	SND_PCM_FORMAT_FLOAT_LE,
 	SND_PCM_FORMAT_FLOAT64_LE,
@@ -205,7 +205,7 @@ static snd_pcm_format_t float_preferred_formats[] = {
 };
 #endif
 
-static char linear_format_widths[32] = {
+static const char linear_format_widths[32] = {
 	0, 0, 0, 0, 0, 0, 0, 1,
 	0, 0, 0, 0, 0, 0, 0, 1,
 	0, 1, 0, 1, 0, 0, 0, 1,
@@ -615,7 +615,7 @@ static int snd_pcm_plug_insert_plugins(snd_pcm_t *pcm,
 				       snd_pcm_plug_params_t *slave)
 {
 	snd_pcm_plug_t *plug = pcm->private_data;
-	static int (*funcs[])(snd_pcm_t *_pcm, snd_pcm_t **new, snd_pcm_plug_params_t *s, snd_pcm_plug_params_t *d) = {
+	static int (*const funcs[])(snd_pcm_t *_pcm, snd_pcm_t **new, snd_pcm_plug_params_t *s, snd_pcm_plug_params_t *d) = {
 #ifdef BUILD_PCM_PLUGIN_MMAP_EMUL
 		snd_pcm_plug_change_mmap,
 #endif
@@ -1051,7 +1051,7 @@ static void snd_pcm_plug_dump(snd_pcm_t *pcm, snd_output_t *out)
 	snd_pcm_dump(plug->gen.slave, out);
 }
 
-static snd_pcm_ops_t snd_pcm_plug_ops = {
+static const snd_pcm_ops_t snd_pcm_plug_ops = {
 	.close = snd_pcm_plug_close,
 	.info = snd_pcm_plug_info,
 	.hw_refine = snd_pcm_plug_hw_refine,
