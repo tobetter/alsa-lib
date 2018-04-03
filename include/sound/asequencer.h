@@ -317,7 +317,7 @@ struct sndrv_seq_ev_sample_control {
 		struct sndrv_seq_ev_sample sample;
 		struct sndrv_seq_ev_cluster cluster;
 		sndrv_seq_position_t position;
-		enum sndrv_seq_stop_mode stop_mode;
+		int stop_mode;
 		sndrv_seq_frequency_t frequency;
 		struct sndrv_seq_ev_volume volume;
 		struct sndrv_seq_ev_loop loop;
@@ -521,7 +521,7 @@ enum sndrv_seq_client_type {
 
 struct sndrv_seq_client_info {
 	int client;			/* client number to inquire */
-	enum sndrv_seq_client_type type;	/* client type */
+	int type;			/* client type */
 	char name[64];			/* client name */
 	unsigned int filter;		/* filter flags */
 	unsigned char multicast_filter[8]; /* multicast filter bitmap */
@@ -605,6 +605,10 @@ struct sndrv_seq_remove_events {
 #define SNDRV_SEQ_PORT_TYPE_DIRECT_SAMPLE (1<<11)	/* Sampling device (support sample download) */
 #define SNDRV_SEQ_PORT_TYPE_SAMPLE	(1<<12)	/* Sampling device (sample can be downloaded at any time) */
 /*...*/
+#define SNDRV_SEQ_PORT_TYPE_HARDWARE	(1<<16)	/* driver for a hardware device */
+#define SNDRV_SEQ_PORT_TYPE_SOFTWARE	(1<<17)	/* implemented in software */
+#define SNDRV_SEQ_PORT_TYPE_SYNTHESIZER	(1<<18)	/* generates sound */
+#define SNDRV_SEQ_PORT_TYPE_PORT	(1<<19)	/* connects to other device(s) */
 #define SNDRV_SEQ_PORT_TYPE_APPLICATION	(1<<20)	/* application (sequencer/editor) */
 
 /* misc. conditioning flags */

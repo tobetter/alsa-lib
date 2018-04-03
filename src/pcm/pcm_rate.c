@@ -68,6 +68,8 @@ struct _snd_pcm_rate {
 	unsigned int put_idx;
 	int16_t *src_buf;
 	int16_t *dst_buf;
+	int start_pending; /* start is triggered but not commited to slave */
+	snd_htimestamp_t trigger_tstamp;
 };
 
 #endif /* DOC_HIDDEN */
@@ -362,10 +364,15 @@ static int snd_pcm_rate_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 	snd_pcm_rate_t *rate = pcm->private_data;
 	snd_pcm_t *slave = rate->gen.slave;
 	snd_pcm_sw_params_t *sparams;
-	snd_pcm_uframes_t boundary1, boundary2;
+	snd_pcm_uframes_t boundary1, boundary2, sboundary;
+	int err;
 
-	rate->sw_params = *params;
 	sparams = &rate->sw_params;
+	err = snd_pcm_sw_params_current(slave, sparams);
+	if (err < 0)
+		return err;
+	sboundary = sparams->boundary;
+	*sparams = *params;
 	boundary1 = pcm->buffer_size;
 	boundary2 = slave->buffer_size;
 	while (boundary1 * 2 <= LONG_MAX - pcm->buffer_size &&
@@ -374,7 +381,7 @@ static int snd_pcm_rate_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 		boundary2 *= 2;
 	}
 	params->boundary = boundary1;
-	sparams->boundary = boundary2;
+	sparams->boundary = sboundary;
 
 	if (rate->ops.adjust_pitch)
 		rate->ops.adjust_pitch(rate->obj, &rate->info);
@@ -391,13 +398,17 @@ static int snd_pcm_rate_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 		if (sparams->start_threshold > (slave->buffer_size / sparams->xfer_align) * sparams->xfer_align)
 			sparams->start_threshold = (slave->buffer_size / sparams->xfer_align) * sparams->xfer_align;
 	}
-	if (sparams->stop_threshold >= sparams->boundary) {
+	if (sparams->stop_threshold >= params->boundary) {
 		sparams->stop_threshold = sparams->boundary;
 	} else {
 		recalc(pcm, &sparams->stop_threshold);
 	}
 	recalc(pcm, &sparams->silence_threshold);
-	recalc(pcm, &sparams->silence_size);
+	if (sparams->silence_size >= params->boundary) {
+		sparams->silence_size = sparams->boundary;
+	} else {
+		recalc(pcm, &sparams->silence_size);
+	}
 	return snd_pcm_sw_params(slave, sparams);
 }
 
@@ -408,6 +419,7 @@ static int snd_pcm_rate_init(snd_pcm_t *pcm)
 	if (rate->ops.reset)
 		rate->ops.reset(rate->obj);
 	rate->last_commit_ptr = 0;
+	rate->start_pending = 0;
 	return 0;
 }
 
@@ -416,9 +428,11 @@ static void convert_to_s16(snd_pcm_rate_t *rate, int16_t *buf,
 			   snd_pcm_uframes_t offset, unsigned int frames,
 			   unsigned int channels)
 {
+#ifndef DOC_HIDDEN
 #define GET16_LABELS
 #include "plugin_ops.h"
 #undef GET16_LABELS
+#endif /* DOC_HIDDEN */
 	void *get = get16_labels[rate->get_idx];
 	const char *src;
 	int16_t sample;
@@ -435,9 +449,11 @@ static void convert_to_s16(snd_pcm_rate_t *rate, int16_t *buf,
 		for (c = 0; c < channels; c++) {
 			src = srcs[c];
 			goto *get;
+#ifndef DOC_HIDDEN
 #define GET16_END after_get
 #include "plugin_ops.h"
 #undef GET16_END
+#endif /* DOC_HIDDEN */
 		after_get:
 			*buf++ = sample;
 			srcs[c] += src_step[c];
@@ -450,9 +466,11 @@ static void convert_from_s16(snd_pcm_rate_t *rate, const int16_t *buf,
 			     snd_pcm_uframes_t offset, unsigned int frames,
 			     unsigned int channels)
 {
+#ifndef DOC_HIDDEN
 #define PUT16_LABELS
 #include "plugin_ops.h"
 #undef PUT16_LABELS
+#endif /* DOC_HIDDEN */
 	void *put = put16_labels[rate->put_idx];
 	char *dst;
 	int16_t sample;
@@ -470,9 +488,11 @@ static void convert_from_s16(snd_pcm_rate_t *rate, const int16_t *buf,
 			dst = dsts[c];
 			sample = *buf++;
 			goto *put;
+#ifndef DOC_HIDDEN
 #define PUT16_END after_put
 #include "plugin_ops.h"
 #undef PUT16_END
+#endif /* DOC_HIDDEN */
 		after_put:
 			dsts[c] += dst_step[c];
 		}
@@ -600,7 +620,7 @@ static inline void snd_pcm_rate_sync_hwptr(snd_pcm_t *pcm)
 	 */
 	rate->hw_ptr =
 		(slave_hw_ptr / rate->gen.slave->period_size) * pcm->period_size +
-		rate->ops.output_frames(rate->obj, slave_hw_ptr % rate->gen.slave->period_size);
+		rate->ops.input_frames(rate->obj, slave_hw_ptr % rate->gen.slave->period_size);
 }
 
 static int snd_pcm_rate_hwsync(snd_pcm_t *pcm)
@@ -797,7 +817,7 @@ static int snd_pcm_rate_commit_area(snd_pcm_t *pcm, snd_pcm_rate_t *rate,
 		xfer = cont;
 
 		if (xfer == slave_size)
-			return 1;
+			goto commit_done;
 		
 		/* commit second fragment */
 		cont = slave_size - cont;
@@ -824,6 +844,13 @@ static int snd_pcm_rate_commit_area(snd_pcm_t *pcm, snd_pcm_rate_t *rate,
 				return result;
 			return 0;
 		}
+	}
+
+ commit_done:
+	if (rate->start_pending) {
+		/* we have pending start-trigger.  let's issue it now */
+		snd_pcm_start(rate->gen.slave);
+		rate->start_pending = 0;
 	}
 	return 1;
 }
@@ -1083,6 +1110,41 @@ static int snd_pcm_rate_drain(snd_pcm_t *pcm)
 	return snd_pcm_drain(rate->gen.slave);
 }
 
+static snd_pcm_state_t snd_pcm_rate_state(snd_pcm_t *pcm)
+{
+	snd_pcm_rate_t *rate = pcm->private_data;
+	if (rate->start_pending) /* pseudo-state */
+		return SND_PCM_STATE_RUNNING;
+	return snd_pcm_state(rate->gen.slave);
+}
+
+
+static int snd_pcm_rate_start(snd_pcm_t *pcm)
+{
+	snd_pcm_rate_t *rate = pcm->private_data;
+	snd_pcm_uframes_t avail;
+	struct timeval tv;
+		
+	if (pcm->stream == SND_PCM_STREAM_CAPTURE)
+		return snd_pcm_start(rate->gen.slave);
+
+	if (snd_pcm_state(rate->gen.slave) != SND_PCM_STATE_PREPARED)
+		return -EBADFD;
+
+	gettimeofday(&tv, 0);
+	rate->trigger_tstamp.tv_sec = tv.tv_sec;
+	rate->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+
+	avail = snd_pcm_mmap_playback_hw_avail(rate->gen.slave);
+	if (avail == 0) {
+		/* postpone the trigger since we have no data committed yet */
+		rate->start_pending = 1;
+		return 0;
+	}
+	rate->start_pending = 0;
+	return snd_pcm_start(rate->gen.slave);
+}
+
 static int snd_pcm_rate_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 {
 	snd_pcm_rate_t *rate = pcm->private_data;
@@ -1095,6 +1157,11 @@ static int snd_pcm_rate_status(snd_pcm_t *pcm, snd_pcm_status_t * status)
 	if (err < 0) {
 		snd_atomic_read_ok(&ratom);
 		return err;
+	}
+	if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
+		if (rate->start_pending)
+			status->state = SND_PCM_STATE_RUNNING;
+		status->trigger_tstamp = rate->trigger_tstamp;
 	}
 	snd_pcm_rate_sync_hwptr(pcm);
 	status->appl_ptr = *pcm->appl.ptr;
@@ -1144,12 +1211,12 @@ static int snd_pcm_rate_close(snd_pcm_t *pcm)
 
 static snd_pcm_fast_ops_t snd_pcm_rate_fast_ops = {
 	.status = snd_pcm_rate_status,
-	.state = snd_pcm_generic_state,
+	.state = snd_pcm_rate_state,
 	.hwsync = snd_pcm_rate_hwsync,
 	.delay = snd_pcm_rate_delay,
 	.prepare = snd_pcm_rate_prepare,
 	.reset = snd_pcm_rate_reset,
-	.start = snd_pcm_generic_start,
+	.start = snd_pcm_rate_start,
 	.drop = snd_pcm_generic_drop,
 	.drain = snd_pcm_rate_drain,
 	.pause = snd_pcm_generic_pause,
@@ -1385,9 +1452,6 @@ int _snd_pcm_rate_open(snd_pcm_t **pcmp, const char *name,
 	if (!slave) {
 		SNDERR("slave is not defined");
 		return -EINVAL;
-	}
-
-	if (! type) {
 	}
 
 	err = snd_pcm_slave_conf(root, slave, &sconf, 2,

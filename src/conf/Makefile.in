@@ -37,6 +37,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@BUILD_ALISP_TRUE@am__append_1 = sndo-mixer.alisp
 subdir = src/conf
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -79,6 +80,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BUILD_ALISP_FALSE = @BUILD_ALISP_FALSE@
+BUILD_ALISP_TRUE = @BUILD_ALISP_TRUE@
 BUILD_HWDEP_FALSE = @BUILD_HWDEP_FALSE@
 BUILD_HWDEP_TRUE = @BUILD_HWDEP_TRUE@
 BUILD_INSTR_FALSE = @BUILD_INSTR_FALSE@
@@ -245,9 +248,7 @@ target_cpu = @target_cpu@
 target_os = @target_os@
 target_vendor = @target_vendor@
 SUBDIRS = cards pcm
-cfg_files = alsa.conf \
-	sndo-mixer.alisp
-
+cfg_files = alsa.conf $(am__append_1)
 EXTRA_DIST = $(cfg_files)
 alsadir = $(datadir)/alsa
 alsa_DATA = $(cfg_files)

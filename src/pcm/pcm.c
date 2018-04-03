@@ -600,39 +600,34 @@ The null device is null plugin. This device has not any arguments.
 
 \section pcm_examples Examples
 
-The full featured examples with cross-links:
+The full featured examples with cross-links can be found in Examples section
+(see top of page):
 
+\anchor example_test_pcm
 \par Sine-wave generator
-\ref example_test_pcm "example code"
 \par
-This example shows various transfer methods for the playback direction.
+alsa-lib/test/pcm.c example shows various transfer methods for the playback direction.
 
 \par Minimalistic PCM playback code
-\ref example_test_pcm_min "example code"
 \par
-This example shows the minimal code to produce a sound.
+alsa-lib/test/pcm_min.c example shows the minimal code to produce a sound.
 
 \par Latency measuring tool
-\ref example_test_latency "example code"
 \par
-This example shows the measuring of minimal latency between capture and
+alsa-lib/test/latency.c example shows the measuring of minimal latency between capture and
 playback devices.
 
 */
 
 /**
- * \example ../test/pcm.c
- * \anchor example_test_pcm
- */
+\example ../../test/pcm.c
+*/
 /**
- * \example ../test/pcm_min.c
- * \anchor example_test_pcm_min
- */
+\example ../../test/pcm_min.c
+*/
 /**
- * \example ../test/latency.c
- * \anchor example_test_latency
- */
-
+\example ../../test/latency.c
+*/
 
 #include <stdio.h>
 #include <string.h>
@@ -1788,7 +1783,9 @@ int snd_pcm_dump_hw_setup(snd_pcm_t *pcm, snd_output_t *out)
 	snd_output_printf(out, "  subformat    : %s\n", snd_pcm_subformat_name(pcm->subformat));
 	snd_output_printf(out, "  channels     : %u\n", pcm->channels);
 	snd_output_printf(out, "  rate         : %u\n", pcm->rate);
-	snd_output_printf(out, "  exact rate   : %g (%u/%u)\n", (double) pcm->rate_num / pcm->rate_den, pcm->rate_num, pcm->rate_den);
+	snd_output_printf(out, "  exact rate   : %g (%u/%u)\n",
+			  (pcm->rate_den ? ((double) pcm->rate_num / pcm->rate_den) : 0.0),
+			  pcm->rate_num, pcm->rate_den);
 	snd_output_printf(out, "  msbits       : %u\n", pcm->msbits);
 	snd_output_printf(out, "  buffer_size  : %lu\n", pcm->buffer_size);
 	snd_output_printf(out, "  period_size  : %lu\n", pcm->period_size);
