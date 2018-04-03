@@ -102,7 +102,7 @@ typedef struct {
 
 #define SNDRV_FILE_PCM_STREAM_PLAYBACK		ALSA_DEVICE_DIRECTORY "pcmC%iD%ip"
 #define SNDRV_FILE_PCM_STREAM_CAPTURE		ALSA_DEVICE_DIRECTORY "pcmC%iD%ic"
-#define SNDRV_PCM_VERSION_MAX			SNDRV_PROTOCOL_VERSION(2, 0, 5)
+#define SNDRV_PCM_VERSION_MAX			SNDRV_PROTOCOL_VERSION(2, 0, 9)
 
 /* update appl_ptr with driver */
 #define FAST_PCM_STATE(hw) \
@@ -294,8 +294,6 @@ static int snd_pcm_hw_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 	int fd = hw->fd, err;
 	if ((snd_pcm_tstamp_t) params->tstamp_mode == pcm->tstamp_mode &&
 	    params->period_step == pcm->period_step &&
-	    params->sleep_min == pcm->sleep_min &&
-	    params->xfer_align == pcm->xfer_align &&
 	    params->start_threshold == pcm->start_threshold &&
 	    params->stop_threshold == pcm->stop_threshold &&
 	    params->silence_threshold == pcm->silence_threshold &&
@@ -848,6 +846,26 @@ static snd_pcm_sframes_t snd_pcm_hw_avail_update(snd_pcm_t *pcm)
 	return avail;
 }
 
+static int snd_pcm_hw_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
+				 snd_htimestamp_t *tstamp)
+{
+	snd_pcm_sframes_t avail1;
+	int ok = 0;
+
+	/* unfortunately, loop is necessary to ensure valid timestamp */
+	while (1) {
+		avail1 = snd_pcm_hw_avail_update(pcm);
+		if (avail1 < 0)
+			return avail1;
+		if (ok && (snd_pcm_uframes_t)avail1 == *avail)
+			break;
+		*avail = avail1;
+		*tstamp = snd_pcm_hw_fast_tstamp(pcm);
+		ok = 1;
+	}
+	return 0;
+}
+
 static void snd_pcm_hw_dump(snd_pcm_t *pcm, snd_output_t *out)
 {
 	snd_pcm_hw_t *hw = pcm->private_data;
@@ -904,6 +922,7 @@ static snd_pcm_fast_ops_t snd_pcm_hw_fast_ops = {
 	.readn = snd_pcm_hw_readn,
 	.avail_update = snd_pcm_hw_avail_update,
 	.mmap_commit = snd_pcm_hw_mmap_commit,
+	.htimestamp = snd_pcm_hw_htimestamp,
 	.poll_descriptors = NULL,
 	.poll_descriptors_count = NULL,
 	.poll_revents = NULL,
@@ -925,9 +944,8 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 		       int fd, int mmap_emulation ATTRIBUTE_UNUSED,
 		       int sync_ptr_ioctl)
 {
-	int ver;
+	int ver, mode, monotonic = 0;
 	long fmode;
-	int mode;
 	snd_pcm_t *pcm = NULL;
 	snd_pcm_hw_t *hw = NULL;
 	snd_pcm_info_t info;
@@ -976,13 +994,27 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 	if (SNDRV_PROTOCOL_INCOMPATIBLE(ver, SNDRV_PCM_VERSION_MAX))
 		return -SND_ERROR_INCOMPATIBLE_VERSION;
 
-	if (SNDRV_PROTOCOL_VERSION(2, 0, 5) <= ver) {
+#ifdef HAVE_CLOCK_GETTIME
+	if (SNDRV_PROTOCOL_VERSION(2, 0, 9) <= ver) {
+		struct timespec timespec;
+		if (clock_gettime(CLOCK_MONOTONIC, &timespec) == 0) {
+			int on = SNDRV_PCM_TSTAMP_TYPE_MONOTONIC;
+			if (ioctl(fd, SNDRV_PCM_IOCTL_TTSTAMP, &on) < 0) {
+				ret = -errno;
+				SNDMSG("TTSTAMP failed\n");
+				return ret;
+			}
+			monotonic = 1;
+		}
+	}
+#endif
+	  else if (SNDRV_PROTOCOL_VERSION(2, 0, 5) <= ver) {
 		int on = 1;
 		if (ioctl(fd, SNDRV_PCM_IOCTL_TSTAMP, &on) < 0) {
 			ret = -errno;
 			SNDMSG("TSTAMP failed\n");
 			return ret;
-		}			
+		}
 	}
 	
 	hw = calloc(1, sizeof(snd_pcm_hw_t));
@@ -1014,6 +1046,7 @@ int snd_pcm_hw_open_fd(snd_pcm_t **pcmp, const char *name,
 	pcm->private_data = hw;
 	pcm->poll_fd = fd;
 	pcm->poll_events = info.stream == SND_PCM_STREAM_PLAYBACK ? POLLOUT : POLLIN;
+	pcm->monotonic = monotonic;
 
 	ret = snd_pcm_hw_mmap_status(pcm);
 	if (ret < 0) {

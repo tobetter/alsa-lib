@@ -59,6 +59,7 @@ typedef struct snd_pcm_ioplug_callback snd_pcm_ioplug_callback_t;
  * bit flags for additional conditions
  */
 #define SND_PCM_IOPLUG_FLAG_LISTED	(1<<0)		/* list up this PCM */
+#define SND_PCM_IOPLUG_FLAG_MONOTONIC	(1<<1)		/* monotonic timestamps */
 
 /*
  * Protocol version
@@ -207,6 +208,9 @@ void snd_pcm_ioplug_params_reset(snd_pcm_ioplug_t *io);
 /* hw_parameter setting */
 int snd_pcm_ioplug_set_param_minmax(snd_pcm_ioplug_t *io, int type, unsigned int min, unsigned int max);
 int snd_pcm_ioplug_set_param_list(snd_pcm_ioplug_t *io, int type, unsigned int num_list, const unsigned int *list);
+
+/* change PCM status */
+int snd_pcm_ioplug_set_state(snd_pcm_ioplug_t *ioplug, snd_pcm_state_t state);
 
 /** \} */
 

@@ -536,6 +536,7 @@ static snd_pcm_fast_ops_t snd_pcm_meter_fast_ops = {
 	.readn = snd_pcm_mmap_readn,
 	.avail_update = snd_pcm_meter_avail_update,
 	.mmap_commit = snd_pcm_meter_mmap_commit,
+	.htimestamp = snd_pcm_generic_htimestamp,
 	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
 	.poll_descriptors = snd_pcm_generic_poll_descriptors,
 	.poll_revents = snd_pcm_generic_poll_revents,
@@ -581,6 +582,7 @@ int snd_pcm_meter_open(snd_pcm_t **pcmp, const char *name, unsigned int frequenc
 	pcm->private_data = meter;
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
+	pcm->monotonic = slave->monotonic;
 	snd_pcm_link_hw_ptr(pcm, slave);
 	snd_pcm_link_appl_ptr(pcm, slave);
 	*pcmp = pcm;

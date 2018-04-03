@@ -159,6 +159,7 @@ static snd_pcm_fast_ops_t snd_pcm_hooks_fast_ops = {
 	.readn = snd_pcm_generic_readn,
 	.avail_update = snd_pcm_generic_avail_update,
 	.mmap_commit = snd_pcm_generic_mmap_commit,
+	.htimestamp = snd_pcm_generic_htimestamp,
 	.poll_descriptors_count = snd_pcm_generic_poll_descriptors_count,
 	.poll_descriptors = snd_pcm_generic_poll_descriptors,
 	.poll_revents = snd_pcm_generic_poll_revents,
@@ -201,6 +202,7 @@ int snd_pcm_hooks_open(snd_pcm_t **pcmp, const char *name, snd_pcm_t *slave, int
 	pcm->poll_fd = slave->poll_fd;
 	pcm->poll_events = slave->poll_events;
 	pcm->mmap_shadow = 1;
+	pcm->monotonic = slave->monotonic;
 	snd_pcm_link_hw_ptr(pcm, slave);
 	snd_pcm_link_appl_ptr(pcm, slave);
 	*pcmp = pcm;
@@ -386,10 +388,12 @@ static int snd_pcm_hook_add_conf(snd_pcm_t *pcm, snd_config_t *root, snd_config_
 	install_func = h ? snd_dlsym(h, install, SND_DLSYM_VERSION(SND_PCM_DLSYM_VERSION)) : NULL;
 	err = 0;
 	if (!h) {
-		SNDERR("Cannot open shared library %s", lib);
+		SNDERR("Cannot open shared library %s",
+		       lib ? lib : "[builtin]");
 		err = -ENOENT;
 	} else if (!install_func) {
-		SNDERR("symbol %s is not defined inside %s", install, lib);
+		SNDERR("symbol %s is not defined inside %s", install,
+		       lib ? lib : "[builtin]");
 		snd_dlclose(h);
 		err = -ENXIO;
 	}
@@ -657,6 +661,7 @@ int _snd_pcm_hook_ctl_elems_install(snd_pcm_t *pcm, snd_config_t *conf)
 			       snd_pcm_hook_ctl_elems_close, sctl);
 	if (err < 0)
 		goto _err;
+	snd_config_delete(pcm_conf);
 	return 0;
  _err:
 	if (h_hw_params)

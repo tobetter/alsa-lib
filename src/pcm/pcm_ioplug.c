@@ -29,6 +29,7 @@
 #include "pcm_local.h"
 #include "pcm_ioplug.h"
 #include "pcm_ext_parm.h"
+#include "pcm_generic.h"
 
 #ifndef PIC
 /* entry for static linking */
@@ -313,7 +314,7 @@ static int snd_pcm_ioplug_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		if (err < 0)
 			return err;
 		change2 |= err;
-		/* periods = buffer_bytes / periods */
+		/* periods = buffer_bytes / period_bytes */
 		err = rule_div(params, SND_PCM_HW_PARAM_PERIODS,
 			       SND_PCM_HW_PARAM_BUFFER_BYTES,
 			       SND_PCM_HW_PARAM_PERIOD_BYTES);
@@ -340,6 +341,26 @@ static int snd_pcm_ioplug_hw_refine(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 		err = refine_back_time_and_size(params, SND_PCM_HW_PARAM_BUFFER_TIME,
 						SND_PCM_HW_PARAM_BUFFER_SIZE,
 						SND_PCM_HW_PARAM_BUFFER_BYTES);
+		if (err < 0)
+			return err;
+	}
+
+	/* period_bytes = buffer_bytes / periods */
+	err = rule_div(params, SND_PCM_HW_PARAM_PERIOD_BYTES,
+		       SND_PCM_HW_PARAM_BUFFER_BYTES,
+		       SND_PCM_HW_PARAM_PERIODS);
+	if (err < 0)
+		return err;
+	if (err) {
+		/* update period_size and period_time */
+		change |= err;
+		err = snd_ext_parm_interval_refine(hw_param_interval(params, SND_PCM_HW_PARAM_PERIOD_BYTES),
+						   io->params, SND_PCM_IOPLUG_HW_PERIOD_BYTES);
+		if (err < 0)
+			return err;
+		err = refine_back_time_and_size(params, SND_PCM_HW_PARAM_PERIOD_TIME,
+						SND_PCM_HW_PARAM_PERIOD_SIZE,
+						SND_PCM_HW_PARAM_PERIOD_BYTES);
 		if (err < 0)
 			return err;
 	}
@@ -418,7 +439,6 @@ static int snd_pcm_ioplug_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 static int snd_pcm_ioplug_start(snd_pcm_t *pcm)
 {
 	ioplug_priv_t *io = pcm->private_data;
-	struct timeval tv;
 	int err;
 	
 	if (io->data->state != SND_PCM_STATE_PREPARED)
@@ -428,9 +448,7 @@ static int snd_pcm_ioplug_start(snd_pcm_t *pcm)
 	if (err < 0)
 		return err;
 
-	gettimeofday(&tv, 0);
-	io->trigger_tstamp.tv_sec = tv.tv_sec;
-	io->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+	gettimestamp(&io->trigger_tstamp, pcm->monotonic);
 	io->data->state = SND_PCM_STATE_RUNNING;
 
 	return 0;
@@ -439,16 +457,13 @@ static int snd_pcm_ioplug_start(snd_pcm_t *pcm)
 static int snd_pcm_ioplug_drop(snd_pcm_t *pcm)
 {
 	ioplug_priv_t *io = pcm->private_data;
-	struct timeval tv;
 
 	if (io->data->state == SND_PCM_STATE_OPEN)
 		return -EBADFD;
 
 	io->data->callback->stop(io->data);
 
-	gettimeofday(&tv, 0);
-	io->trigger_tstamp.tv_sec = tv.tv_sec;
-	io->trigger_tstamp.tv_nsec = tv.tv_usec * 1000L;
+	gettimestamp(&io->trigger_tstamp, pcm->monotonic);
 	io->data->state = SND_PCM_STATE_SETUP;
 
 	return 0;
@@ -600,6 +615,8 @@ static snd_pcm_sframes_t snd_pcm_ioplug_avail_update(snd_pcm_t *pcm)
 	snd_pcm_uframes_t avail;
 
 	snd_pcm_ioplug_hw_ptr_update(pcm);
+	if (io->data->state == SNDRV_PCM_STATE_XRUN)
+		return -EPIPE;
 	if (pcm->stream == SND_PCM_STREAM_CAPTURE &&
 	    pcm->access != SND_PCM_ACCESS_RW_INTERLEAVED &&
 	    pcm->access != SND_PCM_ACCESS_RW_NONINTERLEAVED) {
@@ -758,6 +775,7 @@ static snd_pcm_fast_ops_t snd_pcm_ioplug_fast_ops = {
 	.readn = snd_pcm_ioplug_readn,
 	.avail_update = snd_pcm_ioplug_avail_update,
 	.mmap_commit = snd_pcm_ioplug_mmap_commit,
+	.htimestamp = snd_pcm_generic_real_htimestamp,
 	.poll_descriptors_count = snd_pcm_ioplug_poll_descriptors_count,
 	.poll_descriptors = snd_pcm_ioplug_poll_descriptors,
 	.poll_revents = snd_pcm_ioplug_poll_revents,
@@ -1005,6 +1023,7 @@ int snd_pcm_ioplug_reinit_status(snd_pcm_ioplug_t *ioplug)
 {
 	ioplug->pcm->poll_fd = ioplug->poll_fd;
 	ioplug->pcm->poll_events = ioplug->poll_events;
+	ioplug->pcm->monotonic = (ioplug->flags & SND_PCM_IOPLUG_FLAG_MONOTONIC) != 0;
 	ioplug->pcm->mmap_rw = ioplug->mmap_rw;
 	return 0;
 }
@@ -1022,4 +1041,20 @@ const snd_pcm_channel_area_t *snd_pcm_ioplug_mmap_areas(snd_pcm_ioplug_t *ioplug
 	if (ioplug->mmap_rw)
 		return snd_pcm_mmap_areas(ioplug->pcm);
 	return NULL;
+}
+
+/**
+ * \brief Change the ioplug PCM status
+ * \param ioplug the ioplug handle
+ * \param state the PCM status
+ * \return zero if successful or a negative error code
+ *
+ * Changes the PCM status of the ioplug to the given value.
+ * This function can be used for external plugins to notify the status
+ * change, e.g. XRUN.
+ */
+int snd_pcm_ioplug_set_state(snd_pcm_ioplug_t *ioplug, snd_pcm_state_t state)
+{
+	ioplug->state = state;
+	return 0;
 }

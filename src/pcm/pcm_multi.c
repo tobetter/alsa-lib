@@ -431,6 +431,14 @@ static snd_pcm_sframes_t snd_pcm_multi_avail_update(snd_pcm_t *pcm)
 	return ret;
 }
 
+static int snd_pcm_multi_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail,
+				    snd_htimestamp_t *tstamp)
+{
+	snd_pcm_multi_t *multi = pcm->private_data;
+	snd_pcm_t *slave = multi->slaves[multi->master_slave].pcm;
+	return snd_pcm_htimestamp(slave, avail, tstamp);
+}
+
 static int snd_pcm_multi_prepare(snd_pcm_t *pcm)
 {
 	snd_pcm_multi_t *multi = pcm->private_data;
@@ -690,13 +698,44 @@ static snd_pcm_sframes_t snd_pcm_multi_mmap_commit(snd_pcm_t *pcm,
 	return size;
 }
 
-static int snd_pcm_multi_mmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+static int snd_pcm_multi_munmap(snd_pcm_t *pcm)
 {
+	free(pcm->mmap_channels);
+	free(pcm->running_areas);
+	pcm->mmap_channels = NULL;
+	pcm->running_areas = NULL;
 	return 0;
 }
 
-static int snd_pcm_multi_munmap(snd_pcm_t *pcm ATTRIBUTE_UNUSED)
+static int snd_pcm_multi_mmap(snd_pcm_t *pcm)
 {
+	snd_pcm_multi_t *multi = pcm->private_data;
+	unsigned int c;
+
+	pcm->mmap_channels = calloc(pcm->channels,
+				    sizeof(pcm->mmap_channels[0]));
+	pcm->running_areas = calloc(pcm->channels,
+				    sizeof(pcm->running_areas[0]));
+	if (!pcm->mmap_channels || !pcm->running_areas) {
+		snd_pcm_multi_munmap(pcm);
+		return -ENOMEM;
+	}
+
+	/* Copy the slave mmapped buffer data */
+	for (c = 0; c < pcm->channels; c++) {
+		snd_pcm_multi_channel_t *chan = &multi->channels[c];
+		snd_pcm_t *slave;
+		if (chan->slave_idx < 0) {
+			snd_pcm_multi_munmap(pcm);
+			return -ENXIO;
+		}
+		slave = multi->slaves[chan->slave_idx].pcm;
+		pcm->mmap_channels[c] =
+			slave->mmap_channels[chan->slave_channel];
+		pcm->mmap_channels[c].channel = c;
+		pcm->running_areas[c] =
+			slave->running_areas[chan->slave_channel];
+	}
 	return 0;
 }
 
@@ -761,6 +800,7 @@ static snd_pcm_fast_ops_t snd_pcm_multi_fast_ops = {
 	.unlink = snd_pcm_multi_unlink,
 	.avail_update = snd_pcm_multi_avail_update,
 	.mmap_commit = snd_pcm_multi_mmap_commit,
+	.htimestamp = snd_pcm_multi_htimestamp,
 	.poll_descriptors_count = snd_pcm_multi_poll_descriptors_count,
 	.poll_descriptors = snd_pcm_multi_poll_descriptors,
 	.poll_revents = snd_pcm_multi_poll_revents,
@@ -850,11 +890,13 @@ int snd_pcm_multi_open(snd_pcm_t **pcmp, const char *name,
 		return err;
 	}
 	pcm->mmap_rw = 1;
+	pcm->mmap_shadow = 1; /* has own mmap method */
 	pcm->ops = &snd_pcm_multi_ops;
 	pcm->fast_ops = &snd_pcm_multi_fast_ops;
 	pcm->private_data = multi;
 	pcm->poll_fd = multi->slaves[master_slave].pcm->poll_fd;
 	pcm->poll_events = multi->slaves[master_slave].pcm->poll_events;
+	pcm->monotonic = multi->slaves[master_slave].pcm->monotonic;
 	snd_pcm_link_hw_ptr(pcm, multi->slaves[master_slave].pcm);
 	snd_pcm_link_appl_ptr(pcm, multi->slaves[master_slave].pcm);
 	*pcmp = pcm;

@@ -591,6 +591,7 @@ static int get_char_skip_comments(input_t *input)
 			}
 			err = snd_input_stdio_open(&in, str, "r");
 			if (err < 0) {
+				SNDERR("Cannot access file %s", str);
 				free(str);
 				return err;
 			}
@@ -2897,7 +2898,7 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 				return err;
 			if (snd_config_search(root, fdriver, &n) >= 0) {
 				if (snd_config_get_string(n, &driver) < 0)
-					continue;
+					goto __err;
 				while (1) {
 					char *s = strchr(driver, '.');
 					if (s == NULL)
@@ -2905,7 +2906,7 @@ int snd_config_hook_load_for_all_cards(snd_config_t *root, snd_config_t *config,
 					driver = s + 1;
 				}
 				if (snd_config_search(root, driver, &n) >= 0)
-					continue;
+					goto __err;
 			} else {
 				driver = fdriver;
 			}
@@ -3005,6 +3006,8 @@ int snd_config_update_r(snd_config_t **_top, snd_config_update_t **_update, cons
 			lf->ino = st.st_ino;
 			lf->mtime = st.st_mtime;
 		} else {
+			SNDERR("Cannot access file %s", lf->name);
+			free(lf->name);
 			memmove(&local->finfo[k], &local->finfo[k+1], sizeof(struct finfo) * (local->count - k - 1));
 			k--;
 			local->count--;

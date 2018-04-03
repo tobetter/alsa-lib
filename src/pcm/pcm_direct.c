@@ -109,13 +109,15 @@ retryget:
 	}
 	dmix->shmptr = shmat(dmix->shmid, 0, 0);
 	if (dmix->shmptr == (void *) -1) {
+		err = -errno;
 		snd_pcm_direct_shm_discard(dmix);
-		return -errno;
+		return err;
 	}
 	mlock(dmix->shmptr, sizeof(snd_pcm_direct_share_t));
 	if (shmctl(dmix->shmid, IPC_STAT, &buf) < 0) {
+		err = -errno;
 		snd_pcm_direct_shm_discard(dmix);
-		return -errno;
+		return err;
 	}
 	if (buf.shm_nattch == 1) {	/* we're the first user, clear the segment */
 		memset(dmix->shmptr, 0, sizeof(snd_pcm_direct_share_t));
@@ -128,7 +130,7 @@ retryget:
 	} else {
 		if (dmix->shmptr->magic != SND_PCM_DIRECT_MAGIC) {
 			snd_pcm_direct_shm_discard(dmix);
-			return -errno;
+			return -EINVAL;
 		}
 	}
 	return 0;
@@ -815,16 +817,13 @@ static void save_slave_setting(snd_pcm_direct_t *dmix, snd_pcm_t *spcm)
 	COPY_SLAVE(period_size);
 	COPY_SLAVE(period_time);
 	COPY_SLAVE(periods);
-	COPY_SLAVE(tick_time);
 	COPY_SLAVE(tstamp_mode);
 	COPY_SLAVE(period_step);
-	COPY_SLAVE(sleep_min);
 	COPY_SLAVE(avail_min);
 	COPY_SLAVE(start_threshold);
 	COPY_SLAVE(stop_threshold);
 	COPY_SLAVE(silence_threshold);
 	COPY_SLAVE(silence_size);
-	COPY_SLAVE(xfer_align);
 	COPY_SLAVE(boundary);
 	COPY_SLAVE(info);
 	COPY_SLAVE(msbits);
@@ -875,7 +874,11 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 			return ret;
 		}
 	}
-	ret = snd_pcm_hw_params_set_format(spcm, hw_params, params->format);
+	if (params->format == SND_PCM_FORMAT_UNKNOWN)
+		ret = -EINVAL;
+	else
+		ret = snd_pcm_hw_params_set_format(spcm, hw_params,
+						   params->format);
 	if (ret < 0) {
 		static const snd_pcm_format_t dmix_formats[] = {
 			SND_PCM_FORMAT_S32,
@@ -883,6 +886,7 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 			SND_PCM_FORMAT_S16,
 			SND_PCM_FORMAT_S16 ^ SND_PCM_FORMAT_S16_LE ^ SND_PCM_FORMAT_S16_BE,
 			SND_PCM_FORMAT_S24_3LE,
+			SND_PCM_FORMAT_U8,
 		};
 		snd_pcm_format_t format;
 		unsigned int i;
@@ -996,6 +1000,17 @@ int snd_pcm_direct_initialize_slave(snd_pcm_direct_t *dmix, snd_pcm_t *spcm, str
 	ret = snd_pcm_sw_params_set_stop_threshold(spcm, sw_params, boundary);
 	if (ret < 0) {
 		SNDERR("unable to set stop threshold");
+		return ret;
+	}
+
+	/* set timestamp mode to MMAP
+	 * the slave timestamp is copied appropriately in dsnoop/dmix/dshare
+	 * based on the tstamp_mode of each client
+	 */
+	ret = snd_pcm_sw_params_set_tstamp_mode(spcm, sw_params,
+						SND_PCM_TSTAMP_ENABLE);
+	if (ret < 0) {
+		SNDERR("unable to tstamp mode MMAP");
 		return ret;
 	}
 
@@ -1157,16 +1172,13 @@ static void copy_slave_setting(snd_pcm_direct_t *dmix, snd_pcm_t *spcm)
 	COPY_SLAVE(period_size);
 	COPY_SLAVE(period_time);
 	COPY_SLAVE(periods);
-	COPY_SLAVE(tick_time);
 	COPY_SLAVE(tstamp_mode);
 	COPY_SLAVE(period_step);
-	COPY_SLAVE(sleep_min);
 	COPY_SLAVE(avail_min);
 	COPY_SLAVE(start_threshold);
 	COPY_SLAVE(stop_threshold);
 	COPY_SLAVE(silence_threshold);
 	COPY_SLAVE(silence_size);
-	COPY_SLAVE(xfer_align);
 	COPY_SLAVE(boundary);
 	COPY_SLAVE(info);
 	COPY_SLAVE(msbits);
@@ -1444,7 +1456,10 @@ static int _snd_pcm_direct_get_slave_ipc_offset(snd_config_t *root,
 #endif
 
 	if (snd_config_search(sconf, "slave", &pcm_conf) >= 0 &&
-	    snd_config_search(pcm_conf, "pcm", &pcm_conf) >= 0)
+	    (snd_config_search(pcm_conf, "pcm", &pcm_conf) >= 0 ||
+	    (snd_config_get_string(pcm_conf, &str) >= 0 &&
+	    snd_config_search_definition(root, "pcm_slave", str, &pcm_conf) >= 0 &&
+	    snd_config_search(pcm_conf, "pcm", &pcm_conf) >= 0)))
 		return _snd_pcm_direct_get_slave_ipc_offset(root, pcm_conf,
 							    direction,
 							    hop + 1);

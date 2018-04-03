@@ -47,10 +47,8 @@ target_triplet = @target@
 @BUILD_HWDEP_TRUE@am__append_8 = hwdep/libhwdep.la
 @BUILD_SEQ_TRUE@am__append_9 = seq
 @BUILD_SEQ_TRUE@am__append_10 = seq/libseq.la
-@BUILD_INSTR_TRUE@am__append_11 = instr
-@BUILD_INSTR_TRUE@am__append_12 = instr/libinstr.la
-@BUILD_ALISP_TRUE@am__append_13 = alisp
-@BUILD_ALISP_TRUE@am__append_14 = alisp/libalisp.la
+@BUILD_ALISP_TRUE@am__append_11 = alisp
+@BUILD_ALISP_TRUE@am__append_12 = alisp/libalisp.la
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(srcdir)/Versions.in
@@ -76,13 +74,12 @@ LTLIBRARIES = $(lib_LTLIBRARIES)
 @BUILD_RAWMIDI_TRUE@am__DEPENDENCIES_3 = rawmidi/librawmidi.la
 @BUILD_HWDEP_TRUE@am__DEPENDENCIES_4 = hwdep/libhwdep.la
 @BUILD_SEQ_TRUE@am__DEPENDENCIES_5 = seq/libseq.la
-@BUILD_INSTR_TRUE@am__DEPENDENCIES_6 = instr/libinstr.la
-@BUILD_ALISP_TRUE@am__DEPENDENCIES_7 = alisp/libalisp.la
+@BUILD_ALISP_TRUE@am__DEPENDENCIES_6 = alisp/libalisp.la
 libasound_la_DEPENDENCIES = control/libcontrol.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
 	$(am__DEPENDENCIES_3) $(am__DEPENDENCIES_4) \
 	$(am__DEPENDENCIES_5) $(am__DEPENDENCIES_6) \
-	$(am__DEPENDENCIES_7) compat/libcompat.la
+	compat/libcompat.la
 am_libasound_la_OBJECTS = conf.lo confmisc.lo input.lo output.lo \
 	async.lo error.lo dlmisc.lo socket.lo shmarea.lo userfile.lo \
 	names.lo
@@ -108,8 +105,8 @@ RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	uninstall-recursive
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = control mixer pcm timer rawmidi hwdep seq instr alisp \
-	compat conf
+DIST_SUBDIRS = control mixer pcm timer rawmidi hwdep seq alisp compat \
+	conf
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ALSA_CONFIG_DIR = @ALSA_CONFIG_DIR@
@@ -135,8 +132,6 @@ BUILD_CTL_PLUGIN_SHM_TRUE = @BUILD_CTL_PLUGIN_SHM_TRUE@
 BUILD_CTL_PLUGIN_TRUE = @BUILD_CTL_PLUGIN_TRUE@
 BUILD_HWDEP_FALSE = @BUILD_HWDEP_FALSE@
 BUILD_HWDEP_TRUE = @BUILD_HWDEP_TRUE@
-BUILD_INSTR_FALSE = @BUILD_INSTR_FALSE@
-BUILD_INSTR_TRUE = @BUILD_INSTR_TRUE@
 BUILD_MIXER_FALSE = @BUILD_MIXER_FALSE@
 BUILD_MIXER_TRUE = @BUILD_MIXER_TRUE@
 BUILD_MODULES_FALSE = @BUILD_MODULES_FALSE@
@@ -232,6 +227,8 @@ INSTALL_M4_TRUE = @INSTALL_M4_TRUE@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+KEEP_OLD_SYMBOLS_FALSE = @KEEP_OLD_SYMBOLS_FALSE@
+KEEP_OLD_SYMBOLS_TRUE = @KEEP_OLD_SYMBOLS_TRUE@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
@@ -325,12 +322,11 @@ COMPATNUM = @LIBTOOL_VERSION_INFO@
 lib_LTLIBRARIES = libasound.la
 libasound_la_SOURCES = conf.c confmisc.c input.c output.c async.c error.c dlmisc.c socket.c shmarea.c userfile.c names.c
 SUBDIRS = control $(am__append_1) $(am__append_3) $(am__append_5) \
-	$(am__append_7) $(am__append_9) $(am__append_11) \
-	$(am__append_13) compat conf
+	$(am__append_7) $(am__append_9) $(am__append_11) compat conf
 libasound_la_LIBADD = control/libcontrol.la $(am__append_2) \
 	$(am__append_4) $(am__append_6) $(am__append_8) \
-	$(am__append_10) $(am__append_12) $(am__append_14) \
-	compat/libcompat.la @ALSA_DEPLIBS@
+	$(am__append_10) $(am__append_12) compat/libcompat.la \
+	@ALSA_DEPLIBS@ $(am__empty)
 libasound_la_LDFLAGS = -version-info $(COMPATNUM) $(VSYMS) $(SYMFUNCS)
 INCLUDES = -I$(top_srcdir)/include
 all: all-recursive

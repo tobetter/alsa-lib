@@ -6,6 +6,9 @@
 /* directory containing ALSA configuration database */
 #undef ALSA_CONFIG_DIR
 
+/* Enable assert at error message handler */
+#undef ALSA_DEBUG_ASSERT
+
 /* Directory with ALSA device files */
 #undef ALSA_DEVICE_DIRECTORY
 
@@ -14,9 +17,6 @@
 
 /* Build hwdep component */
 #undef BUILD_HWDEP
-
-/* Build instrument component */
-#undef BUILD_INSTR
 
 /* Build mixer component */
 #undef BUILD_MIXER
@@ -48,6 +48,9 @@
 /* Build sequencer component */
 #undef BUILD_SEQ
 
+/* Have clock gettime */
+#undef HAVE_CLOCK_GETTIME
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
@@ -62,6 +65,9 @@
 
 /* Define to 1 if you have the `resmgr' library (-lresmgr). */
 #undef HAVE_LIBRESMGR
+
+/* Have librt */
+#undef HAVE_LIBRT
 
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H

@@ -281,9 +281,13 @@ typedef enum _snd_pcm_xrun {
 typedef enum _snd_pcm_tstamp {
 	/** No timestamp */
 	SND_PCM_TSTAMP_NONE = 0,
-	/** Update mmap'ed timestamp */
-	SND_PCM_TSTAMP_MMAP,
-	SND_PCM_TSTAMP_LAST = SND_PCM_TSTAMP_MMAP
+	/** Update timestamp at every hardware position update */
+	SND_PCM_TSTAMP_ENABLE,
+	/** Equivalent with #SND_PCM_TSTAMP_ENABLE,
+	 * just for compatibility with older versions
+	 */
+	SND_PCM_TSTAMP_MMAP = SND_PCM_TSTAMP_ENABLE,
+	SND_PCM_TSTAMP_LAST = SND_PCM_TSTAMP_ENABLE
 } snd_pcm_tstamp_t;
 
 /** Unsigned frames quantity */
@@ -292,9 +296,17 @@ typedef unsigned long snd_pcm_uframes_t;
 typedef long snd_pcm_sframes_t;
 
 /** Non blocking mode (flag for open mode) \hideinitializer */
-#define SND_PCM_NONBLOCK		0x0001
+#define SND_PCM_NONBLOCK		0x00000001
 /** Async notification (flag for open mode) \hideinitializer */
-#define SND_PCM_ASYNC			0x0002
+#define SND_PCM_ASYNC			0x00000002
+/** Disable automatic (but not forced!) rate resamplinig */
+#define SND_PCM_NO_AUTO_RESAMPLE	0x00010000
+/** Disable automatic (but not forced!) channel conversion */
+#define SND_PCM_NO_AUTO_CHANNELS	0x00020000
+/** Disable automatic (but not forced!) format conversion */
+#define SND_PCM_NO_AUTO_FORMAT		0x00040000
+/** Disable soft volume control */
+#define SND_PCM_NO_SOFTVOL		0x00080000
 
 /** PCM handle */
 typedef struct _snd_pcm snd_pcm_t;
@@ -427,6 +439,7 @@ snd_pcm_state_t snd_pcm_state(snd_pcm_t *pcm);
 int snd_pcm_hwsync(snd_pcm_t *pcm);
 int snd_pcm_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp);
 int snd_pcm_resume(snd_pcm_t *pcm);
+int snd_pcm_htimestamp(snd_pcm_t *pcm, snd_pcm_uframes_t *avail, snd_htimestamp_t *tstamp);
 snd_pcm_sframes_t snd_pcm_avail_update(snd_pcm_t *pcm);
 snd_pcm_sframes_t snd_pcm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
 snd_pcm_sframes_t snd_pcm_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames);
@@ -470,7 +483,7 @@ size_t snd_pcm_info_sizeof(void);
  * \brief allocate an invalid #snd_pcm_info_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_info_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_info_t *) alloca(snd_pcm_info_sizeof()); memset(*ptr, 0, snd_pcm_info_sizeof()); } while (0)
+#define snd_pcm_info_alloca(ptr) __snd_alloca(ptr, snd_pcm_info)
 int snd_pcm_info_malloc(snd_pcm_info_t **ptr);
 void snd_pcm_info_free(snd_pcm_info_t *obj);
 void snd_pcm_info_copy(snd_pcm_info_t *dst, const snd_pcm_info_t *src);
@@ -548,7 +561,7 @@ size_t snd_pcm_hw_params_sizeof(void);
  * \brief allocate an invalid #snd_pcm_hw_params_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_hw_params_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_hw_params_t *) alloca(snd_pcm_hw_params_sizeof()); memset(*ptr, 0, snd_pcm_hw_params_sizeof()); } while (0)
+#define snd_pcm_hw_params_alloca(ptr) __snd_alloca(ptr, snd_pcm_hw_params)
 int snd_pcm_hw_params_malloc(snd_pcm_hw_params_t **ptr);
 void snd_pcm_hw_params_free(snd_pcm_hw_params_t *obj);
 void snd_pcm_hw_params_copy(snd_pcm_hw_params_t *dst, const snd_pcm_hw_params_t *src);
@@ -669,18 +682,6 @@ int snd_pcm_hw_params_set_buffer_size_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *
 int snd_pcm_hw_params_set_buffer_size_first(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, snd_pcm_uframes_t *val);
 int snd_pcm_hw_params_set_buffer_size_last(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, snd_pcm_uframes_t *val);
 
-int snd_pcm_hw_params_get_tick_time(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_get_tick_time_min(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_get_tick_time_max(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_test_tick_time(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val, int dir);
-int snd_pcm_hw_params_set_tick_time(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val, int dir);
-int snd_pcm_hw_params_set_tick_time_min(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_set_tick_time_max(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_set_tick_time_minmax(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *min, int *mindir, unsigned int *max, int *maxdir);
-int snd_pcm_hw_params_set_tick_time_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_set_tick_time_first(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-int snd_pcm_hw_params_set_tick_time_last(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir);
-
 #endif /* !ALSA_LIBRARY_BUILD && !ALSA_PCM_OLD_HW_PARAMS_API */
 
 int snd_pcm_hw_params_get_min_align(const snd_pcm_hw_params_t *params, snd_pcm_uframes_t *val);
@@ -699,7 +700,7 @@ size_t snd_pcm_sw_params_sizeof(void);
  * \brief allocate an invalid #snd_pcm_sw_params_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_sw_params_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_sw_params_t *) alloca(snd_pcm_sw_params_sizeof()); memset(*ptr, 0, snd_pcm_sw_params_sizeof()); } while (0)
+#define snd_pcm_sw_params_alloca(ptr) __snd_alloca(ptr, snd_pcm_sw_params)
 int snd_pcm_sw_params_malloc(snd_pcm_sw_params_t **ptr);
 void snd_pcm_sw_params_free(snd_pcm_sw_params_t *obj);
 void snd_pcm_sw_params_copy(snd_pcm_sw_params_t *dst, const snd_pcm_sw_params_t *src);
@@ -709,12 +710,8 @@ int snd_pcm_sw_params_get_boundary(const snd_pcm_sw_params_t *params, snd_pcm_uf
 
 int snd_pcm_sw_params_set_tstamp_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_tstamp_t val);
 int snd_pcm_sw_params_get_tstamp_mode(const snd_pcm_sw_params_t *params, snd_pcm_tstamp_t *val);
-int snd_pcm_sw_params_set_sleep_min(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, unsigned int val);
-int snd_pcm_sw_params_get_sleep_min(const snd_pcm_sw_params_t *params, unsigned int *val);
 int snd_pcm_sw_params_set_avail_min(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
 int snd_pcm_sw_params_get_avail_min(const snd_pcm_sw_params_t *params, snd_pcm_uframes_t *val);
-int snd_pcm_sw_params_set_xfer_align(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
-int snd_pcm_sw_params_get_xfer_align(const snd_pcm_sw_params_t *params, snd_pcm_uframes_t *val);
 int snd_pcm_sw_params_set_start_threshold(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
 int snd_pcm_sw_params_get_start_threshold(const snd_pcm_sw_params_t *paramsm, snd_pcm_uframes_t *val);
 int snd_pcm_sw_params_set_stop_threshold(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val);
@@ -747,7 +744,7 @@ size_t snd_pcm_access_mask_sizeof(void);
  * \brief allocate an empty #snd_pcm_access_mask_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_access_mask_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_access_mask_t *) alloca(snd_pcm_access_mask_sizeof()); memset(*ptr, 0, snd_pcm_access_mask_sizeof()); } while (0)
+#define snd_pcm_access_mask_alloca(ptr) __snd_alloca(ptr, snd_pcm_access_mask)
 int snd_pcm_access_mask_malloc(snd_pcm_access_mask_t **ptr);
 void snd_pcm_access_mask_free(snd_pcm_access_mask_t *obj);
 void snd_pcm_access_mask_copy(snd_pcm_access_mask_t *dst, const snd_pcm_access_mask_t *src);
@@ -772,7 +769,7 @@ size_t snd_pcm_format_mask_sizeof(void);
  * \brief allocate an empty #snd_pcm_format_mask_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_format_mask_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_format_mask_t *) alloca(snd_pcm_format_mask_sizeof()); memset(*ptr, 0, snd_pcm_format_mask_sizeof()); } while (0)
+#define snd_pcm_format_mask_alloca(ptr) __snd_alloca(ptr, snd_pcm_format_mask)
 int snd_pcm_format_mask_malloc(snd_pcm_format_mask_t **ptr);
 void snd_pcm_format_mask_free(snd_pcm_format_mask_t *obj);
 void snd_pcm_format_mask_copy(snd_pcm_format_mask_t *dst, const snd_pcm_format_mask_t *src);
@@ -797,7 +794,7 @@ size_t snd_pcm_subformat_mask_sizeof(void);
  * \brief allocate an empty #snd_pcm_subformat_mask_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_subformat_mask_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_subformat_mask_t *) alloca(snd_pcm_subformat_mask_sizeof()); memset(*ptr, 0, snd_pcm_subformat_mask_sizeof()); } while (0)
+#define snd_pcm_subformat_mask_alloca(ptr) __snd_alloca(ptr, snd_pcm_subformat_mask)
 int snd_pcm_subformat_mask_malloc(snd_pcm_subformat_mask_t **ptr);
 void snd_pcm_subformat_mask_free(snd_pcm_subformat_mask_t *obj);
 void snd_pcm_subformat_mask_copy(snd_pcm_subformat_mask_t *dst, const snd_pcm_subformat_mask_t *src);
@@ -822,7 +819,7 @@ size_t snd_pcm_status_sizeof(void);
  * \brief allocate an invalid #snd_pcm_status_t using standard alloca
  * \param ptr returned pointer
  */
-#define snd_pcm_status_alloca(ptr) do { assert(ptr); *ptr = (snd_pcm_status_t *) alloca(snd_pcm_status_sizeof()); memset(*ptr, 0, snd_pcm_status_sizeof()); } while (0)
+#define snd_pcm_status_alloca(ptr) __snd_alloca(ptr, snd_pcm_status)
 int snd_pcm_status_malloc(snd_pcm_status_t **ptr);
 void snd_pcm_status_free(snd_pcm_status_t *obj);
 void snd_pcm_status_copy(snd_pcm_status_t *dst, const snd_pcm_status_t *src);
@@ -1097,12 +1094,29 @@ int snd_spcm_init_get_params(snd_pcm_t *pcm,
  */
 
 /* Deprecated functions, for compatibility */
-const char *snd_pcm_start_mode_name(snd_pcm_start_t mode);
-const char *snd_pcm_xrun_mode_name(snd_pcm_xrun_t mode);
-int snd_pcm_sw_params_set_start_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_start_t val);
-snd_pcm_start_t snd_pcm_sw_params_get_start_mode(const snd_pcm_sw_params_t *params);
-int snd_pcm_sw_params_set_xrun_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_xrun_t val);
-snd_pcm_xrun_t snd_pcm_sw_params_get_xrun_mode(const snd_pcm_sw_params_t *params);
+const char *snd_pcm_start_mode_name(snd_pcm_start_t mode) __attribute__((deprecated));
+const char *snd_pcm_xrun_mode_name(snd_pcm_xrun_t mode) __attribute__((deprecated));
+int snd_pcm_sw_params_set_start_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_start_t val) __attribute__((deprecated));
+snd_pcm_start_t snd_pcm_sw_params_get_start_mode(const snd_pcm_sw_params_t *params) __attribute__((deprecated));
+int snd_pcm_sw_params_set_xrun_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_xrun_t val) __attribute__((deprecated));
+snd_pcm_xrun_t snd_pcm_sw_params_get_xrun_mode(const snd_pcm_sw_params_t *params) __attribute__((deprecated));
+#if !defined(ALSA_LIBRARY_BUILD) && !defined(ALSA_PCM_OLD_SW_PARAMS_API)
+int snd_pcm_sw_params_set_xfer_align(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, snd_pcm_uframes_t val) __attribute__((deprecated));
+int snd_pcm_sw_params_get_xfer_align(const snd_pcm_sw_params_t *params, snd_pcm_uframes_t *val) __attribute__((deprecated));
+int snd_pcm_sw_params_set_sleep_min(snd_pcm_t *pcm, snd_pcm_sw_params_t *params, unsigned int val) __attribute__((deprecated));
+int snd_pcm_sw_params_get_sleep_min(const snd_pcm_sw_params_t *params, unsigned int *val) __attribute__((deprecated));
+int snd_pcm_hw_params_get_tick_time(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_get_tick_time_min(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_get_tick_time_max(const snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_test_tick_time(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val, int dir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int val, int dir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time_min(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time_max(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time_minmax(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *min, int *mindir, unsigned int *max, int *maxdir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time_first(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+int snd_pcm_hw_params_set_tick_time_last(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned int *val, int *dir) __attribute__((deprecated));
+#endif /* !ALSA_LIBRARY_BUILD && !ALSA_PCM_OLD_SW_PARAMS_API */
 
 /** \} */
 
