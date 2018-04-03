@@ -63,7 +63,10 @@ typedef enum _snd_hwdep_iface {
 	SND_HWDEP_IFACE_VX,		/**< Digigram VX cards */
 	SND_HWDEP_IFACE_MIXART,		/**< Digigram miXart cards */
 	SND_HWDEP_IFACE_USX2Y,		/**< Tascam US122, US224 & US428 usb */
-	SND_HWDEP_IFACE_LAST = SND_HWDEP_IFACE_USX2Y  /**< last know hwdep interface */
+	SND_HWDEP_IFACE_EMUX_WAVETABLE,	/**< EmuX wavetable */
+	SND_HWDEP_IFACE_BLUETOOTH,	/**< Bluetooth audio */
+                
+	SND_HWDEP_IFACE_LAST = SND_HWDEP_IFACE_BLUETOOTH  /**< last know hwdep interface */
 } snd_hwdep_iface_t;
 
 /** open for reading */
@@ -139,7 +142,7 @@ const char *snd_hwdep_dsp_image_get_name(const snd_hwdep_dsp_image_t *obj);
 const void *snd_hwdep_dsp_image_get_image(const snd_hwdep_dsp_image_t *obj);
 size_t snd_hwdep_dsp_image_get_length(const snd_hwdep_dsp_image_t *obj);
 
-void snd_hwdep_dsp_image_set_index(snd_hwdep_dsp_image_t *obj, unsigned int index);
+void snd_hwdep_dsp_image_set_index(snd_hwdep_dsp_image_t *obj, unsigned int _index);
 void snd_hwdep_dsp_image_set_name(snd_hwdep_dsp_image_t *obj, const char *name);
 void snd_hwdep_dsp_image_set_image(snd_hwdep_dsp_image_t *obj, void *buffer);
 void snd_hwdep_dsp_image_set_length(snd_hwdep_dsp_image_t *obj, size_t length);

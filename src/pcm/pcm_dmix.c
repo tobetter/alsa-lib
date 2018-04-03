@@ -405,7 +405,7 @@ static int snd_pcm_dmix_sync_ptr(snd_pcm_t *pcm)
 	
 	switch (snd_pcm_state(dmix->spcm)) {
 	case SND_PCM_STATE_DISCONNECTED:
-		dmix->state = -ENOTTY;
+		dmix->state = SND_PCM_STATE_DISCONNECTED;
 		return -ENOTTY;
 	default:
 		break;
@@ -474,7 +474,7 @@ static snd_pcm_state_t snd_pcm_dmix_state(snd_pcm_t *pcm)
 	case SND_PCM_STATE_SUSPENDED:
 		return -ESTRPIPE;
 	case SND_PCM_STATE_DISCONNECTED:
-		dmix->state = -ENOTTY;
+		dmix->state = SND_PCM_STATE_DISCONNECTED;
 		return -ENOTTY;
 	default:
 		break;
@@ -871,6 +871,7 @@ int snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	
 		if (snd_pcm_type(spcm) != SND_PCM_TYPE_HW) {
 			SNDERR("dmix plugin can be only connected to hw plugin");
+			ret = -EINVAL;
 			goto _err;
 		}
 		
@@ -1205,7 +1206,7 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 	params.format = SND_PCM_FORMAT_S16;
 	params.rate = 48000;
 	params.channels = 2;
-	params.period_time = 125000;	/* 0.125 seconds */
+	params.period_time = -1;
 	params.buffer_time = -1;
 	bsize = psize = -1;
 	params.periods = 3;
@@ -1221,6 +1222,10 @@ int _snd_pcm_dmix_open(snd_pcm_t **pcmp, const char *name,
 				 SND_PCM_HW_PARAM_PERIODS, 0, &params.periods);
 	if (err < 0)
 		return err;
+
+	/* set a reasonable default */  
+	if (psize == -1 && params.period_time == -1)
+		params.period_time = 125000;    /* 0.125 seconds */
 
 	/* sorry, limited features */
         if (params.format != SND_PCM_FORMAT_S16 &&

@@ -132,7 +132,7 @@ typedef struct _snd_output_stdio {
 	FILE *fp;
 } snd_output_stdio_t;
 
-static int snd_output_stdio_close(snd_output_t *output ATTRIBUTE_UNUSED)
+static int snd_output_stdio_close(snd_output_t *output)
 {
 	snd_output_stdio_t *stdio = output->private_data;
 	if (stdio->close)
@@ -250,15 +250,20 @@ static int snd_output_buffer_need(snd_output_t *output, size_t size)
 	snd_output_buffer_t *buffer = output->private_data;
 	size_t _free = buffer->alloc - buffer->size;
 	size_t alloc;
+	unsigned char *buf;
+
 	if (_free >= size)
 		return _free;
 	if (buffer->alloc == 0)
 		alloc = 256;
 	else
-		alloc = buffer->alloc * 2;
-	buffer->buf = realloc(buffer->buf, alloc);
-	if (!buffer->buf)
+		alloc = buffer->alloc;
+	while (alloc < buffer->size + size)
+		alloc *= 2;
+	buf = realloc(buffer->buf, alloc);
+	if (!buf)
 		return -ENOMEM;
+	buffer->buf = buf;
 	buffer->alloc = alloc;
 	return buffer->alloc - buffer->size;
 }
@@ -281,8 +286,9 @@ static int snd_output_buffer_print(snd_output_t *output, const char *format, va_
 	result = snd_output_buffer_need(output, size);
 	if (result < 0)
 		return result;
-	result = vsprintf(buffer->buf + buffer->size, format, args);
+	result = vsnprintf(buffer->buf + buffer->size, result, format, args);
 	assert(result == (int)size);
+	buffer->size += result;
 	return result;
 }
 

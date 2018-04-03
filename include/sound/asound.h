@@ -108,9 +108,10 @@ enum sndrv_hwdep_iface {
 	SNDRV_HWDEP_IFACE_MIXART,	/* Digigram miXart cards */
 	SNDRV_HWDEP_IFACE_USX2Y,	/* Tascam US122, US224 & US428 usb */
 	SNDRV_HWDEP_IFACE_EMUX_WAVETABLE, /* EmuX wavetable */	
+	SNDRV_HWDEP_IFACE_BLUETOOTH,	/* Bluetooth audio */
 
 	/* Don't forget to change the following: */
-	SNDRV_HWDEP_IFACE_LAST = SNDRV_HWDEP_IFACE_EMUX_WAVETABLE,
+	SNDRV_HWDEP_IFACE_LAST = SNDRV_HWDEP_IFACE_BLUETOOTH,
 };
 
 struct sndrv_hwdep_info {
@@ -273,7 +274,6 @@ enum sndrv_pcm_subformat {
 #define SNDRV_PCM_INFO_HALF_DUPLEX	0x00100000	/* only half duplex */
 #define SNDRV_PCM_INFO_JOINT_DUPLEX	0x00200000	/* playback and capture stream are somewhat correlated */
 #define SNDRV_PCM_INFO_SYNC_START	0x00400000	/* pcm support some kind of sync go */
-#define SNDRV_PCM_INFO_NONATOMIC_OPS	0x00800000	/* non-atomic prepare callback */
 
 enum sndrv_pcm_state {
 	SNDRV_PCM_STATE_OPEN = 0,	/* stream is open */

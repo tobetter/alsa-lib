@@ -171,7 +171,7 @@ be stopped using the #snd_pcm_drop() or
 \par SND_PCM_STATE_XRUN
 The PCM device reached overrun (capture) or underrun (playback).
 You can use the -EPIPE return code from I/O functions
-(#snd_pcm_writei(), #snd_pcm_writen(), #snd_pcm_readi(), #snd_pcm_readi())
+(#snd_pcm_writei(), #snd_pcm_writen(), #snd_pcm_readi(), #snd_pcm_readn())
 to determine this state without checking
 the actual state via #snd_pcm_state() call. You can recover from
 this state with #snd_pcm_prepare(),
@@ -231,7 +231,7 @@ and the second one expects non-interleaved (samples in separated buffers -
 #SND_PCM_ACCESS_RW_NONINTERLEAVED access method) at input. There are these
 functions for interleaved transfers: #snd_pcm_writei()
 #snd_pcm_readi(). For non-interleaved transfers, there are
-these functions: #snd_pcm_writen(0 and #snd_pcm_readn().
+these functions: #snd_pcm_writen() and #snd_pcm_readn().
 
 \subsection alsa_mmap_rw Direct Read / Write transfer (via mmap'ed areas)
 
@@ -402,7 +402,7 @@ before any read/write begin+commit operations.
 
 \section pcm_action Managing the stream state
 
-These functions directly and indirectly affecting the stream state:
+The following functions directly and indirectly affect the stream state:
 
 \par snd_pcm_hw_params
 The #snd_pcm_hw_params() function brings the stream state
@@ -472,9 +472,11 @@ For detailed descriptions about integrated PCM plugins look to \ref pcm_plugins.
 The default device is equal to plug plugin with hw plugin as slave. The defaults are
 used:
 
+\code
 defaults.pcm.card 0
 defaults.pcm.device 0
 defaults.pcm.subdevice -1
+\endcode
 
 These defaults can be freely overwritten in local configuration files.
 
@@ -795,7 +797,8 @@ int snd_pcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params)
 int snd_pcm_hw_free(snd_pcm_t *pcm)
 {
 	int err;
-	assert(pcm->setup);
+	if (! pcm->setup)
+		return 0;
 	if (pcm->mmap_channels) {
 		err = snd_pcm_munmap(pcm);
 		if (err < 0)
@@ -818,15 +821,21 @@ int snd_pcm_hw_free(snd_pcm_t *pcm)
 int snd_pcm_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 {
 	int err;
-	assert(pcm->setup);		/* the hw_params must be set at first!!! */
+	/* the hw_params must be set at first!!! */
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (! params->avail_min || ! params->xfer_align)
+		return -EINVAL;
 	if (params->start_threshold <= pcm->buffer_size &&
 	    params->start_threshold > (pcm->buffer_size / params->avail_min) * params->avail_min) {
-		SNDERR("snd_pcm_sw_params: params->avail_min problem for start_threshold");
+		SNDMSG("params->avail_min problem for start_threshold");
 		return -EINVAL;
 	}
 	if (params->start_threshold <= pcm->buffer_size &&
 	    params->start_threshold > (pcm->buffer_size / params->xfer_align) * params->xfer_align) {
-		SNDERR("snd_pcm_sw_params: params->xfer_align problem for start_threshold");
+		SNDMSG("params->xfer_align problem for start_threshold");
 		return -EINVAL;
 	}
 	err = pcm->ops->sw_params(pcm->op_arg, params);
@@ -883,7 +892,10 @@ snd_pcm_state_t snd_pcm_state(snd_pcm_t *pcm)
 int snd_pcm_hwsync(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->hwsync(pcm->fast_op_arg);
 }
 
@@ -906,7 +918,10 @@ int snd_pcm_hwsync(snd_pcm_t *pcm)
 int snd_pcm_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->delay(pcm->fast_op_arg, delayp);
 }
 
@@ -925,7 +940,10 @@ int snd_pcm_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *delayp)
 int snd_pcm_resume(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->resume(pcm->fast_op_arg);
 }
 
@@ -937,7 +955,10 @@ int snd_pcm_resume(snd_pcm_t *pcm)
 int snd_pcm_prepare(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->prepare(pcm->fast_op_arg);
 }
 
@@ -951,7 +972,10 @@ int snd_pcm_prepare(snd_pcm_t *pcm)
 int snd_pcm_reset(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->reset(pcm->fast_op_arg);
 }
 
@@ -963,7 +987,10 @@ int snd_pcm_reset(snd_pcm_t *pcm)
 int snd_pcm_start(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->start(pcm->fast_op_arg);
 }
 
@@ -981,7 +1008,10 @@ int snd_pcm_start(snd_pcm_t *pcm)
 int snd_pcm_drop(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->drop(pcm->fast_op_arg);
 }
 
@@ -1001,7 +1031,10 @@ int snd_pcm_drop(snd_pcm_t *pcm)
 int snd_pcm_drain(snd_pcm_t *pcm)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->drain(pcm->fast_op_arg);
 }
 
@@ -1018,7 +1051,10 @@ int snd_pcm_drain(snd_pcm_t *pcm)
 int snd_pcm_pause(snd_pcm_t *pcm, int enable)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return pcm->fast_ops->pause(pcm->fast_op_arg, enable);
 }
 
@@ -1032,8 +1068,12 @@ int snd_pcm_pause(snd_pcm_t *pcm, int enable)
 snd_pcm_sframes_t snd_pcm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 {
 	assert(pcm);
-	assert(pcm->setup);
-	assert(frames > 0);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (frames == 0)
+		return 0;
 	return pcm->fast_ops->rewind(pcm->fast_op_arg, frames);
 }
 
@@ -1042,6 +1082,7 @@ snd_pcm_sframes_t snd_pcm_rewind(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
  * \param pcm PCM handle
  * \param frames wanted skip in frames
  * \return a positive number for actual skip otherwise a negative error code
+ * \retval 0 means no action
  */
 #ifndef DOXYGEN
 snd_pcm_sframes_t INTERNAL(snd_pcm_forward)(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
@@ -1050,8 +1091,12 @@ snd_pcm_sframes_t snd_pcm_forward(snd_pcm_t *pcm, snd_pcm_uframes_t frames)
 #endif
 {
 	assert(pcm);
-	assert(pcm->setup);
-	assert(frames > 0);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (frames == 0)
+		return 0;
 	return pcm->fast_ops->forward(pcm->fast_op_arg, frames);
 }
 use_default_symbol_version(__snd_pcm_forward, snd_pcm_forward, ALSA_0.9.0rc8);
@@ -1077,8 +1122,14 @@ snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_ufr
 {
 	assert(pcm);
 	assert(size == 0 || buffer);
-	assert(pcm->setup);
-	assert(pcm->access == SND_PCM_ACCESS_RW_INTERLEAVED);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (pcm->access != SND_PCM_ACCESS_RW_INTERLEAVED) {
+		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
+		return -EINVAL;
+	}
 	return _snd_pcm_writei(pcm, buffer, size);
 }
 
@@ -1103,8 +1154,14 @@ snd_pcm_sframes_t snd_pcm_writen(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t 
 {
 	assert(pcm);
 	assert(size == 0 || bufs);
-	assert(pcm->setup);
-	assert(pcm->access == SND_PCM_ACCESS_RW_NONINTERLEAVED);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (pcm->access != SND_PCM_ACCESS_RW_NONINTERLEAVED) {
+		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
+		return -EINVAL;
+	}
 	return _snd_pcm_writen(pcm, bufs, size);
 }
 
@@ -1129,8 +1186,14 @@ snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t 
 {
 	assert(pcm);
 	assert(size == 0 || buffer);
-	assert(pcm->setup);
-	assert(pcm->access == SND_PCM_ACCESS_RW_INTERLEAVED);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (pcm->access != SND_PCM_ACCESS_RW_INTERLEAVED) {
+		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
+		return -EINVAL;
+	}
 	return _snd_pcm_readi(pcm, buffer, size);
 }
 
@@ -1155,8 +1218,14 @@ snd_pcm_sframes_t snd_pcm_readn(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t s
 {
 	assert(pcm);
 	assert(size == 0 || bufs);
-	assert(pcm->setup);
-	assert(pcm->access == SND_PCM_ACCESS_RW_NONINTERLEAVED);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
+	if (pcm->access != SND_PCM_ACCESS_RW_NONINTERLEAVED) {
+		SNDMSG("invalid access type %s", snd_pcm_access_name(pcm->access));
+		return -EINVAL;
+	}
 	return _snd_pcm_readn(pcm, bufs, size);
 }
 
@@ -1175,7 +1244,7 @@ int snd_pcm_link(snd_pcm_t *pcm1, snd_pcm_t *pcm2)
 	if (fd1 < 0 || fd2 < 0)
 		return -ENOSYS;
 	if (ioctl(fd1, SNDRV_PCM_IOCTL_LINK, fd2) < 0) {
-		SYSERR("SNDRV_PCM_IOCTL_LINK failed");
+		SYSMSG("SNDRV_PCM_IOCTL_LINK failed");
 		return -errno;
 	}
 	return 0;
@@ -1191,7 +1260,7 @@ int snd_pcm_unlink(snd_pcm_t *pcm)
 	int fd;
 	fd = _snd_pcm_link_descriptor(pcm);
 	if (ioctl(fd, SNDRV_PCM_IOCTL_UNLINK) < 0) {
-		SYSERR("SNDRV_PCM_IOCTL_UNLINK failed");
+		SYSMSG("SNDRV_PCM_IOCTL_UNLINK failed");
 		return -errno;
 	}
 	return 0;
@@ -1243,7 +1312,10 @@ int snd_pcm_poll_descriptors(snd_pcm_t *pcm, struct pollfd *pfds, unsigned int s
 		if (err < 0)
 			return err;
 	}
-	assert(pcm->poll_fd >= 0);
+	if (pcm->poll_fd < 0) {
+		SNDMSG("poll_fd < 0");
+		return -EIO;
+	}
 	if (space >= 1 && pfds) {
 		pfds->fd = pcm->poll_fd;
 		pfds->events = pcm->poll_events | POLLERR | POLLNVAL;
@@ -1465,7 +1537,8 @@ static const char *snd_pcm_tstamp_mode_names[] = {
  */
 const char *snd_pcm_stream_name(snd_pcm_stream_t stream)
 {
-	assert(stream <= SND_PCM_STREAM_LAST);
+	if (stream > SND_PCM_STREAM_LAST)
+		return NULL;
 	return snd_pcm_stream_names[stream];
 }
 
@@ -1559,7 +1632,8 @@ const char *snd_pcm_subformat_description(snd_pcm_subformat_t subformat)
  */
 const char *snd_pcm_start_mode_name(snd_pcm_start_t mode)
 {
-	assert(mode <= SND_PCM_START_LAST);
+	if (mode > SND_PCM_START_LAST)
+		return NULL;
 	return snd_pcm_start_mode_names[mode];
 }
 
@@ -1574,7 +1648,8 @@ link_warning(snd_pcm_start_mode_name, "Warning: start_mode is deprecated, consid
  */
 const char *snd_pcm_xrun_mode_name(snd_pcm_xrun_t mode)
 {
-	assert(mode <= SND_PCM_XRUN_LAST);
+	if (mode > SND_PCM_XRUN_LAST)
+		return NULL;
 	return snd_pcm_xrun_mode_names[mode];
 }
 
@@ -1633,7 +1708,10 @@ int snd_pcm_dump_hw_setup(snd_pcm_t *pcm, snd_output_t *out)
 {
 	assert(pcm);
 	assert(out);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
         snd_output_printf(out, "stream       : %s\n", snd_pcm_stream_name(pcm->stream));
 	snd_output_printf(out, "access       : %s\n", snd_pcm_access_name(pcm->access));
 	snd_output_printf(out, "format       : %s\n", snd_pcm_format_name(pcm->format));
@@ -1659,7 +1737,10 @@ int snd_pcm_dump_sw_setup(snd_pcm_t *pcm, snd_output_t *out)
 {
 	assert(pcm);
 	assert(out);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	snd_output_printf(out, "tstamp_mode  : %s\n", snd_pcm_tstamp_mode_name(pcm->tstamp_mode));
 	snd_output_printf(out, "period_step  : %d\n", pcm->period_step);
 	snd_output_printf(out, "sleep_min    : %d\n", pcm->sleep_min);
@@ -1729,7 +1810,10 @@ int snd_pcm_dump(snd_pcm_t *pcm, snd_output_t *out)
 snd_pcm_sframes_t snd_pcm_bytes_to_frames(snd_pcm_t *pcm, ssize_t bytes)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return bytes * 8 / pcm->frame_bits;
 }
 
@@ -1742,7 +1826,10 @@ snd_pcm_sframes_t snd_pcm_bytes_to_frames(snd_pcm_t *pcm, ssize_t bytes)
 ssize_t snd_pcm_frames_to_bytes(snd_pcm_t *pcm, snd_pcm_sframes_t frames)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return frames * pcm->frame_bits / 8;
 }
 
@@ -1755,7 +1842,10 @@ ssize_t snd_pcm_frames_to_bytes(snd_pcm_t *pcm, snd_pcm_sframes_t frames)
 long snd_pcm_bytes_to_samples(snd_pcm_t *pcm, ssize_t bytes)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return bytes * 8 / pcm->sample_bits;
 }
 
@@ -1768,7 +1858,10 @@ long snd_pcm_bytes_to_samples(snd_pcm_t *pcm, ssize_t bytes)
 ssize_t snd_pcm_samples_to_bytes(snd_pcm_t *pcm, long samples)
 {
 	assert(pcm);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	return samples * pcm->sample_bits / 8;
 }
 
@@ -1814,14 +1907,17 @@ int snd_async_add_pcm_handler(snd_async_handler_t **handler, snd_pcm_t *pcm,
  */
 snd_pcm_t *snd_async_handler_get_pcm(snd_async_handler_t *handler)
 {
-	assert(handler->type == SND_ASYNC_HANDLER_PCM);
+	if (handler->type != SND_ASYNC_HANDLER_PCM) {
+		SNDMSG("invalid handler type %d", handler->type);
+		return NULL;
+	}
 	return handler->u.pcm;
 }
 
 static char *build_in_pcms[] = {
 	"adpcm", "alaw", "copy", "dmix", "file", "hooks", "hw", "ladspa", "lfloat",
 	"linear", "meter", "mulaw", "multi", "null", "plug", "rate", "route", "share",
-	"shm", "dsnoop", "dshare", "asym", "iec958", NULL
+	"shm", "dsnoop", "dshare", "asym", "iec958", "softvol", NULL
 };
 
 static int snd_pcm_open_conf(snd_pcm_t **pcmp, const char *name,
@@ -2064,7 +2160,8 @@ int snd_pcm_open_slave(snd_pcm_t **pcmp, snd_config_t *root,
 /**
  * \brief Wait for a PCM to become ready
  * \param pcm PCM handle
- * \param timeout maximum time in milliseconds to wait
+ * \param timeout maximum time in milliseconds to wait,
+ *        a negative value means infinity
  * \return a positive value on success otherwise a negative error code
  *         (-EPIPE for the xrun and -ESTRPIPE for the suspended status,
  *          others for general errors) 
@@ -2091,7 +2188,12 @@ int snd_pcm_wait(snd_pcm_t *pcm, int timeout)
 		}
 	}
 	err = snd_pcm_poll_descriptors(pcm, &pfd, 1);
-	assert(err == 1);
+	if (err < 0)
+		return err;
+	if (err != 1) {
+		SNDMSG("invalid poll descriptors %d\n", err);
+		return -EIO;
+	}
       __retry:
 	err_poll = poll(&pfd, 1, timeout);
 	if (err_poll < 0)
@@ -2242,7 +2344,8 @@ int snd_pcm_area_silence(const snd_pcm_channel_area_t *dst_area, snd_pcm_uframes
 		break;
 	}
 	default:
-		assert(0);
+		SNDMSG("invalid format width %d", width);
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -2409,7 +2512,8 @@ int snd_pcm_area_copy(const snd_pcm_channel_area_t *dst_area, snd_pcm_uframes_t 
 		break;
 	}
 	default:
-		assert(0);
+		SNDMSG("invalid format width %d", width);
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -2432,8 +2536,14 @@ int snd_pcm_areas_copy(const snd_pcm_channel_area_t *dst_areas, snd_pcm_uframes_
 	int width = snd_pcm_format_physical_width(format);
 	assert(dst_areas);
 	assert(src_areas);
-	assert(channels > 0);
-	assert(frames > 0);
+	if (! channels) {
+		SNDMSG("invalid channels %d", channels);
+		return -EINVAL;
+	}
+	if (! frames) {
+		SNDMSG("invalid frames %ld", frames);
+		return -EINVAL;
+	}
 	while (channels > 0) {
 		unsigned int step = src_areas->step;
 		void *src_addr = src_areas->addr;
@@ -2516,7 +2626,11 @@ int snd_pcm_hw_params_dump(snd_pcm_hw_params_t *params, snd_output_t *out)
  */
 int snd_pcm_hw_params_can_mmap_sample_resolution(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_MMAP_VALID);
 }
 
@@ -2533,7 +2647,11 @@ int snd_pcm_hw_params_can_mmap_sample_resolution(const snd_pcm_hw_params_t *para
  */
 int snd_pcm_hw_params_is_double(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_DOUBLE);
 }
 
@@ -2550,7 +2668,11 @@ int snd_pcm_hw_params_is_double(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_is_batch(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_BATCH);
 }
 
@@ -2567,7 +2689,11 @@ int snd_pcm_hw_params_is_batch(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_is_block_transfer(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_BLOCK_TRANSFER);
 }
 
@@ -2584,7 +2710,11 @@ int snd_pcm_hw_params_is_block_transfer(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_can_overrange(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_OVERRANGE);
 }
 
@@ -2601,7 +2731,11 @@ int snd_pcm_hw_params_can_overrange(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_can_pause(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_PAUSE);
 }
 
@@ -2618,7 +2752,11 @@ int snd_pcm_hw_params_can_pause(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_can_resume(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_RESUME);
 }
 
@@ -2635,7 +2773,11 @@ int snd_pcm_hw_params_can_resume(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_is_half_duplex(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_HALF_DUPLEX);
 }
 
@@ -2652,7 +2794,11 @@ int snd_pcm_hw_params_is_half_duplex(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_is_joint_duplex(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_JOINT_DUPLEX);
 }
 
@@ -2669,7 +2815,11 @@ int snd_pcm_hw_params_is_joint_duplex(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_can_sync_start(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return 0; /* FIXME: should be a negative error? */
+	}
 	return !!(params->info & SNDRV_PCM_INFO_SYNC_START);
 }
 
@@ -2687,7 +2837,11 @@ int snd_pcm_hw_params_can_sync_start(const snd_pcm_hw_params_t *params)
 int snd_pcm_hw_params_get_rate_numden(const snd_pcm_hw_params_t *params,
 				      unsigned int *rate_num, unsigned int *rate_den)
 {
-	assert(params && params->rate_den != 0);
+	assert(params);
+	if (CHECK_SANITY(params->rate_den == 0)) {
+		SNDMSG("invalid rate_den value");
+		return -EINVAL;
+	}
 	*rate_num = params->rate_num;
 	*rate_den = params->rate_den;
 	return 0;
@@ -2704,7 +2858,11 @@ int snd_pcm_hw_params_get_rate_numden(const snd_pcm_hw_params_t *params,
  */
 int snd_pcm_hw_params_get_sbits(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->msbits != 0);
+	assert(params);
+	if (CHECK_SANITY(params->msbits == 0)) {
+		SNDMSG("invalid msbits value");
+		return -EINVAL;
+	}
 	return params->msbits;
 }
 
@@ -2719,7 +2877,11 @@ int snd_pcm_hw_params_get_sbits(const snd_pcm_hw_params_t *params)
  */
 int snd_pcm_hw_params_get_fifo_size(const snd_pcm_hw_params_t *params)
 {
-	assert(params && params->info != ~0U);
+	assert(params);
+	if (CHECK_SANITY(params->info == ~0U)) {
+		SNDMSG("invalid PCM info field");
+		return -EINVAL;
+	}
 	return params->fifo_size;
 }
 
@@ -4970,7 +5132,10 @@ int snd_pcm_hw_params_get_min_align(const snd_pcm_hw_params_t *params, snd_pcm_u
 int snd_pcm_sw_params_current(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
 {
 	assert(pcm && params);
-	assert(pcm->setup);
+	if (CHECK_SANITY(! pcm->setup)) {
+		SNDMSG("PCM not set up");
+		return -EIO;
+	}
 	params->tstamp_mode = pcm->tstamp_mode;
 	params->period_step = pcm->period_step;
 	params->sleep_min = pcm->sleep_min;
@@ -5079,8 +5244,8 @@ int snd_pcm_sw_params_set_start_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params
 		params->start_threshold = pcm->boundary;
 		break;
 	default:
-		assert(0);
-		break;
+		SNDMSG("invalid start mode value %d\n", val);
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -5127,8 +5292,8 @@ int snd_pcm_sw_params_set_xrun_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *params,
 		params->stop_threshold = pcm->boundary;
 		break;
 	default:
-		assert(0);
-		break;
+		SNDMSG("invalid xrun mode value %d\n", val);
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -5167,7 +5332,10 @@ int snd_pcm_sw_params_set_tstamp_mode(snd_pcm_t *pcm, snd_pcm_sw_params_t *param
 #endif
 {
 	assert(pcm && params);
-	assert(val <= SND_PCM_TSTAMP_LAST);
+	if (CHECK_SANITY(val > SND_PCM_TSTAMP_LAST)) {
+		SNDMSG("invalid tstamp_mode value %d", val);
+		return -EINVAL;
+	}
 	params->tstamp_mode = val;
 	return 0;
 }
@@ -5283,7 +5451,10 @@ int snd_pcm_sw_params_set_xfer_align(snd_pcm_t *pcm, snd_pcm_sw_params_t *params
 #endif
 {
 	assert(pcm && params);
-	assert(val % pcm->min_align == 0);
+	if (CHECK_SANITY(val % pcm->min_align)) {
+		SNDMSG("xfer_align (%ld) is not aligned to min_align (%ld)", val, pcm->min_align);
+		return -EINVAL;
+	}
 	params->xfer_align = val;
 	return 0;
 }
@@ -5412,7 +5583,11 @@ int snd_pcm_sw_params_set_silence_threshold(snd_pcm_t *pcm, snd_pcm_sw_params_t 
 #endif
 {
 	assert(pcm && params);
-	assert(val < pcm->buffer_size);
+	if (CHECK_SANITY(val >= pcm->buffer_size)) {
+		SNDMSG("invalid silent_threshold value %ld (buffer_size = %ld)",
+		       val, pcm->buffer_size);
+		return -EINVAL;
+	}
 	params->silence_threshold = val;
 	return 0;
 }
@@ -5462,7 +5637,11 @@ int snd_pcm_sw_params_set_silence_size(snd_pcm_t *pcm, snd_pcm_sw_params_t *para
 #endif
 {
 	assert(pcm && params);
-	assert(val >= pcm->boundary || val <= pcm->buffer_size);
+	if (CHECK_SANITY(val < pcm->boundary && val > pcm->buffer_size)) {
+		SNDMSG("invalid silence_size %ld (boundary %ld, buffer_size %ld)",
+		       val, pcm->boundary, pcm->buffer_size);
+		return -EINVAL;
+	}
 	params->silence_size = val;
 	return 0;
 }
@@ -5953,8 +6132,16 @@ snd_pcm_sframes_t snd_pcm_mmap_commit(snd_pcm_t *pcm,
 				      snd_pcm_uframes_t frames)
 {
 	assert(pcm);
-	assert(offset == *pcm->appl.ptr % pcm->buffer_size);
-	assert(frames <= snd_pcm_mmap_avail(pcm));
+	if (CHECK_SANITY(offset != *pcm->appl.ptr % pcm->buffer_size)) {
+		SNDMSG("commit offset (%ld) doesn't match with appl_ptr (%ld) %% buf_size (%ld)",
+		       offset, *pcm->appl.ptr, pcm->buffer_size);
+		return -EPIPE;
+	}
+	if (CHECK_SANITY(frames > snd_pcm_mmap_avail(pcm))) {
+		SNDMSG("commit frames (%ld) overflow (avail = %ld)", frames,
+		       snd_pcm_mmap_avail(pcm));
+		return -EPIPE;
+	}
 	return pcm->fast_ops->mmap_commit(pcm->fast_op_arg, offset, frames);
 }
 
@@ -6057,7 +6244,8 @@ snd_pcm_sframes_t snd_pcm_read_areas(snd_pcm_t *pcm, const snd_pcm_channel_area_
 		frames = size;
 		if (frames > (snd_pcm_uframes_t) avail)
 			frames = avail;
-		assert(frames != 0);
+		if (! frames)
+			break;
 		err = func(pcm, areas, offset, frames);
 		if (err < 0)
 			break;
@@ -6128,7 +6316,8 @@ snd_pcm_sframes_t snd_pcm_write_areas(snd_pcm_t *pcm, const snd_pcm_channel_area
 		frames = size;
 		if (frames > (snd_pcm_uframes_t) avail)
 			frames = avail;
-		assert(frames != 0);
+		if (! frames)
+			break;
 		err = func(pcm, areas, offset, frames);
 		if (err < 0)
 			break;

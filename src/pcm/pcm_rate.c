@@ -27,8 +27,7 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
-  
-#include <limits.h>
+#include <inttypes.h>
 #include <byteswap.h>
 #include "pcm_local.h"
 #include "pcm_plugin.h"
@@ -45,7 +44,9 @@ const char *_snd_module_pcm_rate = "";
 
 #ifndef DOC_HIDDEN
 
-#define LINEAR_DIV (1<<16)
+/* LINEAR_DIV needs to be large enough to handle resampling from 192000 -> 8000 */
+#define LINEAR_DIV_SHIFT 19
+#define LINEAR_DIV (1<<LINEAR_DIV_SHIFT)
 
 enum rate_type {
 	RATE_TYPE_LINEAR,		/* linear interpolation */
@@ -53,16 +54,8 @@ enum rate_type {
 	RATE_TYPE_POLYPHASE,		/* polyphase resampling */
 };
 
-typedef struct {
-	union {
-		struct {
-			int init;
-			int16_t old_sample, new_sample;
-			int sum;
-		} linear;
-	} u;
-} snd_pcm_rate_state_t;
- 
+typedef struct _snd_pcm_rate snd_pcm_rate_t;
+
 typedef void (*rate_f)(const snd_pcm_channel_area_t *dst_areas,
 		       snd_pcm_uframes_t dst_offset,
 		       snd_pcm_uframes_t dst_frames,
@@ -70,11 +63,9 @@ typedef void (*rate_f)(const snd_pcm_channel_area_t *dst_areas,
 		       snd_pcm_uframes_t src_offset,
 		       snd_pcm_uframes_t src_frames,
 		       unsigned int channels,
-		       unsigned int getidx, unsigned int putidx,
-		       unsigned int arg,
-		       snd_pcm_rate_state_t *states);
+		       snd_pcm_rate_t *rate);
 
-typedef struct {
+struct _snd_pcm_rate {
 	snd_pcm_t *slave;
 	int close_slave;
 	snd_atomic_write_t watom;
@@ -85,72 +76,74 @@ typedef struct {
 	unsigned int get_idx;
 	unsigned int put_idx;
 	unsigned int pitch;
+	unsigned int pitch_shift;	/* for expand interpolation */
 	rate_f func;
 	snd_pcm_format_t sformat;
 	unsigned int srate;
-	snd_pcm_rate_state_t *states;
 	snd_pcm_channel_area_t *pareas;	/* areas for splitted period (rate pcm) */
 	snd_pcm_channel_area_t *sareas;	/* areas for splitted period (slave pcm) */
-} snd_pcm_rate_t;
+};
 
 static void snd_pcm_rate_expand(const snd_pcm_channel_area_t *dst_areas,
 				snd_pcm_uframes_t dst_offset, snd_pcm_uframes_t dst_frames,
 				const snd_pcm_channel_area_t *src_areas,
 				snd_pcm_uframes_t src_offset, snd_pcm_uframes_t src_frames,
 				unsigned int channels,
-				unsigned int getidx, unsigned int putidx,
-				unsigned int get_threshold,
-				snd_pcm_rate_state_t *states)
+				snd_pcm_rate_t *rate)
 {
 #define GET16_LABELS
 #define PUT16_LABELS
 #include "plugin_ops.h"
 #undef GET16_LABELS
 #undef PUT16_LABELS
-	void *get = get16_labels[getidx];
-	void *put = put16_labels[putidx];
+	void *get = get16_labels[rate->get_idx];
+	void *put = put16_labels[rate->put_idx];
+	unsigned int get_threshold = rate->pitch;
 	unsigned int channel;
-	snd_pcm_uframes_t src_frames1 = 0;
-	snd_pcm_uframes_t dst_frames1 = 0;
+	snd_pcm_uframes_t src_frames1;
+	snd_pcm_uframes_t dst_frames1;
 	int16_t sample = 0;
 	
 	for (channel = 0; channel < channels; ++channel) {
-		//int xpos = 0;
 		const snd_pcm_channel_area_t *src_area = &src_areas[channel];
 		const snd_pcm_channel_area_t *dst_area = &dst_areas[channel];
 		const char *src;
 		char *dst;
 		int src_step, dst_step;
-		int16_t old_sample = states->u.linear.old_sample;
-		int16_t new_sample = states->u.linear.new_sample;
+		int16_t old_sample = 0;
+		int16_t new_sample = 0;
+		int old_weight, new_weight;
 		unsigned int pos = 0;
+		int init;
 		src = snd_pcm_channel_area_addr(src_area, src_offset);
 		dst = snd_pcm_channel_area_addr(dst_area, dst_offset);
 		src_step = snd_pcm_channel_area_step(src_area);
 		dst_step = snd_pcm_channel_area_step(dst_area);
 		src_frames1 = 0;
 		dst_frames1 = 0;
-		if (!states->u.linear.init) {
-			goto __force_get;
-		} else {
-			states->u.linear.init = 2;
-		}
+		init = 1;
 		while (dst_frames1 < dst_frames) {
-			if (states->u.linear.init == 2) {
-				old_sample = new_sample;
-			      __force_get:
-				goto *get;
+			if (pos >= get_threshold) {
+				src += src_step;
+				src_frames1++;
+				if (src_frames1 < src_frames) {
+					old_sample = new_sample;
+					goto *get;
 #define GET16_END after_get
 #include "plugin_ops.h"
 #undef GET16_END
-			after_get:
-				new_sample = sample;
-				if (!states->u.linear.init)
-					old_sample = sample;
-				states->u.linear.init = 1;
+				after_get:
+					new_sample = sample;
+					if (init) {
+						init = 0;
+						continue;
+					}
+				}
+				pos -= get_threshold;
 			}
-			sample = (((int64_t)old_sample * (int64_t)(get_threshold - pos)) + ((int64_t)new_sample * pos)) / get_threshold;
-			//printf("sample[%i] = %i (old_sample = %i, new_sample = %i)\n", xpos++, sample, old_sample, new_sample);
+			new_weight = (pos << (16 - rate->pitch_shift)) / (get_threshold >> rate->pitch_shift);
+			old_weight = 0x10000 - new_weight;
+			sample = (old_sample * old_weight + new_sample * new_weight) >> 16;
 			goto *put;
 #define PUT16_END after_put
 #include "plugin_ops.h"
@@ -159,18 +152,58 @@ static void snd_pcm_rate_expand(const snd_pcm_channel_area_t *dst_areas,
 			dst += dst_step;
 			dst_frames1++;
 			pos += LINEAR_DIV;
+		} 
+	}
+}
+
+/* optimized version for S16 format */
+static void snd_pcm_rate_expand_s16(const snd_pcm_channel_area_t *dst_areas,
+				    snd_pcm_uframes_t dst_offset, snd_pcm_uframes_t dst_frames,
+				    const snd_pcm_channel_area_t *src_areas,
+				    snd_pcm_uframes_t src_offset, snd_pcm_uframes_t src_frames,
+				    unsigned int channels,
+				    snd_pcm_rate_t *rate)
+{
+	unsigned int channel;
+	snd_pcm_uframes_t src_frames1;
+	snd_pcm_uframes_t dst_frames1;
+	unsigned int get_threshold = rate->pitch;
+	
+	for (channel = 0; channel < channels; ++channel) {
+		const snd_pcm_channel_area_t *src_area = &src_areas[channel];
+		const snd_pcm_channel_area_t *dst_area = &dst_areas[channel];
+		const int16_t *src;
+		int16_t *dst;
+		int src_step, dst_step;
+		int16_t old_sample;
+		int16_t new_sample;
+		int old_weight, new_weight;
+		unsigned int pos;
+		src = snd_pcm_channel_area_addr(src_area, src_offset);
+		dst = snd_pcm_channel_area_addr(dst_area, dst_offset);
+		src_step = snd_pcm_channel_area_step(src_area) >> 1;
+		dst_step = snd_pcm_channel_area_step(dst_area) >> 1;
+		src_frames1 = 0;
+		dst_frames1 = 0;
+		old_sample = new_sample = *src;
+		pos = get_threshold;
+		while (dst_frames1 < dst_frames) {
 			if (pos >= get_threshold) {
 				pos -= get_threshold;
 				src += src_step;
 				src_frames1++;
-				states->u.linear.init = 2; /* get a new sample */
-				//printf("new_src_pos = %i\n", (src - (char *)snd_pcm_channel_area_addr(src_area, src_offset)) / src_step);
-				assert(src_frames1 <= src_frames);
+				if (src_frames1 < src_frames) {
+					old_sample = new_sample;
+					new_sample = *src;
+				}
 			}
+			new_weight = (pos << (16 - rate->pitch_shift)) / (get_threshold >> rate->pitch_shift);
+			old_weight = 0x10000 - new_weight;
+			*dst = (old_sample * old_weight + new_sample * new_weight) >> 16;
+			dst += dst_step;
+			dst_frames1++;
+			pos += LINEAR_DIV;
 		} 
-		states->u.linear.old_sample = old_sample;
-		states->u.linear.new_sample = new_sample;
-		states++;
 	}
 }
 
@@ -179,33 +212,32 @@ static void snd_pcm_rate_shrink(const snd_pcm_channel_area_t *dst_areas,
 				const snd_pcm_channel_area_t *src_areas,
 				snd_pcm_uframes_t src_offset, snd_pcm_uframes_t src_frames,
 				unsigned int channels,
-				unsigned int getidx, unsigned int putidx,
-				unsigned int get_increment,
-				snd_pcm_rate_state_t *states)
+				snd_pcm_rate_t *rate)
 {
 #define GET16_LABELS
 #define PUT16_LABELS
 #include "plugin_ops.h"
 #undef GET16_LABELS
 #undef PUT16_LABELS
-	void *get = get16_labels[getidx];
-	void *put = put16_labels[putidx];
+	void *get = get16_labels[rate->get_idx];
+	void *put = put16_labels[rate->put_idx];
+	unsigned int get_increment = rate->pitch;
 	unsigned int channel;
-	snd_pcm_uframes_t src_frames1 = 0;
-	snd_pcm_uframes_t dst_frames1 = 0;
+	snd_pcm_uframes_t src_frames1;
+	snd_pcm_uframes_t dst_frames1;
 	int16_t sample = 0;
+	unsigned int pos;
 
 	for (channel = 0; channel < channels; ++channel) {
 		const snd_pcm_channel_area_t *src_area = &src_areas[channel];
 		const snd_pcm_channel_area_t *dst_area = &dst_areas[channel];
-		unsigned int pos;
-		int sum;
 		const char *src;
 		char *dst;
 		int src_step, dst_step;
-		sum = states->u.linear.sum;
-		pos = 0;
-		states->u.linear.init = 0;
+		int16_t old_sample = 0;
+		int16_t new_sample = 0;
+		int old_weight, new_weight;
+		pos = LINEAR_DIV - get_increment; /* Force first sample to be copied */
 		src = snd_pcm_channel_area_addr(src_area, src_offset);
 		dst = snd_pcm_channel_area_addr(dst_area, dst_offset);
 		src_step = snd_pcm_channel_area_step(src_area);
@@ -219,29 +251,82 @@ static void snd_pcm_rate_shrink(const snd_pcm_channel_area_t *dst_areas,
 #include "plugin_ops.h"
 #undef GET16_END
 		after_get:
+			new_sample = sample;
 			src += src_step;
 			src_frames1++;
 			pos += get_increment;
 			if (pos >= LINEAR_DIV) {
-				int s = sample;
 				pos -= LINEAR_DIV;
-				sum += s * (get_increment - pos);
-				sum /= LINEAR_DIV;
-				sample = sum;
+				old_weight = (pos << (32 - LINEAR_DIV_SHIFT)) / (get_increment >> (LINEAR_DIV_SHIFT - 16));
+				new_weight = 0x10000 - old_weight;
+				sample = (old_sample * old_weight + new_sample * new_weight) >> 16;
 				goto *put;
 #define PUT16_END after_put
 #include "plugin_ops.h"
 #undef PUT16_END
 			after_put:
 				dst += dst_step;
-				sum = s * pos;
 				dst_frames1++;
-				assert(dst_frames1 <= dst_frames);
-			} else
-				sum += sample * get_increment;
+				if (CHECK_SANITY(dst_frames1 > dst_frames)) {
+					SNDERR("dst_frames overflow");
+					break;
+				}
+			}
+			old_sample = new_sample;
 		}
-		states->u.linear.sum = sum;
-		states++;
+	}
+}
+
+/* optimized version for S16 format */
+static void snd_pcm_rate_shrink_s16(const snd_pcm_channel_area_t *dst_areas,
+				    snd_pcm_uframes_t dst_offset, snd_pcm_uframes_t dst_frames,
+				    const snd_pcm_channel_area_t *src_areas,
+				    snd_pcm_uframes_t src_offset, snd_pcm_uframes_t src_frames,
+				    unsigned int channels,
+				    snd_pcm_rate_t *rate)
+{
+	unsigned int get_increment = rate->pitch;
+	unsigned int channel;
+	snd_pcm_uframes_t src_frames1;
+	snd_pcm_uframes_t dst_frames1;
+	unsigned int pos = 0;
+
+	for (channel = 0; channel < channels; ++channel) {
+		const snd_pcm_channel_area_t *src_area = &src_areas[channel];
+		const snd_pcm_channel_area_t *dst_area = &dst_areas[channel];
+		const int16_t *src;
+		int16_t *dst;
+		int src_step, dst_step;
+		int16_t old_sample = 0;
+		int16_t new_sample = 0;
+		int old_weight, new_weight;
+		pos = LINEAR_DIV - get_increment; /* Force first sample to be copied */
+		src = snd_pcm_channel_area_addr(src_area, src_offset);
+		dst = snd_pcm_channel_area_addr(dst_area, dst_offset);
+		src_step = snd_pcm_channel_area_step(src_area) >> 1;
+		dst_step = snd_pcm_channel_area_step(dst_area) >> 1 ;
+		src_frames1 = 0;
+		dst_frames1 = 0;
+		while (src_frames1 < src_frames) {
+			
+			new_sample = *src;
+			src += src_step;
+			src_frames1++;
+			pos += get_increment;
+			if (pos >= LINEAR_DIV) {
+				pos -= LINEAR_DIV;
+				old_weight = (pos << (32 - LINEAR_DIV_SHIFT)) / (get_increment >> (LINEAR_DIV_SHIFT - 16));
+				new_weight = 0x10000 - old_weight;
+				*dst = (old_sample * old_weight + new_sample * new_weight) >> 16;
+				dst += dst_step;
+				dst_frames1++;
+				if (CHECK_SANITY(dst_frames1 > dst_frames)) {
+					SNDERR("dst_frames overflow");
+					break;
+				}
+			}
+			old_sample = new_sample;
+		}
 	}
 }
 
@@ -254,9 +339,9 @@ static snd_pcm_sframes_t snd_pcm_rate_client_frames(snd_pcm_t *pcm, snd_pcm_sfra
 		return 0;
 	/* Round toward zero */
 	if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
-		return muldiv_down(frames, LINEAR_DIV, rate->pitch);
+		return muldiv_near(frames, LINEAR_DIV, rate->pitch);
 	else
-		return muldiv_down(frames, rate->pitch, LINEAR_DIV);
+		return muldiv_near(frames, rate->pitch, LINEAR_DIV);
 }
 
 static snd_pcm_sframes_t snd_pcm_rate_slave_frames(snd_pcm_t *pcm, snd_pcm_sframes_t frames)
@@ -264,9 +349,9 @@ static snd_pcm_sframes_t snd_pcm_rate_slave_frames(snd_pcm_t *pcm, snd_pcm_sfram
 	snd_pcm_rate_t *rate = pcm->private_data;
 	/* Round toward zero */
 	if (pcm->stream == SND_PCM_STREAM_PLAYBACK)
-		return muldiv_down(frames, rate->pitch, LINEAR_DIV);
+		return muldiv_near(frames, rate->pitch, LINEAR_DIV);
 	else
-		return muldiv_down(frames, LINEAR_DIV, rate->pitch);
+		return muldiv_near(frames, LINEAR_DIV, rate->pitch);
 }
 
 static int snd_pcm_rate_hw_refine_cprepare(snd_pcm_t *pcm ATTRIBUTE_UNUSED, snd_pcm_hw_params_t *params)
@@ -482,18 +567,23 @@ static int snd_pcm_rate_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t * params)
 	rate->get_idx = snd_pcm_linear_get_index(src_format, SND_PCM_FORMAT_S16);
 	rate->put_idx = snd_pcm_linear_put_index(SND_PCM_FORMAT_S16, dst_format);
 	if (src_rate < dst_rate) {
-		rate->func = snd_pcm_rate_expand;
+		if (src_format == dst_format && src_format == SND_PCM_FORMAT_S16)
+			rate->func = snd_pcm_rate_expand_s16;
+		else
+			rate->func = snd_pcm_rate_expand;
 		/* pitch is get_threshold */
 	} else {
-		rate->func = snd_pcm_rate_shrink;
+		if (src_format == dst_format && src_format == SND_PCM_FORMAT_S16)
+			rate->func = snd_pcm_rate_shrink_s16;
+		else
+			rate->func = snd_pcm_rate_shrink;
 		/* pitch is get_increment */
 	}
-	rate->pitch = (((u_int64_t)dst_rate * LINEAR_DIV) + src_rate - 1) / src_rate;
-	assert(!rate->states);
-	assert(!rate->pareas);
-	rate->states = malloc(channels * sizeof(*rate->states));
-	if (rate->states == NULL)
-		return -ENOMEM;
+	rate->pitch = (((u_int64_t)dst_rate * LINEAR_DIV) + (src_rate / 2)) / src_rate;
+	if (CHECK_SANITY(rate->pareas)) {
+		SNDMSG("rate plugin already in use");
+		return -EBUSY;
+	}
 	if ((buffer_size / period_size) * period_size == buffer_size &&
 	    (slave->buffer_size / slave->period_size) * slave->period_size == slave->buffer_size)
 		return 0;
@@ -529,10 +619,6 @@ static int snd_pcm_rate_hw_free(snd_pcm_t *pcm)
 		free(rate->pareas);
 		rate->pareas = NULL;
 		rate->sareas = NULL;
-	}
-	if (rate->states) {
-		free(rate->states);
-		rate->states = NULL;
 	}
 	return snd_pcm_hw_free(rate->slave);
 }
@@ -581,56 +667,74 @@ static int snd_pcm_rate_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 	params->boundary = boundary1;
 	sparams->boundary = boundary2;
 	if (pcm->stream == SND_PCM_STREAM_PLAYBACK) {
-		rate->pitch = (((u_int64_t)slave->period_size * LINEAR_DIV) + pcm->period_size - 1) / pcm->period_size;
+		rate->pitch = (((u_int64_t)slave->period_size * LINEAR_DIV) + (pcm->period_size/2) ) / pcm->period_size;
 		do {
-			snd_pcm_uframes_t cframes;
+			snd_pcm_uframes_t cframes,cframes_test;
 			
-			cframes = snd_pcm_rate_client_frames(pcm, slave->period_size - 1);
-			if (cframes == pcm->period_size - 1)
+			cframes = snd_pcm_rate_client_frames(pcm, slave->period_size );
+			if (cframes == pcm->period_size )
 				break;
-			if (cframes > pcm->period_size - 1) {
+			if (cframes > pcm->period_size ) {
 				rate->pitch++;
-				if ((snd_pcm_uframes_t)snd_pcm_rate_client_frames(pcm, slave->period_size - 1) < pcm->period_size - 1) {
-					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size - 1, pcm->period_size - 1);
+				cframes_test = snd_pcm_rate_client_frames(pcm, slave->period_size );
+				if (cframes_test < pcm->period_size ) {
+					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size, pcm->period_size);
 					return -EIO;
 				}
 			} else {
 				rate->pitch--;
-				if ((snd_pcm_uframes_t)snd_pcm_rate_client_frames(pcm, slave->period_size - 1) > pcm->period_size - 1) {
-					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size - 1, pcm->period_size - 1);
+				cframes_test = snd_pcm_rate_client_frames(pcm, slave->period_size );
+				if (cframes_test > pcm->period_size) {
+					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size, pcm->period_size);
 					return -EIO;
 				}
 			}
 		} while (1);
-		assert((snd_pcm_uframes_t)snd_pcm_rate_client_frames(pcm, slave->period_size - 1) == pcm->period_size - 1);
+		if ((snd_pcm_uframes_t)snd_pcm_rate_client_frames(pcm, slave->period_size ) != pcm->period_size) {
+			SNDERR("invalid slave period_size %ld for pcm period_size %ld",
+			       slave->period_size, pcm->period_size);
+			return -EIO;
+		}
 	} else {
-		rate->pitch = (((u_int64_t)pcm->period_size * LINEAR_DIV) + slave->period_size - 1) / slave->period_size;
+		rate->pitch = (((u_int64_t)pcm->period_size * LINEAR_DIV) + (slave->period_size/2) ) / slave->period_size;
 		do {
 			snd_pcm_uframes_t cframes;
 			
-			cframes = snd_pcm_rate_slave_frames(pcm, pcm->period_size - 1);
-			if (cframes == slave->period_size - 1)
+			cframes = snd_pcm_rate_slave_frames(pcm, pcm->period_size );
+			if (cframes == slave->period_size )
 				break;
-			if (cframes > slave->period_size - 1) {
+			if (cframes > slave->period_size ) {
 				rate->pitch++;
-				if ((snd_pcm_uframes_t)snd_pcm_rate_slave_frames(pcm, pcm->period_size - 1) < slave->period_size - 1) {
-					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size - 1, pcm->period_size - 1);
+				if ((snd_pcm_uframes_t)snd_pcm_rate_slave_frames(pcm, pcm->period_size ) < slave->period_size ) {
+					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size, pcm->period_size);
 					return -EIO;
 				}
 			} else {
 				rate->pitch--;
-				if ((snd_pcm_uframes_t)snd_pcm_rate_slave_frames(pcm, pcm->period_size - 1) > slave->period_size - 1) {
-					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size - 1, pcm->period_size - 1);
+				if ((snd_pcm_uframes_t)snd_pcm_rate_slave_frames(pcm, pcm->period_size) > slave->period_size ) {
+					SNDERR("Unable to satisfy pitch condition (%i/%i - %li/%li)\n", slave->rate, pcm->rate, slave->period_size , pcm->period_size );
 					return -EIO;
 				}
 			}
 		} while (1);
-		assert((snd_pcm_uframes_t)snd_pcm_rate_slave_frames(pcm, pcm->period_size - 1) == slave->period_size - 1);
+		if ((snd_pcm_uframes_t)snd_pcm_rate_slave_frames(pcm, pcm->period_size ) != slave->period_size) {
+			SNDERR("invalid pcm period_size %ld for slave period_size",
+			       pcm->period_size, slave->period_size);
+			return -EIO;
+		}
+	}
+	if (rate->pitch >= LINEAR_DIV) {
+		/* shift for expand linear interpolation */
+		rate->pitch_shift = 0;
+		while ((rate->pitch >> rate->pitch_shift) >= (1 << 16))
+			rate->pitch_shift++;
 	}
 	recalc(pcm, &sparams->avail_min);
 	rate->orig_avail_min = sparams->avail_min;
 	recalc(pcm, &sparams->xfer_align);
 	recalc(pcm, &sparams->start_threshold);
+	if (sparams->avail_min < 1) sparams->avail_min = 1;
+	if (sparams->xfer_align < 1) sparams->xfer_align = 1;
 	if (sparams->start_threshold <= slave->buffer_size) {
 		if (sparams->start_threshold > (slave->buffer_size / sparams->avail_min) * sparams->avail_min)
 			sparams->start_threshold = (slave->buffer_size / sparams->avail_min) * sparams->avail_min;
@@ -650,15 +754,8 @@ static int snd_pcm_rate_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t * params)
 static int snd_pcm_rate_init(snd_pcm_t *pcm)
 {
 	snd_pcm_rate_t *rate = pcm->private_data;
-	unsigned int k;
 	switch (rate->type) {
 	case RATE_TYPE_LINEAR:
-		for (k = 0; k < pcm->channels; ++k) {
-			rate->states[k].u.linear.sum = 0;
-			rate->states[k].u.linear.old_sample = 0;
-			rate->states[k].u.linear.new_sample = 0;
-			rate->states[k].u.linear.init = 0;
-		}
 		break;
 	default:
 		assert(0);
@@ -676,9 +773,7 @@ snd_pcm_rate_write_areas1(snd_pcm_t *pcm,
 	snd_pcm_rate_t *rate = pcm->private_data;
 	rate->func(slave_areas, slave_offset, rate->slave->period_size,
 		   areas, offset, pcm->period_size,
-		   pcm->channels,
-		   rate->get_idx, rate->put_idx,
-		   rate->pitch, rate->states);
+		   pcm->channels, rate);
 	return 0;
 }
 
@@ -692,9 +787,7 @@ snd_pcm_rate_read_areas1(snd_pcm_t *pcm,
 	snd_pcm_rate_t *rate = pcm->private_data;
 	rate->func(areas, offset, pcm->period_size,
 		   slave_areas, slave_offset, rate->slave->period_size,
-		   pcm->channels,
-		   rate->get_idx, rate->put_idx,
-		   rate->pitch, rate->states);
+		   pcm->channels, rate);
 	return 0;
 }
 
@@ -1028,7 +1121,10 @@ static int snd_pcm_rate_commit_next_period(snd_pcm_t *pcm, snd_pcm_uframes_t app
 		result = snd_pcm_mmap_begin(rate->slave, &slave_areas, &slave_offset, &slave_frames);
 		if (result < 0)
 			return result;
-		assert(slave_offset == 0);
+		if (slave_offset) {
+			SNDERR("non-zero slave_offset %ld", slave_offset);
+			return -EIO;
+		}
 		snd_pcm_areas_copy(slave_areas, slave_offset,
 				   rate->sareas, xfer,
 				   pcm->channels, cont,
@@ -1052,7 +1148,7 @@ static int snd_pcm_rate_grab_next_period(snd_pcm_t *pcm, snd_pcm_uframes_t hw_of
 	snd_pcm_uframes_t cont = pcm->buffer_size - hw_offset;
 	const snd_pcm_channel_area_t *areas;
 	const snd_pcm_channel_area_t *slave_areas;
-	snd_pcm_uframes_t slave_offset;
+	snd_pcm_uframes_t slave_offset, xfer;
 	snd_pcm_uframes_t slave_frames = ULONG_MAX;
 	snd_pcm_sframes_t result;
 
@@ -1075,9 +1171,6 @@ static int snd_pcm_rate_grab_next_period(snd_pcm_t *pcm, snd_pcm_uframes_t hw_of
 			return 0;
 		}
 	} else {
-		snd_pcm_rate_t *rate = pcm->private_data;
-		snd_pcm_uframes_t xfer;
-
 		/* ok, grab first fragment */
 		result = snd_pcm_mmap_begin(rate->slave, &slave_areas, &slave_offset, &slave_frames);
 		if (result < 0)
@@ -1111,7 +1204,10 @@ static int snd_pcm_rate_grab_next_period(snd_pcm_t *pcm, snd_pcm_uframes_t hw_of
 		result = snd_pcm_mmap_begin(rate->slave, &slave_areas, &slave_offset, &slave_frames);
 		if (result < 0)
 			return result;
-		assert(slave_offset == 0);
+		if (slave_offset) {
+			SNDERR("non-zero slave_offset %ld", slave_offset);
+			return -EIO;
+		}
 		snd_pcm_areas_copy(rate->sareas, xfer,
 		                   slave_areas, slave_offset,
 				   pcm->channels, cont,

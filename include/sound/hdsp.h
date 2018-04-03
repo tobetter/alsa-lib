@@ -19,6 +19,8 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <stdint.h>
+
 #define HDSP_MATRIX_MIXER_SIZE 2048
 
 typedef enum {
@@ -32,13 +34,13 @@ typedef enum {
 typedef struct _snd_hdsp_peak_rms hdsp_peak_rms_t;
 
 struct _snd_hdsp_peak_rms {
-	unsigned int input_peaks[26];
-	unsigned int playback_peaks[26];
-	unsigned int output_peaks[28];
-	unsigned long long input_rms[26];
-	unsigned long long playback_rms[26];
+	uint32_t input_peaks[26];
+	uint32_t playback_peaks[26];
+	uint32_t output_peaks[28];
+	uint64_t input_rms[26];
+	uint64_t playback_rms[26];
 	/* These are only used for H96xx cards */
-	unsigned long long output_rms[26];
+	uint64_t output_rms[26];
 };
 
 #define SNDRV_HDSP_IOCTL_GET_PEAK_RMS _IOR('H', 0x40, hdsp_peak_rms_t)
@@ -76,7 +78,7 @@ struct _snd_hdsp_config_info {
 typedef struct _snd_hdsp_firmware hdsp_firmware_t;
 
 struct _snd_hdsp_firmware {
-	unsigned long *firmware_data;	/* 24413 long words */
+	void *firmware_data;	/* 24413 x 4 bytes */
 };
 
 #define SNDRV_HDSP_IOCTL_UPLOAD_FIRMWARE _IOW('H', 0x42, hdsp_firmware_t)
