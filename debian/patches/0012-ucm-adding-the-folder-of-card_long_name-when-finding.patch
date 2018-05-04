@@ -1,0 +1,45 @@
+From 181f8e251bc05832f9c9401544e680ea0572a2e3 Mon Sep 17 00:00:00 2001
+From: Hui Wang <hui.wang@canonical.com>
+Date: Wed, 2 May 2018 14:08:05 +0800
+Subject: [PATCH] ucm: adding the folder of card_long_name when finding verb
+ conf file
+
+The board configuration file and verb conf file are allowed to be
+in the folder named of card_long_name, so when finding the verb conf
+file, we need to check if it is in the folder of card_long_name or
+card_name.
+
+Signed-off-by: Hui Wang <hui.wang@canonical.com>
+Signed-off-by: Jaroslav Kysela <perex@perex.cz>
+---
+ src/ucm/parser.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+Index: alsa-lib-1.1.3/src/ucm/parser.c
+===================================================================
+--- alsa-lib-1.1.3.orig/src/ucm/parser.c
++++ alsa-lib-1.1.3/src/ucm/parser.c
+@@ -1055,6 +1055,7 @@ static int parse_verb_file(snd_use_case_
+ 	char filename[MAX_FILE];
+ 	char *env = getenv(ALSA_CONFIG_UCM_VAR);
+ 	int err;
++	char *folder_name;
+ 
+ 	/* allocate verb */
+ 	verb = calloc(1, sizeof(struct use_case_verb));
+@@ -1081,9 +1082,14 @@ static int parse_verb_file(snd_use_case_
+ 	}
+ 
+ 	/* open Verb file for reading */
++	if (!strncmp(uc_mgr->conf_file_name, uc_mgr->card_long_name, MAX_CARD_LONG_NAME))
++		folder_name = uc_mgr->card_long_name;
++	else
++		folder_name = uc_mgr->card_name;
++
+ 	snprintf(filename, sizeof(filename), "%s/%s/%s",
+ 		env ? env : ALSA_USE_CASE_DIR,
+-		uc_mgr->card_name, file);
++		folder_name, file);
+ 	filename[sizeof(filename)-1] = '\0';
+ 	
+ 	err = uc_mgr_config_load(filename, &cfg);

@@ -1,3 +1,20 @@
+alsa-lib (1.1.3-5ubuntu0.1) bionic; urgency=medium
+
+  * debian/patches/0009-ucm-Assure-the-user-input-card-name-not-to-exceed-ma.patch
+  * debian/patches/0010-ucm-Load-device-specific-configuration-file-based-on.patch
+  * debian/patches/0011-conf-ucm-Add-dual-HD-audio-codecs-config-for-Lenovo.patch
+  * debian/patches/0012-ucm-adding-the-folder-of-card_long_name-when-finding.patch
+  * debian/patches/0013-conf-ucm-increase-the-input-volume-for-LineIn.patch
+    - Backport 5 patches to make audio work on Lenovo machines with dual audio
+      codecs. (LP: #1768830)
+      0009-xxx.patch: 2b9b3f01
+      0010-xxx.patch: 4b9297e6
+      0011-xxx.patch: b7e56af8 (minor change for fixing patch conflict)
+      0012-xxx.patch: 181f8e25 (minor change for fixing patch conflict)
+      0013-xxx.patch: 81db276f
+
+ -- Hui Wang <hui.wang@canonical.com>  Fri, 04 May 2018 09:15:08 +0800
+
 alsa-lib (1.1.3-5) unstable; urgency=medium
 
   [ Jordi Mallach ]

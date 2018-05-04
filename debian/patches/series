@@ -6,3 +6,8 @@
 0006-Enabled-extended-namehints-in-alsa.conf.patch
 0007-Add-a-configuration-for-tegra-alc5632-based-cards.patch
 0008-topology-Fix-incorrect-license-in-source-comments.patch
+0009-ucm-Assure-the-user-input-card-name-not-to-exceed-ma.patch
+0010-ucm-Load-device-specific-configuration-file-based-on.patch
+0011-conf-ucm-Add-dual-HD-audio-codecs-config-for-Lenovo.patch
+0012-ucm-adding-the-folder-of-card_long_name-when-finding.patch
+0013-conf-ucm-increase-the-input-volume-for-LineIn.patch
