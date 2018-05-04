@@ -41,6 +41,7 @@
 #include "use-case.h"
 
 #define MAX_FILE		256
+#define MAX_CARD_LONG_NAME	80
 #define ALSA_USE_CASE_DIR	ALSA_CONFIG_DIR "/ucm"
 
 #define SEQUENCE_ELEMENT_TYPE_CDEV	1
@@ -190,6 +191,8 @@ struct use_case_verb {
  */
 struct snd_use_case_mgr {
 	char *card_name;
+	char card_long_name[MAX_CARD_LONG_NAME];
+	char conf_file_name[MAX_CARD_LONG_NAME];
 	char *comment;
 
 	/* use case verb, devices and modifier configs parsed from files */
