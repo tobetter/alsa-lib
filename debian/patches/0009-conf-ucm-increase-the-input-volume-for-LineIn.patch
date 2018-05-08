@@ -1,0 +1,29 @@
+From 81db276f8c2235adc83e9698b0174265f6482655 Mon Sep 17 00:00:00 2001
+From: Hui Wang <hui.wang@canonical.com>
+Date: Wed, 2 May 2018 14:08:06 +0800
+Subject: [PATCH] conf/ucm: increase the input volume for LineIn
+
+Otherwise, the boost value is 0, and the sound captured from that
+LineIn jack is too weak for users.
+
+Signed-off-by: Hui Wang <hui.wang@canonical.com>
+Signed-off-by: Jaroslav Kysela <perex@perex.cz>
+---
+ src/conf/ucm/HDAudio-Lenovo-DualCodecs/HiFi.conf | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/conf/ucm/HDAudio-Lenovo-DualCodecs/HiFi.conf b/src/conf/ucm/HDAudio-Lenovo-DualCodecs/HiFi.conf
+index 5096789..ece780d 100644
+--- a/src/conf/ucm/HDAudio-Lenovo-DualCodecs/HiFi.conf
++++ b/src/conf/ucm/HDAudio-Lenovo-DualCodecs/HiFi.conf
+@@ -99,6 +99,7 @@ SectionDevice."LineIn" {
+ 	EnableSequence [
+ 		cdev "hw:PCH"
+ 		cset "name='Input Source' Line"
++		cset "name='Line Boost Volume' 3"
+ 	]
+ }
+ 
+-- 
+2.7.4
+

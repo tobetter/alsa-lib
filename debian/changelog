@@ -1,3 +1,12 @@
+alsa-lib (1.1.6-1ubuntu1) cosmic; urgency=medium
+
+  * debian/patches/0008-ucm-adding-the-folder-of-card_long_name-when-finding.patch
+  * debian/patches/0009-conf-ucm-increase-the-input-volume-for-LineIn.patch
+     - Backport 2 patches to make audio work on Lenovo machines with dual codecs.
+       (LP: #1768830)
+
+ -- Hui Wang <hui.wang@canonical.com>  Tue, 08 May 2018 03:28:26 +0000
+
 alsa-lib (1.1.6-1) unstable; urgency=medium
 
   * New upstream release.
