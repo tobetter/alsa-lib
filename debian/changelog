@@ -1,3 +1,9 @@
+alsa-lib (1.1.6-1ubuntu2) disco; urgency=medium
+
+  * No-change rebuild to build for python3.7 as the default.
+
+ -- Matthias Klose <doko@ubuntu.com>  Wed, 31 Oct 2018 13:13:22 +0000
+
 alsa-lib (1.1.6-1ubuntu1) cosmic; urgency=medium
 
   * debian/patches/0008-ucm-adding-the-folder-of-card_long_name-when-finding.patch
