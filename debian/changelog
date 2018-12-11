@@ -1,3 +1,12 @@
+alsa-lib (1.1.6-1ubuntu1.1) cosmic; urgency=medium
+
+  * d/p/0010-conf-ucm-Add-a-UCM-profile-for-Dell-WD15-Dock-USB-au.patch
+  * d/p/0011-conf-ucm-Dell-WD15-Dock-Fix-incorrect-device-names.patch
+  * d/p/0012-conf-USB-Audio-Add-Dell-WD19-Dock-in-the-IEC958-blac.patch
+    - enable line-out on the Dell WD Dock stations (LP: #1806532)
+
+ -- Hui Wang <hui.wang@canonical.com>  Tue, 11 Dec 2018 17:10:09 +0800
+
 alsa-lib (1.1.6-1ubuntu1) cosmic; urgency=medium
 
   * debian/patches/0008-ucm-adding-the-folder-of-card_long_name-when-finding.patch
