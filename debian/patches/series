@@ -7,3 +7,6 @@
 0007-Add-a-configuration-for-tegra-alc5632-based-cards.patch
 0008-ucm-adding-the-folder-of-card_long_name-when-finding.patch
 0009-conf-ucm-increase-the-input-volume-for-LineIn.patch
+0010-conf-ucm-Add-a-UCM-profile-for-Dell-WD15-Dock-USB-au.patch
+0011-conf-ucm-Dell-WD15-Dock-Fix-incorrect-device-names.patch
+0012-conf-USB-Audio-Add-Dell-WD19-Dock-in-the-IEC958-blac.patch
