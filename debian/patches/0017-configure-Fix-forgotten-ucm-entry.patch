@@ -1,0 +1,29 @@
+From 5e5921792d6d40607732186f3bca2c22182c9a79 Mon Sep 17 00:00:00 2001
+From: Takashi Iwai <tiwai@suse.de>
+Date: Thu, 3 May 2018 08:40:20 +0200
+Subject: [PATCH 4/4] configure: Fix forgotten ucm entry
+
+The previous commit forgot to add to configure.ac.  Fix it.
+
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+(cherry picked from commit 44f499bb22f3923f966e11a234455e3d06936b8b)
+Signed-off-by: Hui Wang <hui.wang@canonical.com>
+---
+ configure.ac | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configure.ac b/configure.ac
+index c501f49d..fd6d9d8a 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -666,6 +666,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
+ 	  src/conf/pcm/Makefile \
+ 	  src/conf/ucm/Makefile \
+ 	  src/conf/ucm/DAISY-I2S/Makefile \
++	  src/conf/ucm/Dell-WD15-Dock/Makefile \
+ 	  src/conf/ucm/PandaBoard/Makefile \
+ 	  src/conf/ucm/PandaBoardES/Makefile \
+ 	  src/conf/ucm/SDP4430/Makefile \
+-- 
+2.17.1
+

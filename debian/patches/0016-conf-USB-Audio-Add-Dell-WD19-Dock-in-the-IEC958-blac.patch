@@ -1,0 +1,35 @@
+From ab78607b73e77131e24f2b3b4d6aa5d6b9946e44 Mon Sep 17 00:00:00 2001
+From: Hui Wang <hui.wang@canonical.com>
+Date: Wed, 28 Nov 2018 17:16:45 +0800
+Subject: [PATCH 3/4] conf: USB-Audio: Add Dell WD19 Dock in the IEC958
+ blacklist
+
+This Dock doesn't have IEC958 physical output, so add it to the
+blacklist to prevent it being opened.
+
+[ Also adding WD15 Dock entry that has the same problem -- tiwai ]
+
+Signed-off-by: Hui Wang <hui.wang@canonical.com>
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+(cherry picked from commit 7ca1f6e78c15846951e5d970a864382180be7213)
+Signed-off-by: Hui Wang <hui.wang@canonical.com>
+---
+ src/conf/cards/USB-Audio.conf | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/conf/cards/USB-Audio.conf b/src/conf/cards/USB-Audio.conf
+index e365f297..ea904e41 100644
+--- a/src/conf/cards/USB-Audio.conf
++++ b/src/conf/cards/USB-Audio.conf
+@@ -59,6 +59,8 @@ USB-Audio.pcm.iec958_device {
+ 	"SWTOR Gaming Headset by Razer" 999
+ 	"USB Device 0x46d_0x821" 999
+ 	"USB Device 0x46d_0x992" 999
++	"WD15 Dock" 999
++	"WD19 Dock" 999
+ }
+ 
+ # Second iec958 device number, if any.
+-- 
+2.17.1
+

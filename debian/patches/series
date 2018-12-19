@@ -11,3 +11,7 @@
 0011-conf-ucm-Add-dual-HD-audio-codecs-config-for-Lenovo.patch
 0012-ucm-adding-the-folder-of-card_long_name-when-finding.patch
 0013-conf-ucm-increase-the-input-volume-for-LineIn.patch
+0014-conf-ucm-Add-a-UCM-profile-for-Dell-WD15-Dock-USB-au.patch 
+0015-conf-ucm-Dell-WD15-Dock-Fix-incorrect-device-names.patch   
+0016-conf-USB-Audio-Add-Dell-WD19-Dock-in-the-IEC958-blac.patch 
+0017-configure-Fix-forgotten-ucm-entry.patch                    
