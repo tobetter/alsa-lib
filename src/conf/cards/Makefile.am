@@ -46,6 +46,7 @@ cfg_files = aliases.conf \
 	RME9652.conf \
 	SI7018.conf \
 	SB-XFi.conf \
+	tegra-alc5632.conf \
 	TRID4DWAVENX.conf \
 	USB-Audio.conf \
 	YMF744.conf \
