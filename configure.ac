@@ -666,6 +666,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/pcm/Makefile \
 	  src/conf/ucm/Makefile \
 	  src/conf/ucm/DAISY-I2S/Makefile \
+	  src/conf/ucm/Dell-WD15-Dock/Makefile \
 	  src/conf/ucm/PandaBoard/Makefile \
 	  src/conf/ucm/PandaBoardES/Makefile \
 	  src/conf/ucm/SDP4430/Makefile \
