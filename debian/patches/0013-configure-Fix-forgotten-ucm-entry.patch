@@ -1,0 +1,29 @@
+From 84a56d70ef0d4a318fde4a173e28a9338cc412f1 Mon Sep 17 00:00:00 2001
+From: Takashi Iwai <tiwai@suse.de>
+Date: Thu, 3 May 2018 08:40:20 +0200
+Subject: [PATCH] configure: Fix forgotten ucm entry
+
+The previous commit forgot to add to configure.ac.  Fix it.
+
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+(cherry picked from commit 44f499bb22f3923f966e11a234455e3d06936b8b)
+Signed-off-by: Hui Wang <hui.wang@canonical.com>
+---
+ configure.ac | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configure.ac b/configure.ac
+index cce195ae..ea810a3d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -724,6 +724,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
+ 	  src/conf/ucm/chtrt5645-mono-speaker-analog-mic/Makefile \
+ 	  src/conf/ucm/DAISY-I2S/Makefile \
+ 	  src/conf/ucm/DB410c/Makefile \
++	  src/conf/ucm/Dell-WD15-Dock/Makefile \
+ 	  src/conf/ucm/GoogleNyan/Makefile \
+ 	  src/conf/ucm/gpd-win-pocket-rt5645/Makefile \
+ 	  src/conf/ucm/HDAudio-Gigabyte-ALC1220DualCodecs/Makefile \
+-- 
+2.17.1
+

@@ -10,3 +10,4 @@
 0010-conf-ucm-Add-a-UCM-profile-for-Dell-WD15-Dock-USB-au.patch
 0011-conf-ucm-Dell-WD15-Dock-Fix-incorrect-device-names.patch
 0012-conf-USB-Audio-Add-Dell-WD19-Dock-in-the-IEC958-blac.patch
+0013-configure-Fix-forgotten-ucm-entry.patch
