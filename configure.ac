@@ -682,6 +682,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/tegra-rt5640/Makefile \
 	  src/conf/ucm/Manta-I2S/Makefile \
 	  src/conf/ucm/Manta-SPDIF/Makefile \
+	  src/conf/ucm/msm8974-taiko-mtp-snd-card/Makefile \
 	  src/conf/topology/Makefile \
 	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
