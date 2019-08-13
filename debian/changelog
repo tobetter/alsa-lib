@@ -1,3 +1,11 @@
+alsa-lib (1.1.9-0ubuntu1) eoan; urgency=medium
+
+  * New upstream version
+  * debian/libasound2.symbols:
+    - updated for the new version
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Tue, 13 Aug 2019 20:50:38 +0200
+
 alsa-lib (1.1.8-1) unstable; urgency=medium
 
   * New upstream release.
