@@ -45,6 +45,7 @@ PAZ00 \
 PIPO-W2S-Defaultstring-CherryTrailCR \
 SDP4430 \
 skylake-rt286 \
+sof-skl_hda_card \
 TECLAST-X80Pro-Defaultstring-CherryTrailCR \
 tegraalc5632 \
 VEYRON-I2S
