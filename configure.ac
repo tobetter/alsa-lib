@@ -772,6 +772,11 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/codecs/rt5651/Makefile \
 	  src/conf/ucm/platforms/Makefile \
 	  src/conf/ucm/platforms/bytcr/Makefile \
+	  src/conf/ucm/sof-skl_hda_card/Makefile \
+	  src/conf/ucm/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Makefile \
+	  src/conf/ucm/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05/Makefile \
+  	  src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/Makefile \
+  	  src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/Makefile \
 	  src/conf/topology/Makefile \
 	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
