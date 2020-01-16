@@ -22,9 +22,7 @@ Depends: libasound2-data (>= ${source:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Suggests: libasound2-plugins (>= 1.0.24)
-Breaks: bluez-alsa (<= 4.94-2),
-        libasound2-plugin-equal (<= 0.6-1),
-        libasound2-plugins (<< 1.0.24)
+Breaks: alsa-utils (<< 1.2.1)
 Description: shared library for ALSA applications
  This package contains the ALSA library and its standard plugins, as well
  as the required configuration files.
@@ -47,13 +45,13 @@ Description: shared library for ALSA applications -- development files
 Package: libasound2-data
 Architecture: all
 Depends: ${misc:Depends}
+Recommends: alsa-ucm-conf, alsa-topology-conf
 Suggests: alsa-utils
 Breaks: libasound2 (<< ${source:Version})
 Replaces: libasound2 (<< ${source:Version})
 Multi-Arch: foreign
 Description: Configuration files and profiles for ALSA drivers
- This package contains configuration files for ALSA drivers and UCM
- profiles for use with alsaucm.
+ This package contains configuration files for ALSA drivers.
  .
  ALSA is the Advanced Linux Sound Architecture.
 
@@ -85,11 +83,36 @@ Architecture: linux-any
 Depends: libasound2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
-Breaks: libasound2 (<< 1.1.3-2)
-Replaces: libasound2 (<< 1.1.3-2)
 Multi-Arch: same
 Description: smixer plugin for ALSA library
  This package contains the smixer (Simple Mixer) interface for the ALSA
  library.
+ .
+ ALSA is the Advanced Linux Sound Architecture.
+
+Package: libatopology2
+Architecture: linux-any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Replaces: libasound2 (<< 1.2.1.1)
+Breaks: libasound2 (<< 1.2.1.1)
+Description: shared library for handling ALSA topology definitions
+ This package contains the ALSA topology library.
+ .
+ ALSA is the Advanced Linux Sound Architecture.
+
+Package: libatopology-dev
+Architecture: linux-any
+Section: libdevel
+Multi-Arch: same
+Provides: libatopology-dev
+Depends: libatopology2 (= ${binary:Version}), libasound2-dev, ${misc:Depends}
+Replaces: libasound2-dev (<< 1.2.1.1)
+Breaks: libasound2-dev (<< 1.2.1.1)
+Description: shared library for handling ALSA topology -- development files
+ This package contains files required for developing software
+ that makes use of libatopology2, the ALSA topology library.
  .
  ALSA is the Advanced Linux Sound Architecture.
