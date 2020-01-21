@@ -1,3 +1,9 @@
+alsa-lib (1.1.9-0ubuntu3) focal; urgency=medium
+
+  * Make autopkgtests cross-test-friendly.
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Tue, 21 Jan 2020 14:22:23 -0800
+
 alsa-lib (1.1.9-0ubuntu2) focal; urgency=medium
 
  * d/p/0008-add-ucm-for-sof-driver-LenovoX1-7th-and-Dell-cml.patch
