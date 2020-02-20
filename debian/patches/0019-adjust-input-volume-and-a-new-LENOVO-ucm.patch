@@ -1,0 +1,143 @@
+Index: alsa-lib-1.1.3/configure.ac
+===================================================================
+--- alsa-lib-1.1.3.orig/configure.ac
++++ alsa-lib-1.1.3/configure.ac
+@@ -690,6 +690,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pict
+ 	  src/conf/ucm/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05/Makefile \
+   	  src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/Makefile \
+   	  src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/Makefile \
++	  src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/Makefile \
+ 	  src/conf/topology/Makefile \
+ 	  src/conf/topology/broadwell/Makefile \
+ 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX.conf
+@@ -0,0 +1,35 @@
++SectionUseCase."HiFi" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/HiFi.conf"
++	Comment "Play HiFi Music"
++}
++
++SectionUseCase."Hdmi1" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi1.conf"
++	Comment "Play to Hdmi1"
++}
++
++SectionUseCase."Hdmi2" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi2.conf"
++	Comment "Play to Hdmi2"
++}
++
++SectionUseCase."Hdmi3" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi3.conf"
++	Comment "Play to Hdmi3"
++}
++
++SectionDefaults [
++	cdev "hw:sofsklhdacard"
++	cset "name='Bass Speaker Playback Switch' off"
++	cset "name='Master Playback Switch' on"
++	cset "name='Master Playback Volume' 80"
++	cset "name='Capture Switch' on"
++	cset "name='Headphone Playback Volume' 80"
++	cset "name='Speaker Playback Volume' 80"
++	cset "name='Auto-Mute Mode' off"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
++	cset "name='PGA2.0 2 Master Capture Volume' 60"
++	cset "name='PGA10.0 10 Master Capture Volume' 75"
++	cset "name='PGA11.0 11 Master Capture Volume' 75"
++]
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/Makefile.am
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX
++ucm_DATA = LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX.conf
++EXTRA_DIST = $(ucm_DATA)
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC.conf
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC.conf
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC.conf
+@@ -27,8 +27,8 @@ SectionDefaults [
+ 	cset "name='Headphone Playback Volume' 80"
+ 	cset "name='Speaker Playback Volume' 80"
+ 	cset "name='Auto-Mute Mode' off"
+-	cset "name='Capture Volume' 50"
+-	cset "name='Headset Mic Boost Volume' 1"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
+ 	cset "name='PGA2.0 2 Master Capture Volume' 60"
+ 	cset "name='PGA10.0 10 Master Capture Volume' 75"
+ 	cset "name='PGA11.0 11 Master Capture Volume' 75"
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05.conf
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05.conf
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05/LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05.conf
+@@ -27,8 +27,8 @@ SectionDefaults [
+ 	cset "name='Headphone Playback Volume' 80"
+ 	cset "name='Speaker Playback Volume' 80"
+ 	cset "name='Auto-Mute Mode' off"
+-	cset "name='Capture Volume' 50"
+-	cset "name='Headset Mic Boost Volume' 1"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
+ 	cset "name='PGA2.0 2 Master Capture Volume' 60"
+ 	cset "name='PGA10.0 10 Master Capture Volume' 75"
+ 	cset "name='PGA11.0 11 Master Capture Volume' 75"
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17.conf
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17.conf
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17.conf
+@@ -27,8 +27,8 @@ SectionDefaults [
+ 	cset "name='Headphone Playback Volume' 80"
+ 	cset "name='Speaker Playback Volume' 80"
+ 	cset "name='Auto-Mute Mode' off"
+-	cset "name='Capture Volume' 50"
+-	cset "name='Headset Mic Boost Volume' 1"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
+ 	cset "name='PGA2.0 2 Master Capture Volume' 60"
+ 	cset "name='PGA10.0 10 Master Capture Volume' 75"
+ 	cset "name='PGA11.0 11 Master Capture Volume' 75"
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO.conf
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO.conf
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO.conf
+@@ -27,8 +27,8 @@ SectionDefaults [
+ 	cset "name='Headphone Playback Volume' 80"
+ 	cset "name='Speaker Playback Volume' 80"
+ 	cset "name='Auto-Mute Mode' off"
+-	cset "name='Capture Volume' 50"
+-	cset "name='Headset Mic Boost Volume' 1"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
+ 	cset "name='PGA2.0 2 Master Capture Volume' 60"
+ 	cset "name='PGA10.0 10 Master Capture Volume' 75"
+ 	cset "name='PGA11.0 11 Master Capture Volume' 75"
+Index: alsa-lib-1.1.3/src/conf/ucm/Makefile.am
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/Makefile.am
++++ alsa-lib-1.1.3/src/conf/ucm/Makefile.am
+@@ -1 +1 @@
+-SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 PAZ00 GoogleNyan HDAudio-Lenovo-DualCodecs broadwell-rt286 skylake-rt286 VEYRON-I2S chtrt5645 DB410c Dell-WD15-Dock apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF msm8974-taiko-mtp-snd-card sof-skl_hda_card LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05 LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17 LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO
++SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 PAZ00 GoogleNyan HDAudio-Lenovo-DualCodecs broadwell-rt286 skylake-rt286 VEYRON-I2S chtrt5645 DB410c Dell-WD15-Dock apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF msm8974-taiko-mtp-snd-card sof-skl_hda_card LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05 LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17 LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX
+Index: alsa-lib-1.1.3/src/conf/ucm/sof-skl_hda_card/sof-skl_hda_card.conf
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/sof-skl_hda_card/sof-skl_hda_card.conf
++++ alsa-lib-1.1.3/src/conf/ucm/sof-skl_hda_card/sof-skl_hda_card.conf
+@@ -26,8 +26,8 @@ SectionDefaults [
+ 	cset "name='Headphone Playback Volume' 80"
+ 	cset "name='Speaker Playback Volume' 80"
+ 	cset "name='Auto-Mute Mode' off"
+-	cset "name='Capture Volume' 50"
+-	cset "name='Headset Mic Boost Volume' 1"
++	cset "name='Capture Volume' 60"
++	cset "name='Headset Mic Boost Volume' 2"
+ 	cset "name='PGA2.0 2 Master Capture Volume' 60"
+ 	cset "name='PGA10.0 10 Master Capture Volume' 75"
+ 	cset "name='PGA11.0 11 Master Capture Volume' 75"
