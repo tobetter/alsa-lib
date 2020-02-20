@@ -16,3 +16,4 @@
 0016-conf-USB-Audio-Add-Dell-WD19-Dock-in-the-IEC958-blac.patch 
 0017-configure-Fix-forgotten-ucm-entry.patch                    
 0018-add-ucm-for-sof-driver-LenovoX1-7th-and-Dell-cml.patch
+0019-adjust-input-volume-and-a-new-LENOVO-ucm.patch

@@ -1,3 +1,12 @@
+alsa-lib (1.1.3-5ubuntu0.4) bionic; urgency=medium
+
+  * d/p/0019-adjust-input-volume-and-a-new-LENOVO-ucm.patch
+    Fix the input volume in the ucm and add a new ucm for a
+    LENOVO X1 Carbon variant
+    (LP: #1859754)
+
+ -- Hui Wang <hui.wang@canonical.com>  Thu, 20 Feb 2020 12:59:22 +0800
+
 alsa-lib (1.1.3-5ubuntu0.3) bionic; urgency=medium
 
  * d/p/0018-add-ucm-for-sof-driver-LenovoX1-7th-and-Dell-cml.patch
