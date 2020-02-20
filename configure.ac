@@ -672,6 +672,7 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
 	  src/conf/ucm/tegraalc5632/Makefile \
 	  src/conf/ucm/PAZ00/Makefile \
 	  src/conf/ucm/GoogleNyan/Makefile \
+	  src/conf/ucm/HDAudio-Lenovo-DualCodecs/Makefile \
 	  src/conf/ucm/broadwell-rt286/Makefile \
 	  src/conf/ucm/skylake-rt286/Makefile \
 	  src/conf/ucm/VEYRON-I2S/Makefile \
