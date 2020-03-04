@@ -1,3 +1,11 @@
+alsa-lib (1.2.2-2ubuntu1) focal; urgency=medium
+
+  * Resynchronize with Debian
+  * debian/patches/python3.8.diff:
+    - fix the build with python 3.8
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Wed, 04 Mar 2020 09:23:20 +0100
+
 alsa-lib (1.2.2-2) unstable; urgency=medium
 
   * Add an override_dh_makeshlibs to force the usage of -c4 with
