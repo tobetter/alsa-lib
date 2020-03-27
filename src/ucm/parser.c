@@ -1084,6 +1084,8 @@ static int parse_verb_file(snd_use_case_mgr_t *uc_mgr,
 	/* open Verb file for reading */
 	if (!strncmp(uc_mgr->conf_file_name, uc_mgr->card_long_name, MAX_CARD_LONG_NAME))
 		folder_name = uc_mgr->card_long_name;
+	else if (!strncmp(uc_mgr->conf_file_name, uc_mgr->bios_ver_str, MAX_CARD_LONG_NAME))
+		folder_name = uc_mgr->bios_ver_str;
 	else
 		folder_name = uc_mgr->card_name;
 
@@ -1424,6 +1426,48 @@ static int load_master_config(const char *card_name, snd_config_t **cfg)
 	return 0;
 }
 
+#define DMI_SYS_VENDOR_NAME "/sys/class/dmi/id/sys_vendor"
+#define DMI_BIOS_VERSION_NAME "/sys/class/dmi/id/bios_version"
+#define LENOVO_BIOS_UCM_PREFIX "LENOVO-BIOSID-"
+#define SOF_DRIVER_NAME "sof-skl_hda"
+
+int parse_machine_bios_ver(snd_use_case_mgr_t *uc_mgr)
+{
+	FILE *fp;
+	char vdr_buf[MAX_CARD_LONG_NAME];
+	char rev_buf[MAX_CARD_LONG_NAME];
+	char *ret_buf;
+	int ret = -ENOENT;
+
+	if (strncmp(uc_mgr->card_name, SOF_DRIVER_NAME, (sizeof(SOF_DRIVER_NAME) - 1)))
+		return ret;
+
+	fp = fopen(DMI_SYS_VENDOR_NAME, "r");
+	if (fp == NULL)
+		return -errno;
+
+	ret_buf = fgets(vdr_buf, MAX_CARD_LONG_NAME - 1, fp);
+	fclose(fp);
+	if (ret_buf == NULL)
+		return ret;
+
+	if (!strncmp(vdr_buf, "LENOVO", 6)) {
+		fp = fopen(DMI_BIOS_VERSION_NAME, "r");
+		if (fp == NULL)
+			return -errno;
+
+		ret_buf = fgets(rev_buf, MAX_CARD_LONG_NAME - 1, fp);
+		fclose(fp);
+		if (ret_buf == NULL)
+			return ret;
+		strcpy(uc_mgr->bios_ver_str, LENOVO_BIOS_UCM_PREFIX);
+		strncat(uc_mgr->bios_ver_str, rev_buf, 3);
+		return 0;
+	} /* here we could expand code for Dell, Hp ... */
+
+	return ret;
+}
+
 /* load master use case file for sound card
  *
  * The same ASoC machine driver can be shared by many different devices.
@@ -1451,16 +1495,26 @@ int uc_mgr_import_master_config(snd_use_case_mgr_t *uc_mgr)
 		/* got device-specific file that matches the card long name */
 		strcpy(uc_mgr->conf_file_name, uc_mgr->card_long_name);
 	} else {
-		/* Fall back to the file that maches the given card name,
-		 * either short name or long name (users may open a card by
-		 * its name or long name).
+		/* Fall back to the file that maches the first 3 letters of BIOS
+		 * version, if no files found, it will fall back to the file that
+		 * match the given card name, either short name or long
+		 * name (users may open a card by its name, long name or bios ver).
 		 */
+		err = parse_machine_bios_ver(uc_mgr);
+		if (err == 0)
+			err = load_master_config(uc_mgr->bios_ver_str, &cfg);
+
+		if (err == 0) {
+			strcpy(uc_mgr->conf_file_name, uc_mgr->bios_ver_str);
+			goto parse;
+		}
+
 		err = load_master_config(uc_mgr->card_name, &cfg);
 		if (err < 0)
 			return err;
 		strcpy(uc_mgr->conf_file_name, uc_mgr->card_name);
 	}
-
+ parse:
 	err = parse_master_file(uc_mgr, cfg);
 	snd_config_delete(cfg);
 	if (err < 0)
