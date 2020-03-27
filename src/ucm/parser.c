@@ -1055,6 +1055,7 @@ static int parse_verb_file(snd_use_case_mgr_t *uc_mgr,
 	char filename[MAX_FILE];
 	char *env = getenv(ALSA_CONFIG_UCM_VAR);
 	int err;
+	char *folder_name;
 
 	/* allocate verb */
 	verb = calloc(1, sizeof(struct use_case_verb));
@@ -1081,9 +1082,14 @@ static int parse_verb_file(snd_use_case_mgr_t *uc_mgr,
 	}
 
 	/* open Verb file for reading */
+	if (!strncmp(uc_mgr->conf_file_name, uc_mgr->card_long_name, MAX_CARD_LONG_NAME))
+		folder_name = uc_mgr->card_long_name;
+	else
+		folder_name = uc_mgr->card_name;
+
 	snprintf(filename, sizeof(filename), "%s/%s/%s",
 		env ? env : ALSA_USE_CASE_DIR,
-		uc_mgr->card_name, file);
+		folder_name, file);
 	filename[sizeof(filename)-1] = '\0';
 	
 	err = uc_mgr_config_load(filename, &cfg);
