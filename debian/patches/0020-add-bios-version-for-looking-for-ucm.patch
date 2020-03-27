@@ -1,0 +1,613 @@
+Index: alsa-lib-1.1.3/src/ucm/parser.c
+===================================================================
+--- alsa-lib-1.1.3.orig/src/ucm/parser.c
++++ alsa-lib-1.1.3/src/ucm/parser.c
+@@ -1084,6 +1084,8 @@ static int parse_verb_file(snd_use_case_
+ 	/* open Verb file for reading */
+ 	if (!strncmp(uc_mgr->conf_file_name, uc_mgr->card_long_name, MAX_CARD_LONG_NAME))
+ 		folder_name = uc_mgr->card_long_name;
++	else if (!strncmp(uc_mgr->conf_file_name, uc_mgr->bios_ver_str, MAX_CARD_LONG_NAME))
++		folder_name = uc_mgr->bios_ver_str;
+ 	else
+ 		folder_name = uc_mgr->card_name;
+ 
+@@ -1424,6 +1426,48 @@ static int load_master_config(const char
+ 	return 0;
+ }
+ 
++#define DMI_SYS_VENDOR_NAME "/sys/class/dmi/id/sys_vendor"
++#define DMI_BIOS_VERSION_NAME "/sys/class/dmi/id/bios_version"
++#define LENOVO_BIOS_UCM_PREFIX "LENOVO-BIOSID-"
++#define SOF_DRIVER_NAME "sof-skl_hda"
++
++int parse_machine_bios_ver(snd_use_case_mgr_t *uc_mgr)
++{
++	FILE *fp;
++	char vdr_buf[MAX_CARD_LONG_NAME];
++	char rev_buf[MAX_CARD_LONG_NAME];
++	char *ret_buf;
++	int ret = -ENOENT;
++
++	if (strncmp(uc_mgr->card_name, SOF_DRIVER_NAME, (sizeof(SOF_DRIVER_NAME) - 1)))
++		return ret;
++
++	fp = fopen(DMI_SYS_VENDOR_NAME, "r");
++	if (fp == NULL)
++		return -errno;
++
++	ret_buf = fgets(vdr_buf, MAX_CARD_LONG_NAME - 1, fp);
++	fclose(fp);
++	if (ret_buf == NULL)
++		return ret;
++
++	if (!strncmp(vdr_buf, "LENOVO", 6)) {
++		fp = fopen(DMI_BIOS_VERSION_NAME, "r");
++		if (fp == NULL)
++			return -errno;
++
++		ret_buf = fgets(rev_buf, MAX_CARD_LONG_NAME - 1, fp);
++		fclose(fp);
++		if (ret_buf == NULL)
++			return ret;
++		strcpy(uc_mgr->bios_ver_str, LENOVO_BIOS_UCM_PREFIX);
++		strncat(uc_mgr->bios_ver_str, rev_buf, 3);
++		return 0;
++	} /* here we could expand code for Dell, Hp ... */
++
++	return ret;
++}
++
+ /* load master use case file for sound card
+  *
+  * The same ASoC machine driver can be shared by many different devices.
+@@ -1451,16 +1495,26 @@ int uc_mgr_import_master_config(snd_use_
+ 		/* got device-specific file that matches the card long name */
+ 		strcpy(uc_mgr->conf_file_name, uc_mgr->card_long_name);
+ 	} else {
+-		/* Fall back to the file that maches the given card name,
+-		 * either short name or long name (users may open a card by
+-		 * its name or long name).
++		/* Fall back to the file that maches the first 3 letters of BIOS
++		 * version, if no files found, it will fall back to the file that
++		 * match the given card name, either short name or long
++		 * name (users may open a card by its name, long name or bios ver).
+ 		 */
++		err = parse_machine_bios_ver(uc_mgr);
++		if (err == 0)
++			err = load_master_config(uc_mgr->bios_ver_str, &cfg);
++
++		if (err == 0) {
++			strcpy(uc_mgr->conf_file_name, uc_mgr->bios_ver_str);
++			goto parse;
++		}
++
+ 		err = load_master_config(uc_mgr->card_name, &cfg);
+ 		if (err < 0)
+ 			return err;
+ 		strcpy(uc_mgr->conf_file_name, uc_mgr->card_name);
+ 	}
+-
++ parse:
+ 	err = parse_master_file(uc_mgr, cfg);
+ 	snd_config_delete(cfg);
+ 	if (err < 0)
+Index: alsa-lib-1.1.3/src/ucm/ucm_local.h
+===================================================================
+--- alsa-lib-1.1.3.orig/src/ucm/ucm_local.h
++++ alsa-lib-1.1.3/src/ucm/ucm_local.h
+@@ -193,6 +193,7 @@ struct snd_use_case_mgr {
+ 	char *card_name;
+ 	char card_long_name[MAX_CARD_LONG_NAME];
+ 	char conf_file_name[MAX_CARD_LONG_NAME];
++	char bios_ver_str[MAX_CARD_LONG_NAME];
+ 	char *comment;
+ 
+ 	/* use case verb, devices and modifier configs parsed from files */
+Index: alsa-lib-1.1.3/configure.ac
+===================================================================
+--- alsa-lib-1.1.3.orig/configure.ac
++++ alsa-lib-1.1.3/configure.ac
+@@ -691,6 +691,11 @@ AC_OUTPUT(Makefile doc/Makefile doc/pict
+   	  src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/Makefile \
+   	  src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/Makefile \
+ 	  src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/Makefile \
++	  src/conf/ucm/LENOVO-BIOSID-N2H/Makefile \
++	  src/conf/ucm/LENOVO-BIOSID-N2U/Makefile \
++	  src/conf/ucm/LENOVO-BIOSID-N2W/Makefile \
++	  src/conf/ucm/LENOVO-BIOSID-N2X/Makefile \
++	  src/conf/ucm/LENOVO-BIOSID-N2Y/Makefile \
+ 	  src/conf/topology/Makefile \
+ 	  src/conf/topology/broadwell/Makefile \
+ 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
+Index: alsa-lib-1.1.3/src/conf/ucm/Makefile.am
+===================================================================
+--- alsa-lib-1.1.3.orig/src/conf/ucm/Makefile.am
++++ alsa-lib-1.1.3/src/conf/ucm/Makefile.am
+@@ -1 +1,2 @@
+-SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 PAZ00 GoogleNyan HDAudio-Lenovo-DualCodecs broadwell-rt286 skylake-rt286 VEYRON-I2S chtrt5645 DB410c Dell-WD15-Dock apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF msm8974-taiko-mtp-snd-card sof-skl_hda_card LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05 LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17 LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX
++SUBDIRS=DAISY-I2S PandaBoard PandaBoardES SDP4430 tegraalc5632 PAZ00 GoogleNyan HDAudio-Lenovo-DualCodecs broadwell-rt286 skylake-rt286 VEYRON-I2S chtrt5645 DB410c Dell-WD15-Dock apq8064-tabla-snd-card Tuna tegra-rt5640 Manta-I2S Manta-SPDIF msm8974-taiko-mtp-snd-card sof-skl_hda_card LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC LENOVO-20QESITR05-ThinkPadX1Carbon7th-20QESITR05 LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17 LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX LENOVO-BIOSID-N2H LENOVO-BIOSID-N2U LENOVO-BIOSID-N2W LENOVO-BIOSID-N2X LENOVO-BIOSID-N2Y
++
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2H/LENOVO-BIOSID-N2H.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2H/LENOVO-BIOSID-N2H.conf
+@@ -0,0 +1,35 @@
++SectionUseCase."HiFi" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/HiFi.conf"
++	Comment "Play HiFi Music"
++}
++
++SectionUseCase."Hdmi1" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi1.conf"
++	Comment "Play to Hdmi1"
++}
++
++SectionUseCase."Hdmi2" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi2.conf"
++	Comment "Play to Hdmi2"
++}
++
++SectionUseCase."Hdmi3" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi3.conf"
++	Comment "Play to Hdmi3"
++}
++
++SectionDefaults [
++	cdev "hw:sofsklhdacard"
++	cset "name='Bass Speaker Playback Switch' off"
++	cset "name='Master Playback Switch' on"
++	cset "name='Master Playback Volume' 80"
++	cset "name='Capture Switch' on"
++	cset "name='Headphone Playback Volume' 80"
++	cset "name='Speaker Playback Volume' 80"
++	cset "name='Auto-Mute Mode' off"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
++	cset "name='PGA2.0 2 Master Capture Volume' 60"
++	cset "name='PGA10.0 10 Master Capture Volume' 75"
++	cset "name='PGA11.0 11 Master Capture Volume' 75"
++]
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2H/Makefile.am
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2H/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/LENOVO-BIOSID-N2H
++ucm_DATA = LENOVO-BIOSID-N2H.conf
++EXTRA_DIST = $(ucm_DATA)
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2U/LENOVO-BIOSID-N2U.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2U/LENOVO-BIOSID-N2U.conf
+@@ -0,0 +1,34 @@
++SectionUseCase."HiFi" {
++	File "../LENOVO-BIOSID-N2X/HiFi.conf"
++	Comment "Play HiFi Music"
++}
++
++SectionUseCase."Hdmi1" {
++	File "../LENOVO-BIOSID-N2X/Hdmi1.conf"
++	Comment "Play to Hdmi1"
++}
++
++SectionUseCase."Hdmi2" {
++	File "../LENOVO-BIOSID-N2X/Hdmi2.conf"
++	Comment "Play to Hdmi2"
++}
++
++SectionUseCase."Hdmi3" {
++	File "../LENOVO-BIOSID-N2X/Hdmi3.conf"
++	Comment "Play to Hdmi3"
++}
++
++SectionDefaults [
++	cdev "hw:sofsklhdacard"
++	cset "name='Master Playback Switch' on"
++	cset "name='Master Playback Volume' 80"
++	cset "name='Capture Switch' on"
++	cset "name='Headphone Playback Volume' 80"
++	cset "name='Speaker Playback Volume' 80"
++	cset "name='Auto-Mute Mode' off"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
++	cset "name='PGA2.0 2 Master Capture Volume' 60"
++	cset "name='PGA10.0 10 Master Capture Volume' 75"
++	cset "name='PGA11.0 11 Master Capture Volume' 75"
++]
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2U/Makefile.am
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2U/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/LENOVO-BIOSID-N2U
++ucm_DATA = LENOVO-BIOSID-N2U.conf
++EXTRA_DIST = $(ucm_DATA)
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2W/LENOVO-BIOSID-N2W.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2W/LENOVO-BIOSID-N2W.conf
+@@ -0,0 +1,35 @@
++SectionUseCase."HiFi" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/HiFi.conf"
++	Comment "Play HiFi Music"
++}
++
++SectionUseCase."Hdmi1" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi1.conf"
++	Comment "Play to Hdmi1"
++}
++
++SectionUseCase."Hdmi2" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi2.conf"
++	Comment "Play to Hdmi2"
++}
++
++SectionUseCase."Hdmi3" {
++	File "../LENOVO-20QE000VMC-ThinkPadX1Carbon7th-20QE000VMC/Hdmi3.conf"
++	Comment "Play to Hdmi3"
++}
++
++SectionDefaults [
++	cdev "hw:sofsklhdacard"
++	cset "name='Bass Speaker Playback Switch' off"
++	cset "name='Master Playback Switch' on"
++	cset "name='Master Playback Volume' 80"
++	cset "name='Capture Switch' on"
++	cset "name='Headphone Playback Volume' 80"
++	cset "name='Speaker Playback Volume' 80"
++	cset "name='Auto-Mute Mode' off"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
++	cset "name='PGA2.0 2 Master Capture Volume' 60"
++	cset "name='PGA10.0 10 Master Capture Volume' 75"
++	cset "name='PGA11.0 11 Master Capture Volume' 75"
++]
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2W/Makefile.am
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2W/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/LENOVO-BIOSID-N2W
++ucm_DATA = LENOVO-BIOSID-N2W.conf
++EXTRA_DIST = $(ucm_DATA)
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Hdmi1.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Hdmi1.conf
+@@ -0,0 +1,35 @@
++# Use case Configuration for skl-hda-card
++
++SectionVerb {
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++}
++
++SectionDevice."HDMI1" {
++	Comment "HDMI1/DP1 Output"
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='IEC958 Playback Switch' on"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='IEC958 Playback Switch' off"
++	]
++
++	Value {
++		PlaybackPCM "hw:sofsklhdacard,3"
++		PlaybackChannels "2"
++		JackControl "HDMI/DP,pcm=3 Jack"
++		PlaybackPriority "300"
++	}
++}
++
++<ucm/LENOVO-BIOSID-N2X/Mics.conf>
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Hdmi2.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Hdmi2.conf
+@@ -0,0 +1,35 @@
++# Use case Configuration for skl-hda-card
++
++SectionVerb {
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++}
++
++SectionDevice."HDMI2" {
++	Comment "HDMI2/DP2 Output"
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='IEC958 Playback Switch',index=1 on"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='IEC958 Playback Switch',index=1 off"
++	]
++
++	Value {
++		PlaybackPCM "hw:sofsklhdacard,4"
++		PlaybackChannels "2"
++		JackControl "HDMI/DP,pcm=4 Jack"
++		PlaybackPriority "400"
++	}
++}
++
++<ucm/LENOVO-BIOSID-N2X/Mics.conf>
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Hdmi3.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Hdmi3.conf
+@@ -0,0 +1,35 @@
++# Use case Configuration for skl-hda-card
++
++SectionVerb {
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++}
++
++SectionDevice."HDMI3" {
++	Comment "HDMI3/DP3 Output"
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='IEC958 Playback Switch',index=2 on"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='IEC958 Playback Switch',index=2 off"
++	]
++
++	Value {
++		PlaybackPCM "hw:sofsklhdacard,5"
++		PlaybackChannels "2"
++		JackControl "HDMI/DP,pcm=5 Jack"
++		PlaybackPriority "500"
++	}
++}
++
++<ucm/LENOVO-BIOSID-N2X/Mics.conf>
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/HiFi.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/HiFi.conf
+@@ -0,0 +1,63 @@
++# Use case Configuration for skl-hda-card
++
++SectionVerb {
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++}
++
++SectionDevice."Speaker" {
++	Comment "Speaker"
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='Speaker Playback Switch' on"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='Speaker Playback Switch' off"
++	]
++
++	Value {
++		PlaybackPCM "hw:sofsklhdacard,0"
++		PlaybackVolume "Master"
++		PlaybackSwitch "Master Playback Switch"
++		JackHWMute "Headphone"
++		PlaybackChannels "2"
++		PlaybackPriority "100"
++	}
++}
++
++SectionDevice."Headphone" {
++	Comment "Headphone"
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='Headphone Playback Switch' on"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++		cset "name='Headphone Playback Switch' off"
++	]
++
++	Value {
++		PlaybackPCM "hw:sofsklhdacard,0"
++		PlaybackVolume "Master"
++		PlaybackSwitch "Master Playback Switch"
++		PlaybackChannels "2"
++		JackName "sof-skl_hda_card Headphone"
++		JackType "gpio"
++		JackSwitch "12"
++		JackControl "Headphone Jack"
++		PlaybackPriority "200"
++	}
++}
++
++<ucm/LENOVO-BIOSID-N2X/Mics.conf>
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/LENOVO-BIOSID-N2X.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/LENOVO-BIOSID-N2X.conf
+@@ -0,0 +1,34 @@
++SectionUseCase."HiFi" {
++	File "./HiFi.conf"
++	Comment "Play HiFi Music"
++}
++
++SectionUseCase."Hdmi1" {
++	File "./Hdmi1.conf"
++	Comment "Play to Hdmi1"
++}
++
++SectionUseCase."Hdmi2" {
++	File "./Hdmi2.conf"
++	Comment "Play to Hdmi2"
++}
++
++SectionUseCase."Hdmi3" {
++	File "./Hdmi3.conf"
++	Comment "Play to Hdmi3"
++}
++
++SectionDefaults [
++	cdev "hw:sofsklhdacard"
++	cset "name='Master Playback Switch' on"
++	cset "name='Master Playback Volume' 80"
++	cset "name='Capture Switch' on"
++	cset "name='Headphone Playback Volume' 80"
++	cset "name='Speaker Playback Volume' 80"
++	cset "name='Auto-Mute Mode' off"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
++	cset "name='PGA2.0 2 Master Capture Volume' 60"
++	cset "name='PGA10.0 10 Master Capture Volume' 75"
++	cset "name='PGA11.0 11 Master Capture Volume' 75"
++]
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Makefile.am
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/LENOVO-BIOSID-N2X
++ucm_DATA = LENOVO-BIOSID-N2X.conf Hdmi1.conf Hdmi2.conf Hdmi3.conf  HiFi.conf Mics.conf
++EXTRA_DIST = $(ucm_DATA)
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Mics.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2X/Mics.conf
+@@ -0,0 +1,49 @@
++SectionDevice."Headset Microphone" {
++	Comment "Headset Microphone"
++
++	ConflictingDevice [
++		"Digital Microphone"
++	]
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	Value {
++		CapturePCM "hw:sofsklhdacard,0"
++		CaptureVolume "Capture"
++		CaptureSwitch "Capture Switch"
++		CaptureChannels "2"
++		JackName "sof-skl_hda_card Mic"
++		JackType "gpio"
++		JackSwitch "13"
++		JackControl "Mic Jack"
++	}
++}
++
++SectionDevice."Dmic" {
++	Comment "Digital Microphone"
++
++	ConflictingDevice [
++		"Headset Microphone"
++	]
++
++	EnableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	DisableSequence [
++		cdev "hw:sofsklhdacard"
++	]
++
++	Value {
++		CapturePCM "hw:sofsklhdacard,6"
++		CaptureVolume "Dmic0 Capture Volume"
++		CaptureSwitch "Dmic0 Capture Switch"
++		CaptureChannels "2"
++	}
++}
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2Y/LENOVO-BIOSID-N2Y.conf
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2Y/LENOVO-BIOSID-N2Y.conf
+@@ -0,0 +1,34 @@
++SectionUseCase."HiFi" {
++	File "../LENOVO-BIOSID-N2X/HiFi.conf"
++	Comment "Play HiFi Music"
++}
++
++SectionUseCase."Hdmi1" {
++	File "../LENOVO-BIOSID-N2X/Hdmi1.conf"
++	Comment "Play to Hdmi1"
++}
++
++SectionUseCase."Hdmi2" {
++	File "../LENOVO-BIOSID-N2X/Hdmi2.conf"
++	Comment "Play to Hdmi2"
++}
++
++SectionUseCase."Hdmi3" {
++	File "../LENOVO-BIOSID-N2X/Hdmi3.conf"
++	Comment "Play to Hdmi3"
++}
++
++SectionDefaults [
++	cdev "hw:sofsklhdacard"
++	cset "name='Master Playback Switch' on"
++	cset "name='Master Playback Volume' 80"
++	cset "name='Capture Switch' on"
++	cset "name='Headphone Playback Volume' 80"
++	cset "name='Speaker Playback Volume' 80"
++	cset "name='Auto-Mute Mode' off"
++	cset "name='Capture Volume' 60"
++	cset "name='Mic Boost Volume' 2"
++	cset "name='PGA2.0 2 Master Capture Volume' 60"
++	cset "name='PGA10.0 10 Master Capture Volume' 75"
++	cset "name='PGA11.0 11 Master Capture Volume' 75"
++]
+Index: alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2Y/Makefile.am
+===================================================================
+--- /dev/null
++++ alsa-lib-1.1.3/src/conf/ucm/LENOVO-BIOSID-N2Y/Makefile.am
+@@ -0,0 +1,4 @@
++alsaconfigdir = @ALSA_CONFIG_DIR@
++ucmdir = $(alsaconfigdir)/ucm/LENOVO-BIOSID-N2Y
++ucm_DATA = LENOVO-BIOSID-N2Y.conf
++EXTRA_DIST = $(ucm_DATA)
