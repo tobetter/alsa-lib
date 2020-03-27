@@ -7,3 +7,4 @@
 0007-Add-a-configuration-for-tegra-alc5632-based-cards.patch
 0008-add-ucm-for-sof-driver-LenovoX1-7th-and-Dell-cml.patch
 0009-adjust-input-volume-and-a-new-LENOVO-ucm.patch
+0010-add-bios-version-for-looking-for-ucm.patch
