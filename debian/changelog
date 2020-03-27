@@ -1,3 +1,20 @@
+alsa-lib (1.1.9-0ubuntu1.3) eoan; urgency=medium
+
+  * d/p/0010-add-bios-version-for-looking-for-ucm.patch
+    Add a new way to looking for the ucm by DMI bios_version.
+    Without this patch, the alsa-lib looks for the ucm by cardlongname
+    first, if it fails, then by the cardname. This has a problem at least
+    on LENOVO machines, since a LENOVO model has the same audio design but
+    it has hundreds of cardlongname, we need to create hundreds of folders
+    for one model, that is unacceptable. LENOVO told us a LENOVO model has
+    the unique biso_version, we could use it to find the ucm. After applying
+    this patch, the alsa-lib looks for the ucm by cardlongname first, if it
+    fails, it will use bios_version, if it also fails, it will fallback to
+    cardname.
+    (LP: #1868210)
+
+ -- Hui Wang <hui.wang@canonical.com>  Fri, 27 Mar 2020 11:40:37 +0800
+
 alsa-lib (1.1.9-0ubuntu1.2) eoan; urgency=medium
 
   * d/p/0009-adjust-input-volume-and-a-new-LENOVO-ucm.patch

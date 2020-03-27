@@ -778,6 +778,11 @@ AC_OUTPUT(Makefile doc/Makefile doc/pictures/Makefile doc/doxygen.cfg \
   	  src/conf/ucm/LENOVO-20UB0SIT17-ThinkPadX1YogaGen5-20UB0SIT17/Makefile \
   	  src/conf/ucm/LENOVO-MFG_IN_GO-ThinkPad-MFG_IN_GO/Makefile \
     	  src/conf/ucm/LENOVO-20QD00LKIX-ThinkPadX1Carbon7th-20QD00LKIX/Makefile \
+    	  src/conf/ucm/LENOVO-BIOSID-N2H/Makefile \
+    	  src/conf/ucm/LENOVO-BIOSID-N2U/Makefile \
+    	  src/conf/ucm/LENOVO-BIOSID-N2W/Makefile \
+    	  src/conf/ucm/LENOVO-BIOSID-N2X/Makefile \
+    	  src/conf/ucm/LENOVO-BIOSID-N2Y/Makefile \
 	  src/conf/topology/Makefile \
 	  src/conf/topology/broadwell/Makefile \
 	  modules/Makefile modules/mixer/Makefile modules/mixer/simple/Makefile \
