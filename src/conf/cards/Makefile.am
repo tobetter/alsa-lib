@@ -28,6 +28,7 @@ cfg_files = aliases.conf \
 	FM801.conf \
 	FWSpeakers.conf \
 	FireWave.conf \
+	G12B-ODROID-N2.conf \
 	GUS.conf \
 	HDA-Intel.conf \
 	HdmiLpeAudio.conf \
